@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,12 @@ import {
   Platform,
   TextInput,
   Modal,
-  Alert,
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 interface Student {
   id: string;
@@ -45,6 +47,8 @@ export default function AdminStudentsScreen() {
   const [formCourse, setFormCourse] = useState('Data Science & Machine Learning');
   const [formEnrollmentDate, setFormEnrollmentDate] = useState('2026-06-02');
   const [formPaymentStatus, setFormPaymentStatus] = useState('Paid');
+  const [formPassword, setFormPassword] = useState('');
+  const [formShowPassword, setFormShowPassword] = useState(false);
 
   const [students, setStudents] = useState<Student[]>([
     { id: '1', firstName: 'Rahul', lastName: 'Kumar', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'rahul.kumar@email.com', phone: '+91 98765 43210', coursesCount: 2 },
@@ -52,6 +56,19 @@ export default function AdminStudentsScreen() {
     { id: '3', firstName: 'Arjun', lastName: 'Singh', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'arjun.singh@email.com', phone: '+91 98765 43210', coursesCount: 3 },
     { id: '4', firstName: 'Sneha', lastName: 'Reddy', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'sneha.reddy@email.com', phone: '+91 98765 43210', coursesCount: 1 }
   ]);
+
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+  };
 
   const filteredStudents = students.filter(student => {
     const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
@@ -81,6 +98,7 @@ export default function AdminStudentsScreen() {
     setFormCourse('Data Science & Machine Learning');
     setFormEnrollmentDate('2026-06-02');
     setFormPaymentStatus('Paid');
+    setFormPassword('');
     setIsModalVisible(true);
   };
 
@@ -103,14 +121,13 @@ export default function AdminStudentsScreen() {
     setIsModalVisible(true);
   };
 
-  const handleSaveStudent = () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone) {
-      Alert.alert('Error', 'Please fill out all required fields.');
+  const handleSaveStudent = async () => {
+    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedStudent && !formPassword)) {
+      showToast('Please fill out all required fields including password.', 'error');
       return;
     }
 
     if (selectedStudent) {
-      // Edit mode
       setStudents(prev => prev.map(s => s.id === selectedStudent.id ? {
         ...s,
         firstName: formFirstName,
@@ -118,45 +135,66 @@ export default function AdminStudentsScreen() {
         email: formEmail,
         phone: formPhone
       } : s));
-      Alert.alert('Success', 'Student information updated successfully.');
+      showToast('Student information updated successfully.', 'success');
+      setIsModalVisible(false);
     } else {
-      // Add mode
-      const newStudent: Student = {
-        id: String(students.length + 1),
-        firstName: formFirstName,
-        lastName: formLastName,
-        joinedDate: 'Jun 2, 2026',
-        status: 'Active',
-        email: formEmail,
-        phone: formPhone,
-        coursesCount: 1
-      };
-      setStudents(prev => [...prev, newStudent]);
-      Alert.alert('Success', 'New student registered successfully.');
+      setSaving(true);
+      try {
+        const res = await api.createUser({
+          firstName: formFirstName,
+          lastName: formLastName,
+          email: formEmail,
+          password: formPassword,
+          phone: formPhone,
+          dob: formDob,
+          street: formStreet,
+          city: formCity,
+          state: formState,
+          pinCode: formPinCode,
+          guardianName: formGuardianName,
+          guardianPhone: formGuardianPhone,
+          course: formCourse,
+          enrollmentDate: formEnrollmentDate,
+          paymentStatus: formPaymentStatus,
+          role: 'STUDENT',
+        });
+        if (res.success) {
+          const newStudent: Student = {
+            id: String(res.data),
+            firstName: formFirstName,
+            lastName: formLastName,
+            joinedDate: 'Jun 2, 2026',
+            status: 'Active',
+            email: formEmail,
+            phone: formPhone,
+            coursesCount: 1
+          };
+          setStudents(prev => [...prev, newStudent]);
+          setIsModalVisible(false);
+          showToast('Student registered! Credentials sent to ' + formEmail, 'success');
+        } else {
+          showToast(res.message || 'Failed to register student.', 'error');
+        }
+      } catch (err: any) {
+        showToast('Cannot reach server. Make sure backend is running.', 'error');
+      } finally {
+        setSaving(false);
+      }
     }
-    setIsModalVisible(false);
   };
 
   const handleDeleteStudent = (id: string) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this student registration?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setStudents(prev => prev.filter(s => s.id !== id));
-            Alert.alert('Deleted', 'Student has been removed.');
-          }
-        }
-      ]
-    );
+    setStudents(prev => prev.filter(s => s.id !== id));
+    showToast('Student has been removed.', 'success');
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {toast && (
+        <Animated.View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastOpacity }]}>
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </Animated.View>
+      )}
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Manage Students</Text>
@@ -335,6 +373,24 @@ export default function AdminStudentsScreen() {
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
+              {!selectedStudent && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Password *</Text>
+                  <View style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }]}>
+                    <TextInput
+                      style={{ flex: 1, fontSize: 13, color: '#1F2937', height: 42 }}
+                      value={formPassword}
+                      onChangeText={setFormPassword}
+                      placeholder="Set login password"
+                      placeholderTextColor="#9CA3AF"
+                      secureTextEntry={!formShowPassword}
+                    />
+                    <TouchableOpacity onPress={() => setFormShowPassword(!formShowPassword)}>
+                      <Ionicons name={formShowPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>Phone *</Text>
                 <TextInput
@@ -472,10 +528,13 @@ export default function AdminStudentsScreen() {
                 <TouchableOpacity
                   style={styles.modalSubmitBtn}
                   onPress={handleSaveStudent}
+                  disabled={saving}
                 >
-                  <Text style={styles.modalSubmitBtnText}>
-                    {selectedStudent ? 'Save Changes' : 'Add Student'}
-                  </Text>
+                  {saving
+                    ? <ActivityIndicator color="#FFF" />
+                    : <Text style={styles.modalSubmitBtnText}>
+                        {selectedStudent ? 'Save Changes' : 'Add Student'}
+                      </Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -820,5 +879,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  toast: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    zIndex: 999,
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toastSuccess: {
+    backgroundColor: '#10B981',
+  },
+  toastError: {
+    backgroundColor: '#EF4444',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

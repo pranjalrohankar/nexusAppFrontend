@@ -10,8 +10,11 @@ import {
   Platform,
   Animated,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { api, setToken } from '../../services/api';
 
 type ScreenType = 'LOGO' | 'SPLASH' | 'SIGN_IN' | 'SIGN_UP';
 
@@ -88,14 +91,34 @@ export default function AuthFlow({ onSignIn }: AuthFlowProps) {
     }
   }, [screen, transitionTo]);
 
+  const [loading, setLoading] = useState(false);
+
   // Handle SignIn action
-  const handleSignInSubmit = () => {
-    onSignIn(selectedRole);
+  const handleSignInSubmit = async () => {
+    if (!signInEmail || !signInPassword) {
+      Alert.alert('Error', 'Please enter email and password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.login(signInEmail, signInPassword, selectedRole);
+      if (res.success) {
+        setToken(res.data.token);
+        onSignIn(selectedRole);
+      } else {
+        Alert.alert('Login Failed', res.message || 'Invalid credentials');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not connect to server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Handle SignUp action
+  // Handle SignUp action (enquiry only, no login)
   const handleSignUpSubmit = () => {
-    onSignIn(selectedRole);
+    Alert.alert('Enquiry Submitted', 'Thank you! We will contact you soon.');
+    transitionTo('SIGN_IN');
   };
 
   // Custom Logo Component
@@ -278,8 +301,11 @@ export default function AuthFlow({ onSignIn }: AuthFlowProps) {
                   <TouchableOpacity 
                     style={styles.primaryButton}
                     onPress={handleSignInSubmit}
+                    disabled={loading}
                   >
-                    <Text style={styles.primaryButtonText}>Sign In</Text>
+                    {loading
+                      ? <ActivityIndicator color="#FFF" />
+                      : <Text style={styles.primaryButtonText}>Sign In</Text>}
                   </TouchableOpacity>
 
                   {/* Footer */}
