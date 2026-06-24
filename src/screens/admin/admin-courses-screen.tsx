@@ -387,7 +387,7 @@ export default function AdminCoursesScreen() {
                   placeholder="e.g. 8:00 PM - 9:30 PM"
                   placeholderTextColor="#9CA3AF"
                 />
-              </View>
+              </View>  
 
               {/* Enrollment & Pricing */}
               <Text style={styles.formSectionTitle}>Enrollment & Pricing</Text>
