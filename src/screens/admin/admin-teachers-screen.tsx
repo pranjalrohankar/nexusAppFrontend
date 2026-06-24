@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,12 @@ import {
   Platform,
   TextInput,
   Modal,
-  Alert,
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 interface Teacher {
   id: string;
@@ -46,6 +48,8 @@ export default function AdminTeachersScreen() {
   const [formSpecialization, setFormSpecialization] = useState('Data Science, Web Dev');
   const [formJoinDate, setFormJoinDate] = useState('2026-06-02');
   const [formEmploymentType, setFormEmploymentType] = useState('Full Time');
+  const [formPassword, setFormPassword] = useState('');
+  const [formShowPassword, setFormShowPassword] = useState(false);
   const [assignedCourses, setAssignedCourses] = useState({
     ds: true,
     fs: false,
@@ -61,6 +65,19 @@ export default function AdminTeachersScreen() {
     { id: '3', name: 'Ravi Verma', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'ravi.verma@nexus.co', phone: '+91 98765 43210', rating: 4.8, coursesCount: 4, studentsCount: 210 },
     { id: '4', name: 'Neha Gupta', joinedDate: 'Dec 1, 2025', status: 'Active', email: 'neha.gupta@nexus.co', phone: '+91 98765 43210', rating: 4.6, coursesCount: 1, studentsCount: 45 }
   ]);
+
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(2500),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+  };
 
   const filteredTeachers = teachers.filter(teacher => {
     const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -90,6 +107,7 @@ export default function AdminTeachersScreen() {
     setFormSpecialization('Data Science');
     setFormJoinDate('2026-06-02');
     setFormEmploymentType('Full Time');
+    setFormPassword('');
     setAssignedCourses({ ds: true, fs: false, uiux: false, digital: false, python: false, cloud: false });
     setIsModalVisible(true);
   };
@@ -115,62 +133,79 @@ export default function AdminTeachersScreen() {
     setIsModalVisible(true);
   };
 
-  const handleSaveTeacher = () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone) {
-      Alert.alert('Error', 'Please fill out all required fields.');
+  const handleSaveTeacher = async () => {
+    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedTeacher && !formPassword)) {
+      showToast('Please fill out all required fields including password.', 'error');
       return;
     }
 
     const fullName = `${formFirstName} ${formLastName}`;
 
     if (selectedTeacher) {
-      // Edit
       setTeachers(prev => prev.map(t => t.id === selectedTeacher.id ? {
-        ...t,
-        name: fullName,
-        email: formEmail,
-        phone: formPhone
+        ...t, name: fullName, email: formEmail, phone: formPhone
       } : t));
-      Alert.alert('Success', 'Teacher details saved.');
+      showToast('Teacher details saved successfully.', 'success');
+      setIsModalVisible(false);
     } else {
-      // Add
-      const newTeacher: Teacher = {
-        id: String(teachers.length + 1),
-        name: fullName,
-        joinedDate: 'Jun 2, 2026',
-        status: 'Active',
-        email: formEmail,
-        phone: formPhone,
-        rating: 5.0,
-        coursesCount: Object.values(assignedCourses).filter(Boolean).length,
-        studentsCount: 0
-      };
-      setTeachers(prev => [...prev, newTeacher]);
-      Alert.alert('Success', 'New teacher registered successfully.');
+      setSaving(true);
+      try {
+        const res = await api.createUser({
+          firstName: formFirstName,
+          lastName: formLastName,
+          email: formEmail,
+          password: formPassword,
+          phone: formPhone,
+          dob: formDob,
+          street: formStreet,
+          city: formCity,
+          state: formState,
+          pinCode: formPinCode,
+          qualification: formQual,
+          experience: formExp,
+          specialization: formSpecialization,
+          joinDate: formJoinDate,
+          employmentType: formEmploymentType,
+          role: 'TEACHER',
+        });
+        if (res.success) {
+          const newTeacher: Teacher = {
+            id: String(res.data),
+            name: fullName,
+            joinedDate: 'Jun 2, 2026',
+            status: 'Active',
+            email: formEmail,
+            phone: formPhone,
+            rating: 5.0,
+            coursesCount: Object.values(assignedCourses).filter(Boolean).length,
+            studentsCount: 0
+          };
+          setTeachers(prev => [...prev, newTeacher]);
+          setIsModalVisible(false);
+          showToast('Teacher registered! Credentials sent to ' + formEmail, 'success');
+        } else {
+          showToast(res.message || 'Failed to register teacher.', 'error');
+        }
+      } catch {
+        showToast('Could not connect to server.', 'error');
+      } finally {
+        setSaving(false);
+      }
     }
-    setIsModalVisible(false);
   };
 
   const handleDeleteTeacher = (id: string) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this instructor registration?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setTeachers(prev => prev.filter(t => t.id !== id));
-            Alert.alert('Deleted', 'Instructor removed.');
-          }
-        }
-      ]
-    );
+    setTeachers(prev => prev.filter(t => t.id !== id));
+    showToast('Instructor removed successfully.', 'success');
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {toast && (
+        <Animated.View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastOpacity }]}>
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </Animated.View>
+      )}
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Manage Teachers</Text>
@@ -346,6 +381,24 @@ export default function AdminTeachersScreen() {
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
+              {!selectedTeacher && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Password *</Text>
+                  <View style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }]}>
+                    <TextInput
+                      style={{ flex: 1, fontSize: 13, color: '#1F2937', height: 42 }}
+                      value={formPassword}
+                      onChangeText={setFormPassword}
+                      placeholder="Set login password"
+                      placeholderTextColor="#9CA3AF"
+                      secureTextEntry={!formShowPassword}
+                    />
+                    <TouchableOpacity onPress={() => setFormShowPassword(!formShowPassword)}>
+                      <Ionicons name={formShowPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>Phone *</Text>
                 <TextInput
@@ -521,10 +574,13 @@ export default function AdminTeachersScreen() {
                 <TouchableOpacity
                   style={styles.modalSubmitBtn}
                   onPress={handleSaveTeacher}
+                  disabled={saving}
                 >
-                  <Text style={styles.modalSubmitBtnText}>
-                    {selectedTeacher ? 'Save Changes' : 'Add Teacher'}
-                  </Text>
+                  {saving
+                    ? <ActivityIndicator color="#FFF" />
+                    : <Text style={styles.modalSubmitBtnText}>
+                        {selectedTeacher ? 'Save Changes' : 'Add Teacher'}
+                      </Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -924,5 +980,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  toast: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    zIndex: 999,
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toastSuccess: {
+    backgroundColor: '#10B981',
+  },
+  toastError: {
+    backgroundColor: '#EF4444',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
   },
 });
