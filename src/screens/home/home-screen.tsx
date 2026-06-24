@@ -2,7 +2,7 @@ import CourseDetails, { CourseData } from '@/screens/courses/course-details';
 import ExploreCourses, { ExploreCourseItem } from '@/screens/courses/explore-courses';
 import ClassRecordingsScreen from '@/screens/home/class-recordings-screen';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dimensions,
   Platform,
@@ -14,54 +14,9 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '@/services/api';
 
-export const exploreCoursesList: ExploreCourseItem[] = [
-  {
-    id: '1',
-    title: 'Full Stack Web Development',
-    duration: '6 months',
-    students: '2.5k',
-    rating: '4.8',
-    price: '₹15,999',
-    key: 'Full Stack Web Development',
-  },
-  {
-    id: '2',
-    title: 'Java Full Stack Development',
-    duration: '5 months',
-    students: '2.5k',
-    rating: '4.8',
-    price: '₹15,999',
-    key: 'Java Full Stack',
-  },
-  {
-    id: '3',
-    title: 'Node.js & Express',
-    duration: '6 months',
-    students: '2.5k',
-    rating: '4.8',
-    price: '₹15,999',
-    key: 'Node js for AI',
-  },
-  {
-    id: '4',
-    title: 'Python Web Development',
-    duration: '3 months',
-    students: '2.5k',
-    rating: '4.8',
-    price: '₹15,999',
-    key: 'Python for AI',
-  },
-  {
-    id: '5',
-    title: 'Data Science & Machine Learning',
-    duration: '8 months',
-    students: '1.8k',
-    rating: '4.9',
-    price: '₹18,999',
-    key: 'Data Science & Machine Learning',
-  },
-];
+export const exploreCoursesList: ExploreCourseItem[] = [];
 
 export const coursesData: Record<string, CourseData> = {
   'Full Stack Web Development': {
@@ -314,6 +269,22 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
   const [selectedCourse, setSelectedCourse] = useState<CourseData | null>(null);
   const [isExploring, setIsExploring] = useState(false);
   const [isViewingRecordings, setIsViewingRecordings] = useState(false);
+  const [liveExploreList, setLiveExploreList] = useState<ExploreCourseItem[]>([]);
+
+  useEffect(() => {
+    api.getActiveCourses().then((data: any) => {
+      const list = Array.isArray(data) ? data : [];
+      setLiveExploreList(list.map((c: any) => ({
+        id: String(c.id),
+        title: c.title,
+        duration: c.duration ?? '',
+        students: '0',
+        rating: '—',
+        price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
+        key: c.title,
+      })));
+    }).catch(() => {});
+  }, []);
 
   if (isViewingRecordings) {
     return (
@@ -326,7 +297,7 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
   if (isExploring) {
     return (
       <ExploreCourses
-        coursesList={exploreCoursesList}
+        coursesList={liveExploreList}
         onBack={() => setIsExploring(false)}
         onSelectCourse={(courseKey: string) => {
           setIsExploring(false);
