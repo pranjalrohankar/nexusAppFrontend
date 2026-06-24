@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,11 @@ import {
   Platform,
   TextInput,
   Modal,
-  Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 interface Course {
   id: string;
@@ -45,12 +46,43 @@ export default function AdminCoursesScreen() {
   const [formStatus, setFormStatus] = useState<'Active' | 'Upcoming' | 'Completed'>('Active');
   const [googleMeetChecked, setGoogleMeetChecked] = useState(true);
 
-  const [courses, setCourses] = useState<Course[]>([
-    { id: '1', title: 'Data Science & Machine Learning', category: 'Data Science', instructor: 'Priya Sharma', duration: '3 Months', studentsCount: 45, maxCapacity: 50, startDate: 'Jan 15, 2026', price: '₹25,000', status: 'Active' },
-    { id: '2', title: 'Full Stack Web Development', category: 'Web Development', instructor: 'Rajesh Kumar', duration: '3 Months', studentsCount: 38, maxCapacity: 48, startDate: 'Jan 15, 2026', price: '₹20,000', status: 'Active' },
-    { id: '3', title: 'UI/UX Design Mastery', category: 'Design', instructor: 'Ravi Verma', duration: '2 Months', studentsCount: 24, maxCapacity: 24, startDate: 'Feb 1, 2026', price: '₹18,000', status: 'Upcoming' },
-    { id: '4', title: 'Digital Marketing', category: 'Marketing', instructor: 'Neha Gupta', duration: '2 Months', studentsCount: 15, maxCapacity: 20, startDate: 'Dec 1, 2025', price: '₹15,000', status: 'Completed' }
-  ]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, type });
+    toastAnim.setValue(0);
+    Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => setToast(null));
+    }, 3000);
+  };
+
+  const fetchCourses = async () => {
+    try {
+      const res = await api.getCourses();
+      const list = res?.content ?? res ?? [];
+      setCourses(list.map((c: any) => ({
+        id: String(c.id),
+        title: c.title,
+        category: c.category ?? '',
+        instructor: c.instructorName ?? 'TBD',
+        duration: c.duration ?? '',
+        studentsCount: 0,
+        maxCapacity: c.maxCapacity ?? 0,
+        startDate: c.startDate ?? '',
+        price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
+        status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
+      })));
+    } catch (err) {
+      console.log('Failed to fetch courses', err);
+    }
+  };
+
+  useEffect(() => { fetchCourses(); }, []);
 
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -95,62 +127,59 @@ export default function AdminCoursesScreen() {
     setIsModalVisible(true);
   };
 
-  const handleSaveCourse = () => {
+  const handleSaveCourse = async () => {
     if (!formTitle || !formCapacity || !formPrice) {
-      Alert.alert('Error', 'Please fill out all required fields.');
+      showToast('Please fill out all required fields.', 'error');
       return;
     }
 
-    const priceLabel = `₹${Number(formPrice).toLocaleString('en-IN')}`;
+    const backendStatus =
+      formStatus === 'Active' ? 'ACTIVE' :
+      formStatus === 'Completed' ? 'INACTIVE' : 'DRAFT';
 
-    if (selectedCourse) {
-      // Edit
-      setCourses(prev => prev.map(c => c.id === selectedCourse.id ? {
-        ...c,
-        title: formTitle,
-        category: formCategory,
-        duration: formDuration,
-        maxCapacity: Number(formCapacity),
-        price: priceLabel,
-        status: formStatus
-      } : c));
-      Alert.alert('Success', 'Course details updated.');
-    } else {
-      // Add
-      const newCourse: Course = {
-        id: String(courses.length + 1),
-        title: formTitle,
-        category: formCategory,
-        instructor: 'Ravi Verma',
-        duration: formDuration,
-        studentsCount: 0,
-        maxCapacity: Number(formCapacity),
-        startDate: 'Jun 2, 2026',
-        price: priceLabel,
-        status: formStatus
-      };
-      setCourses(prev => [...prev, newCourse]);
-      Alert.alert('Success', 'New course template built successfully.');
+    const payload = {
+      title: formTitle,
+      category: formCategory,
+      description: formDescription,
+      duration: formDuration,
+      startDate: formStartDate || null,
+      endDate: formEndDate || null,
+      classTimings: formClassTime,
+      maxCapacity: Number(formCapacity),
+      price: Number(formPrice),
+      status: backendStatus,
+    };
+
+    try {
+      if (selectedCourse) {
+        await api.updateCourse(selectedCourse.id, payload);
+        setIsModalVisible(false);
+        showToast('Course updated successfully.');
+      } else {
+        await api.createCourse(payload);
+        setIsModalVisible(false);
+        showToast('New course created successfully.');
+      }
+      fetchCourses();
+    } catch (err: any) {
+      showToast(err?.message ?? 'Failed to save course.', 'error');
+      console.error('handleSaveCourse error:', err);
     }
-    setIsModalVisible(false);
   };
 
-  const handleDeleteCourse = (id: string) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this course template?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setCourses(prev => prev.filter(c => c.id !== id));
-            Alert.alert('Deleted', 'Course template has been removed.');
-          }
-        }
-      ]
-    );
+  const handleDeleteCourse = async (id: string) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Are you sure you want to delete this course?')
+      : true;
+    if (!confirmed) return;
+    try {
+      await api.deleteCourse(id);
+      fetchCourses();
+      showToast('Course deleted successfully.');
+    } catch (err) {
+      showToast('Failed to delete course.', 'error');
+      console.error(err);
+    }
   };
 
   return (
@@ -290,6 +319,18 @@ export default function AdminCoursesScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* TOAST NOTIFICATION */}
+      {toast && (
+        <Animated.View style={[
+          styles.toast,
+          toast.type === 'error' ? styles.toastError : styles.toastSuccess,
+          { opacity: toastAnim, transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] },
+        ]}>
+          <Ionicons name={toast.type === 'error' ? 'close-circle' : 'checkmark-circle'} size={18} color="#FFFFFF" />
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </Animated.View>
+      )}
 
       {/* ADD / EDIT COURSE MODAL */}
       <Modal
@@ -826,5 +867,29 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  toast: {
+    position: 'absolute',
+    top: 16,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    zIndex: 999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toastSuccess: { backgroundColor: '#10B981' },
+  toastError: { backgroundColor: '#EF4444' },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
