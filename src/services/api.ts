@@ -53,17 +53,30 @@ export function clearToken() {
 function buildHeaders() {
   const token = getToken();
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) h['Authorization'] = `Bearer ${token}`;
+  if (token) {
+    h['Authorization'] = `Bearer ${token}`;
+    console.log('Sending request with token:', token.substring(0, 20) + '...');
+  } else {
+    console.warn('No authentication token found!');
+  }
   return h;
 }
 
 async function handleResponse(res: Response) {
   if (!res.ok) {
+    if (res.status === 403) {
+      console.error('403 Forbidden - Token may be invalid or missing admin role');
+    }
     const text = await res.text();
+    console.error('API Error:', res.status, text);
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
-  if (res.status === 204) return null;
-  return res.json();
+  if (res.status === 204) return { success: true, message: 'Operation successful' };
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return res.json();
+  }
+  return { success: true, message: 'Operation successful' };
 }
 
 async function post(path: string, body: object) {
@@ -105,6 +118,10 @@ export const api = {
 
   getStudents: () => get('/admin/students'),
   getTeachers: () => get('/admin/teachers'),
+  updateStudent: (id: number | string, data: object) => put(`/admin/students/${id}`, data),
+  deleteStudent: (id: number | string) => del(`/admin/students/${id}`),
+  updateTeacher: (id: number | string, data: object) => put(`/admin/teachers/${id}`, data),
+  deleteTeacher: (id: number | string) => del(`/admin/teachers/${id}`),
 
   getCourses: () => get('/courses?size=100'),
   getActiveCourses: () => get('/courses/active'),
