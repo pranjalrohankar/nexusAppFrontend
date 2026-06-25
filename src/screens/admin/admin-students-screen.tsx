@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,15 +15,37 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
+interface Enrollment {
+  courseTitle: string;
+  enrollmentDate: string;
+  paymentStatus: string;
+}
+
 interface Student {
-  id: string;
-  firstName: string;
-  lastName: string;
-  joinedDate: string;
-  status: 'Active' | 'Inactive';
+  id: number;
+  name: string;
   email: string;
   phone: string;
+  active: boolean;
   coursesCount: number;
+  createdAt: string;
+  enrollments: Enrollment[];
+  dob?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  pinCode?: string;
+  guardianName?: string;
+  guardianPhone?: string;
+  course?: string;
+  enrollmentDate?: string;
+  paymentStatus?: string;
+}
+
+interface Course {
+  id: number;
+  title: string;
+  status: string;
 }
 
 export default function AdminStudentsScreen() {
@@ -50,12 +72,10 @@ export default function AdminStudentsScreen() {
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
 
-  const [students, setStudents] = useState<Student[]>([
-    { id: '1', firstName: 'Rahul', lastName: 'Kumar', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'rahul.kumar@email.com', phone: '+91 98765 43210', coursesCount: 2 },
-    { id: '2', firstName: 'Priya', lastName: 'Patel', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'priya.patel@email.com', phone: '+91 98765 43210', coursesCount: 2 },
-    { id: '3', firstName: 'Arjun', lastName: 'Singh', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'arjun.singh@email.com', phone: '+91 98765 43210', coursesCount: 3 },
-    { id: '4', firstName: 'Sneha', lastName: 'Reddy', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'sneha.reddy@email.com', phone: '+91 98765 43210', coursesCount: 1 }
-  ]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -70,17 +90,54 @@ export default function AdminStudentsScreen() {
     ]).start(() => setToast(null));
   };
 
+  useEffect(() => {
+    loadStudents();
+    loadCourses();
+  }, []);
+
+  const loadStudents = async () => {
+    setLoading(true);
+    try {
+      const res = await api.getStudents();
+      if (res.success) {
+        setStudents(res.data);
+      } else {
+        showToast(res.message || 'Failed to load students', 'error');
+      }
+    } catch (err) {
+      showToast('Cannot connect to server', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCourses = async () => {
+    try {
+      const res = await api.getActiveCourses();
+      console.log('Courses API Response:', res);
+      if (res.success) {
+        console.log('Courses loaded:', res.data);
+        setCourses(res.data);
+      } else {
+        console.log('Failed to load courses:', res.message);
+      }
+    } catch (err) {
+      console.error('Failed to load courses', err);
+    }
+  };
+
   const filteredStudents = students.filter(student => {
-    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
     const query = searchQuery.toLowerCase();
-    const matchesSearch = fullName.includes(query) || student.email.toLowerCase().includes(query);
+    const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
     
     if (activeTab === 'All') return matchesSearch;
-    return matchesSearch && student.status === activeTab;
+    if (activeTab === 'Active') return matchesSearch && student.active;
+    if (activeTab === 'Inactive') return matchesSearch && !student.active;
+    return matchesSearch;
   });
 
-  const activeCount = students.filter(s => s.status === 'Active').length;
-  const inactiveCount = students.filter(s => s.status === 'Inactive').length;
+  const activeCount = students.filter(s => s.active).length;
+  const inactiveCount = students.filter(s => !s.active).length;
 
   const handleOpenAddModal = () => {
     setSelectedStudent(null);
@@ -95,51 +152,86 @@ export default function AdminStudentsScreen() {
     setFormPinCode('560001');
     setFormGuardianName('');
     setFormGuardianPhone('');
-    setFormCourse('Data Science & Machine Learning');
-    setFormEnrollmentDate('2026-06-02');
-    setFormPaymentStatus('Paid');
+    setFormCourse('');
+    setFormEnrollmentDate(new Date().toISOString().split('T')[0]);
+    setFormPaymentStatus('Pending');
     setFormPassword('');
+    setShowCourseDropdown(false);
     setIsModalVisible(true);
   };
 
   const handleOpenEditModal = (student: Student) => {
     setSelectedStudent(student);
-    setFormFirstName(student.firstName);
-    setFormLastName(student.lastName);
+    const names = student.name.split(' ');
+    setFormFirstName(names[0] || '');
+    setFormLastName(names.slice(1).join(' ') || '');
     setFormEmail(student.email);
-    setFormPhone(student.phone);
-    setFormDob('1998-05-15');
-    setFormStreet('123 Green Avenue');
-    setFormCity('Bangalore');
-    setFormState('Karnataka');
-    setFormPinCode('560001');
-    setFormGuardianName('Mr. Kumar');
-    setFormGuardianPhone('+91 98765 43211');
-    setFormCourse(student.coursesCount === 2 ? 'Full Stack Web Development' : 'Data Science & Machine Learning');
-    setFormEnrollmentDate(student.joinedDate);
-    setFormPaymentStatus('Paid');
+    setFormPhone(student.phone || '');
+    setFormDob(student.dob || '');
+    setFormStreet(student.street || '');
+    setFormCity(student.city || 'Bangalore');
+    setFormState(student.state || 'Karnataka');
+    setFormPinCode(student.pinCode || '560001');
+    setFormGuardianName(student.guardianName || '');
+    setFormGuardianPhone(student.guardianPhone || '');
+    setFormCourse(student.course || 'Data Science & Machine Learning');
+    setFormEnrollmentDate(student.enrollmentDate || '2026-06-02');
+    setFormPaymentStatus(student.paymentStatus || 'Paid');
     setIsModalVisible(true);
   };
 
   const handleSaveStudent = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedStudent && !formPassword)) {
-      showToast('Please fill out all required fields including password.', 'error');
+    if (!formFirstName || !formLastName || !formEmail || !formPhone || !formCourse) {
+      showToast('Please fill out all required fields.', 'error');
       return;
     }
 
     if (selectedStudent) {
-      setStudents(prev => prev.map(s => s.id === selectedStudent.id ? {
-        ...s,
-        firstName: formFirstName,
-        lastName: formLastName,
-        email: formEmail,
-        phone: formPhone
-      } : s));
-      showToast('Student information updated successfully.', 'success');
-      setIsModalVisible(false);
-    } else {
+      // Editing existing student
+      console.log('Updating student with ID:', selectedStudent.id);
       setSaving(true);
       try {
+        const res = await api.updateStudent(selectedStudent.id, {
+          firstName: formFirstName,
+          lastName: formLastName,
+          phone: formPhone,
+          dob: formDob,
+          street: formStreet,
+          city: formCity,
+          state: formState,
+          pinCode: formPinCode,
+          guardianName: formGuardianName,
+          guardianPhone: formGuardianPhone,
+          course: formCourse,
+          enrollmentDate: formEnrollmentDate,
+          paymentStatus: formPaymentStatus,
+        });
+        console.log('Update response:', res);
+        if (res && res.success) {
+          showToast('Student updated successfully', 'success');
+          setIsModalVisible(false);
+          loadStudents();
+        } else {
+          showToast(res?.message || 'Failed to update', 'error');
+        }
+      } catch (err: any) {
+        console.error('Update error:', err);
+        showToast(err.message || 'Cannot connect to server', 'error');
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      // Adding new student or enrolling existing student to new course
+      if (!formPassword) {
+        showToast('Password is required for new enrollment', 'error');
+        return;
+      }
+      
+      setSaving(true);
+      try {
+        // Backend will check if user exists and either:
+        // 1. Create new user + student + enrollment (new student)
+        // 2. Add new enrollment to existing student (re-enrollment)
         const res = await api.createUser({
           firstName: formFirstName,
           lastName: formLastName,
@@ -159,21 +251,11 @@ export default function AdminStudentsScreen() {
           role: 'STUDENT',
         });
         if (res.success) {
-          const newStudent: Student = {
-            id: String(res.data),
-            firstName: formFirstName,
-            lastName: formLastName,
-            joinedDate: 'Jun 2, 2026',
-            status: 'Active',
-            email: formEmail,
-            phone: formPhone,
-            coursesCount: 1
-          };
-          setStudents(prev => [...prev, newStudent]);
           setIsModalVisible(false);
-          showToast('Student registered! Credentials sent to ' + formEmail, 'success');
+          showToast(res.message || 'Student enrolled successfully!', 'success');
+          loadStudents();
         } else {
-          showToast(res.message || 'Failed to register student.', 'error');
+          showToast(res.message || 'Failed to enroll student.', 'error');
         }
       } catch (err: any) {
         showToast('Cannot reach server. Make sure backend is running.', 'error');
@@ -183,9 +265,21 @@ export default function AdminStudentsScreen() {
     }
   };
 
-  const handleDeleteStudent = (id: string) => {
-    setStudents(prev => prev.filter(s => s.id !== id));
-    showToast('Student has been removed.', 'success');
+  const handleDeleteStudent = async (id: number) => {
+    console.log('Deleting student with ID:', id);
+    try {
+      const res = await api.deleteStudent(id);
+      console.log('Delete response:', res);
+      if (res && res.success) {
+        showToast('Student deleted successfully', 'success');
+        loadStudents();
+      } else {
+        showToast(res?.message || 'Failed to delete', 'error');
+      }
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      showToast(err.message || 'Cannot connect to server', 'error');
+    }
   };
 
   return (
@@ -257,7 +351,12 @@ export default function AdminStudentsScreen() {
 
         {/* LIST */}
         <View style={styles.listContainer}>
-          {filteredStudents.length === 0 ? (
+          {loading ? (
+            <View style={styles.emptyCard}>
+              <ActivityIndicator size="large" color="#7B2CBF" />
+              <Text style={styles.emptyText}>Loading students...</Text>
+            </View>
+          ) : filteredStudents.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="school-outline" size={32} color="#9CA3AF" />
               <Text style={styles.emptyText}>No students matched the filters.</Text>
@@ -267,15 +366,15 @@ export default function AdminStudentsScreen() {
               <View key={item.id} style={styles.studentCard}>
                 <View style={styles.cardHeader}>
                   <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>{item.firstName[0]}</Text>
+                    <Text style={styles.avatarText}>{item.name[0]}</Text>
                   </View>
                   <View style={styles.metaCol}>
-                    <Text style={styles.studentName}>{item.firstName} {item.lastName}</Text>
-                    <Text style={styles.joinedText}>Joined {item.joinedDate}</Text>
+                    <Text style={styles.studentName}>{item.name}</Text>
+                    <Text style={styles.joinedText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
-                  <View style={[styles.statusBadge, item.status === 'Active' ? styles.statusActive : styles.statusInactive]}>
-                    <Text style={[styles.statusText, item.status === 'Active' ? styles.statusActiveText : styles.statusInactiveText]}>
-                      {item.status}
+                  <View style={[styles.statusBadge, item.active ? styles.statusActive : styles.statusInactive]}>
+                    <Text style={[styles.statusText, item.active ? styles.statusActiveText : styles.statusInactiveText]}>
+                      {item.active ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
                 </View>
@@ -292,8 +391,18 @@ export default function AdminStudentsScreen() {
                   </View>
                   <View style={styles.infoRow}>
                     <Ionicons name="book-outline" size={13} color="#6B7280" />
-                    <Text style={styles.infoValue}>{item.coursesCount} Enrolled Courses</Text>
+                    <Text style={styles.infoValue}>{item.coursesCount} Enrolled Course{item.coursesCount !== 1 ? 's' : ''}</Text>
                   </View>
+                  {item.enrollments && item.enrollments.length > 0 && (
+                    <View style={styles.enrollmentsContainer}>
+                      {item.enrollments.map((enrollment, idx) => (
+                        <View key={idx} style={styles.enrollmentTag}>
+                          <Text style={styles.enrollmentTagText}>{enrollment.courseTitle}</Text>
+                          <Text style={styles.enrollmentTagStatus}>({enrollment.paymentStatus})</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
 
                 {/* Actions */}
@@ -485,15 +594,48 @@ export default function AdminStudentsScreen() {
 
               {/* Enrollment Details */}
               <Text style={styles.formSectionTitle}>Enrollment Details</Text>
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Course</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formCourse}
-                  onChangeText={setFormCourse}
-                  placeholder="Course Name"
-                  placeholderTextColor="#9CA3AF"
-                />
+              <View style={[styles.formGroup, { zIndex: 1000 }]}>
+                <Text style={styles.fieldLabel}>Course *</Text>
+                <TouchableOpacity
+                  style={styles.modalInputDropdown}
+                  onPress={() => {
+                    console.log('Dropdown clicked, courses:', courses.length);
+                    setShowCourseDropdown(!showCourseDropdown);
+                  }}
+                >
+                  <Text style={[styles.dropdownText, !formCourse && styles.dropdownPlaceholder]}>
+                    {formCourse || 'Select a course'}
+                  </Text>
+                  <Ionicons name={showCourseDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+                {showCourseDropdown && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+                      {courses.length === 0 ? (
+                        <View style={styles.dropdownItem}>
+                          <Text style={styles.dropdownItemText}>No courses available</Text>
+                        </View>
+                      ) : (
+                        courses.map((course) => (
+                          <TouchableOpacity
+                            key={course.id}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              console.log('Course selected:', course.title);
+                              setFormCourse(course.title);
+                              setShowCourseDropdown(false);
+                            }}
+                          >
+                            <Text style={styles.dropdownItemText}>{course.title}</Text>
+                            {formCourse === course.title && (
+                              <Ionicons name="checkmark" size={18} color="#7B2CBF" />
+                            )}
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
               <View style={styles.formRow}>
                 <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
@@ -669,6 +811,73 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 12,
     textAlign: 'center',
+  },
+  enrollmentsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  enrollmentTag: {
+    backgroundColor: '#F3E8FF',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  enrollmentTagText: {
+    fontSize: 10,
+    color: '#7B2CBF',
+    fontWeight: '600',
+  },
+  enrollmentTagStatus: {
+    fontSize: 9,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1F2937',
+  },
+  dropdownPlaceholder: {
+    color: '#9CA3AF',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: 70,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    maxHeight: 200,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  dropdownScroll: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownItemText: {
+    fontSize: 13,
+    color: '#1F2937',
+    flex: 1,
   },
   studentCard: {
     backgroundColor: '#FFFFFF',
@@ -848,6 +1057,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1F2937',
     backgroundColor: '#F9FAFB',
+  },
+  modalInputDropdown: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    height: 42,
+    paddingHorizontal: 12,
+    backgroundColor: '#F9FAFB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   modalActionRow: {
     flexDirection: 'row',
