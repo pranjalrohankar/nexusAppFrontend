@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,6 +25,12 @@ interface Teacher {
   rating: number;
   coursesCount: number;
   studentsCount: number;
+  assignedCourseIds: number[];
+}
+
+interface Course {
+  id: number;
+  title: string;
 }
 
 export default function AdminTeachersScreen() {
@@ -50,21 +56,56 @@ export default function AdminTeachersScreen() {
   const [formEmploymentType, setFormEmploymentType] = useState('Full Time');
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
-  const [assignedCourses, setAssignedCourses] = useState({
-    ds: true,
-    fs: false,
-    uiux: false,
-    digital: false,
-    python: false,
-    cloud: false
-  });
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
+  const [totalStudents, setTotalStudents] = useState(0);
 
-  const [teachers, setTeachers] = useState<Teacher[]>([
-    { id: '1', name: 'Priya Sharma', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'priya.sharma@nexus.co', phone: '+91 98765 43210', rating: 4.9, coursesCount: 3, studentsCount: 156 },
-    { id: '2', name: 'Rajesh Kumar', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'rajesh.kumar@nexus.co', phone: '+91 98765 43210', rating: 4.7, coursesCount: 2, studentsCount: 85 },
-    { id: '3', name: 'Ravi Verma', joinedDate: 'Jan 1, 2026', status: 'Active', email: 'ravi.verma@nexus.co', phone: '+91 98765 43210', rating: 4.8, coursesCount: 4, studentsCount: 210 },
-    { id: '4', name: 'Neha Gupta', joinedDate: 'Dec 1, 2025', status: 'Active', email: 'neha.gupta@nexus.co', phone: '+91 98765 43210', rating: 4.6, coursesCount: 1, studentsCount: 45 }
-  ]);
+  const fetchTeachers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getTeachers();
+      if (res.success && Array.isArray(res.data)) {
+        const mapped: Teacher[] = res.data.map((t: any) => ({
+          id: String(t.teacherId),
+          name: t.name || '',
+          joinedDate: t.joinDate || '',
+          status: (t.status === 'Active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
+          email: t.email || '',
+          phone: t.phone || '',
+          rating: t.rating ?? 5.0,
+          coursesCount: t.coursesCount ?? 0,
+          studentsCount: t.studentsCount ?? 0,
+          assignedCourseIds: Array.isArray(t.assignedCourses)
+            ? t.assignedCourses.map((c: any) => c.courseId)
+            : [],
+        }));
+        setTeachers(mapped);
+        setTotalStudents(res.totalStudents ?? 0);
+      }
+    } catch {
+      showToast('Failed to load teachers.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchCourses = useCallback(async () => {
+    try {
+      const res = await api.getCourses();
+      if (res.content && Array.isArray(res.content)) {
+        setCourses(res.content.map((c: any) => ({ id: c.id, title: c.title })));
+      } else if (res.success && Array.isArray(res.data)) {
+        setCourses(res.data.map((c: any) => ({ id: c.id, title: c.title })));
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchTeachers();
+    fetchCourses();
+  }, [fetchTeachers, fetchCourses]);
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -88,8 +129,6 @@ export default function AdminTeachersScreen() {
   });
 
   const activeCount = teachers.filter(t => t.status === 'Active').length;
-  const inactiveCount = teachers.filter(t => t.status === 'Inactive').length;
-  const totalStudentsTaught = teachers.reduce((acc, curr) => acc + curr.studentsCount, 0);
 
   const handleOpenAddModal = () => {
     setSelectedTeacher(null);
@@ -108,7 +147,7 @@ export default function AdminTeachersScreen() {
     setFormJoinDate('2026-06-02');
     setFormEmploymentType('Full Time');
     setFormPassword('');
-    setAssignedCourses({ ds: true, fs: false, uiux: false, digital: false, python: false, cloud: false });
+    setSelectedCourseIds([]);
     setIsModalVisible(true);
   };
 
@@ -116,20 +155,20 @@ export default function AdminTeachersScreen() {
     setSelectedTeacher(teacher);
     const names = teacher.name.split(' ');
     setFormFirstName(names[0] || '');
-    setFormLastName(names[1] || '');
+    setFormLastName(names.slice(1).join(' ') || '');
     setFormEmail(teacher.email);
     setFormPhone(teacher.phone);
-    setFormDob('1990-03-24');
-    setFormStreet('456 Royal Residency');
-    setFormCity('Bangalore');
-    setFormState('Karnataka');
-    setFormPinCode('560001');
-    setFormQual('Ph.D. in Computer Science');
-    setFormExp('8');
-    setFormSpecialization('Machine Learning');
+    setFormDob('');
+    setFormStreet('');
+    setFormCity('');
+    setFormState('');
+    setFormPinCode('');
+    setFormQual('');
+    setFormExp('');
+    setFormSpecialization('');
     setFormJoinDate(teacher.joinedDate);
-    setFormEmploymentType('Full Time');
-    setAssignedCourses({ ds: true, fs: true, uiux: false, digital: false, python: false, cloud: false });
+    setFormEmploymentType('');
+    setSelectedCourseIds(teacher.assignedCourseIds || []);
     setIsModalVisible(true);
   };
 
@@ -139,17 +178,34 @@ export default function AdminTeachersScreen() {
       return;
     }
 
-    const fullName = `${formFirstName} ${formLastName}`;
-
-    if (selectedTeacher) {
-      setTeachers(prev => prev.map(t => t.id === selectedTeacher.id ? {
-        ...t, name: fullName, email: formEmail, phone: formPhone
-      } : t));
-      showToast('Teacher details saved successfully.', 'success');
-      setIsModalVisible(false);
-    } else {
-      setSaving(true);
-      try {
+    setSaving(true);
+    try {
+      if (selectedTeacher) {
+        const res = await api.updateTeacher(selectedTeacher.id, {
+          firstName: formFirstName,
+          lastName: formLastName,
+          email: formEmail,
+          phone: formPhone,
+          dob: formDob,
+          street: formStreet,
+          city: formCity,
+          state: formState,
+          pinCode: formPinCode,
+          qualification: formQual,
+          experience: formExp,
+          specialization: formSpecialization,
+          joinDate: formJoinDate,
+          employmentType: formEmploymentType,
+          courseIds: selectedCourseIds,
+        });
+        if (res.success) {
+          await fetchTeachers();
+          setIsModalVisible(false);
+          showToast('Teacher details saved successfully.', 'success');
+        } else {
+          showToast(res.message || 'Failed to update teacher.', 'error');
+        }
+      } else {
         const res = await api.createUser({
           firstName: formFirstName,
           lastName: formLastName,
@@ -169,47 +225,53 @@ export default function AdminTeachersScreen() {
           role: 'TEACHER',
         });
         if (res.success) {
-          const newTeacher: Teacher = {
-            id: String(res.data),
-            name: fullName,
-            joinedDate: 'Jun 2, 2026',
-            status: 'Active',
-            email: formEmail,
-            phone: formPhone,
-            rating: 5.0,
-            coursesCount: Object.values(assignedCourses).filter(Boolean).length,
-            studentsCount: 0
-          };
-          setTeachers(prev => [...prev, newTeacher]);
+          await fetchTeachers();
           setIsModalVisible(false);
           showToast('Teacher registered! Credentials sent to ' + formEmail, 'success');
         } else {
           showToast(res.message || 'Failed to register teacher.', 'error');
         }
-      } catch {
-        showToast('Could not connect to server.', 'error');
-      } finally {
-        setSaving(false);
       }
+    } catch {
+      showToast('Could not connect to server.', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteTeacher = (id: string) => {
-    setTeachers(prev => prev.filter(t => t.id !== id));
-    showToast('Instructor removed successfully.', 'success');
+  const handleDeleteTeacher = async (id: string) => {
+    try {
+      const res = await api.deleteTeacher(id);
+      if (res.success) {
+        setTeachers(prev => prev.filter(t => t.id !== id));
+        showToast('Instructor removed successfully.', 'success');
+      } else {
+        showToast(res.message || 'Failed to delete teacher.', 'error');
+      }
+    } catch {
+      showToast('Could not connect to server.', 'error');
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {toast && (
         <Animated.View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastOpacity }]}>
+          <Ionicons
+            name={toast.type === 'success' ? 'checkmark-circle' : 'close-circle'}
+            size={18}
+            color="#FFFFFF"
+            style={{ marginRight: 8 }}
+          />
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Manage Teachers</Text>
-        <Text style={styles.headerSubtitle}>{teachers.length} total instructors registered</Text>
+        <Text style={styles.headerSubtitle}>
+          {loading ? 'Loading...' : `${teachers.length} total instructors registered`}
+        </Text>
         <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -259,14 +321,25 @@ export default function AdminTeachersScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.statBadgeCard}>
-            <Text style={styles.statBadgeVal}>{totalStudentsTaught}</Text>
+            <Text style={styles.statBadgeVal}>{totalStudents}</Text>
             <Text style={styles.statBadgeLabel}>Students</Text>
           </View>
         </View>
 
         {/* TEACHERS LIST */}
         <View style={styles.listContainer}>
-          {filteredTeachers.map((item) => (
+          {loading ? (
+            <View style={styles.emptyCard}>
+              <ActivityIndicator size="large" color="#7B2CBF" />
+              <Text style={styles.emptyText}>Loading teachers...</Text>
+            </View>
+          ) : filteredTeachers.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={32} color="#9CA3AF" />
+              <Text style={styles.emptyText}>No teachers matched the filters.</Text>
+            </View>
+          ) : (
+            filteredTeachers.map((item) => (
             <View key={item.id} style={styles.teacherCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.avatarCircle}>
@@ -323,7 +396,8 @@ export default function AdminTeachersScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
+            ))
+          )}
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -512,56 +586,32 @@ export default function AdminTeachersScreen() {
                 </View>
               </View>
 
-              {/* Assigned Courses Checkboxes */}
+              {/* Assign Courses — dynamic from backend */}
               <Text style={styles.formSectionTitle}>Assign Courses</Text>
               <View style={styles.checkboxContainer}>
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setAssignedCourses(p => ({ ...p, ds: !p.ds }))}
-                >
-                  <Ionicons
-                    name={assignedCourses.ds ? "checkbox" : "square-outline"}
-                    size={20}
-                    color="#7B2CBF"
-                  />
-                  <Text style={styles.checkboxLabel}>Data Science & Machine Learning</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setAssignedCourses(p => ({ ...p, fs: !p.fs }))}
-                >
-                  <Ionicons
-                    name={assignedCourses.fs ? "checkbox" : "square-outline"}
-                    size={20}
-                    color="#7B2CBF"
-                  />
-                  <Text style={styles.checkboxLabel}>Full Stack Web Development</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setAssignedCourses(p => ({ ...p, uiux: !p.uiux }))}
-                >
-                  <Ionicons
-                    name={assignedCourses.uiux ? "checkbox" : "square-outline"}
-                    size={20}
-                    color="#7B2CBF"
-                  />
-                  <Text style={styles.checkboxLabel}>UI/UX Design Mastery</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setAssignedCourses(p => ({ ...p, digital: !p.digital }))}
-                >
-                  <Ionicons
-                    name={assignedCourses.digital ? "checkbox" : "square-outline"}
-                    size={20}
-                    color="#7B2CBF"
-                  />
-                  <Text style={styles.checkboxLabel}>Digital Marketing</Text>
-                </TouchableOpacity>
+                {courses.length === 0 ? (
+                  <Text style={{ color: '#9CA3AF', fontSize: 13 }}>No courses available</Text>
+                ) : courses.map(course => {
+                  const checked = selectedCourseIds.includes(course.id);
+                  return (
+                    <TouchableOpacity
+                      key={course.id}
+                      style={styles.checkboxRow}
+                      onPress={() =>
+                        setSelectedCourseIds(prev =>
+                          checked ? prev.filter(id => id !== course.id) : [...prev, course.id]
+                        )
+                      }
+                    >
+                      <Ionicons
+                        name={checked ? 'checkbox' : 'square-outline'}
+                        size={20}
+                        color="#7B2CBF"
+                      />
+                      <Text style={styles.checkboxLabel}>{course.title}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <View style={styles.modalActionRow}>
@@ -981,6 +1031,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 13,
   },
+  emptyCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 40,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 12,
+    textAlign: 'center',
+  },
   toast: {
     position: 'absolute',
     top: 60,
@@ -988,7 +1053,10 @@ const styles = StyleSheet.create({
     right: 20,
     zIndex: 999,
     borderRadius: 12,
-    padding: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
