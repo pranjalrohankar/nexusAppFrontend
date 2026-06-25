@@ -117,11 +117,16 @@ export const api = {
   createUser: (data: object) => post('/admin/users', data),
 
   getStudents: () => get('/admin/students'),
-  getTeachers: () => get('/admin/teachers'),
+  getTeachers: () => get('/teachers/all'),
+  getTeacher: (id: number | string) => get(`/teachers/${id}`),
   updateStudent: (id: number | string, data: object) => put(`/admin/students/${id}`, data),
   deleteStudent: (id: number | string) => del(`/admin/students/${id}`),
-  updateTeacher: (id: number | string, data: object) => put(`/admin/teachers/${id}`, data),
-  deleteTeacher: (id: number | string) => del(`/admin/teachers/${id}`),
+  updateTeacher: (id: number | string, data: object) => put(`/teachers/${id}`, data),
+  deleteTeacher: (id: number | string) => del(`/teachers/${id}`),
+  assignCourse: (teacherId: number | string, courseId: number | string) => 
+    post(`/teachers/${teacherId}/courses/${courseId}`, {}),
+  unassignCourse: (teacherId: number | string, courseId: number | string) => 
+    del(`/teachers/${teacherId}/courses/${courseId}`),
 
   getCourses: () => get('/courses?size=100'),
   getActiveCourses: () => get('/courses/active'),
