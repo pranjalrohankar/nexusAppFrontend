@@ -128,7 +128,7 @@ export const api = {
   unassignCourse: (teacherId: number | string, courseId: number | string) => 
     del(`/teachers/${teacherId}/courses/${courseId}`),
 
-  getCourses: () => get('/courses?size=100'),
+  getAllCourses: () => get('/courses/all'),
   getActiveCourses: () => get('/courses/active'),
   createCourse: (data: object) => post('/courses', data),
   updateCourse: (id: number | string, data: object) => put(`/courses/${id}`, data),

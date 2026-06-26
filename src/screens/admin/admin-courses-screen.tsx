@@ -63,8 +63,8 @@ export default function AdminCoursesScreen() {
 
   const fetchCourses = async () => {
     try {
-      const res = await api.getCourses();
-      const list = res?.content ?? res ?? [];
+      const res = await api.getAllCourses();
+      const list = res?.data ?? res?.content ?? res ?? [];
       setCourses(list.map((c: any) => ({
         id: String(c.id),
         title: c.title,

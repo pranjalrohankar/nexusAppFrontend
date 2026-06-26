@@ -68,7 +68,7 @@ export default function AdminTeachersScreen() {
       const res = await api.getTeachers();
       if (res.success && Array.isArray(res.data)) {
         const mapped: Teacher[] = res.data.map((t: any) => ({
-          id: String(t.teacherId),
+          id: String(t.teacherId ?? t.id ?? ''),
           name: t.name || '',
           joinedDate: t.joinDate || '',
           status: (t.status === 'Active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
@@ -80,7 +80,7 @@ export default function AdminTeachersScreen() {
           assignedCourseIds: Array.isArray(t.assignedCourses)
             ? t.assignedCourses.map((c: any) => c.courseId)
             : [],
-        }));
+        })).filter((t: Teacher) => t.id && t.id !== 'undefined');
         setTeachers(mapped);
         setTotalStudents(res.totalStudents ?? 0);
       }
@@ -93,10 +93,8 @@ export default function AdminTeachersScreen() {
 
   const fetchCourses = useCallback(async () => {
     try {
-      const res = await api.getCourses();
-      if (res.content && Array.isArray(res.content)) {
-        setCourses(res.content.map((c: any) => ({ id: c.id, title: c.title })));
-      } else if (res.success && Array.isArray(res.data)) {
+      const res = await api.getAllCourses();
+      if (res.success && Array.isArray(res.data)) {
         setCourses(res.data.map((c: any) => ({ id: c.id, title: c.title })));
       }
     } catch {}
@@ -130,7 +128,7 @@ export default function AdminTeachersScreen() {
 
   const activeCount = teachers.filter(t => t.status === 'Active').length;
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = async () => {
     setSelectedTeacher(null);
     setFormFirstName('');
     setFormLastName('');
@@ -148,10 +146,11 @@ export default function AdminTeachersScreen() {
     setFormEmploymentType('Full Time');
     setFormPassword('');
     setSelectedCourseIds([]);
+    if (courses.length === 0) await fetchCourses();
     setIsModalVisible(true);
   };
 
-  const handleOpenEditModal = (teacher: Teacher) => {
+  const handleOpenEditModal = async (teacher: Teacher) => {
     setSelectedTeacher(teacher);
     const names = teacher.name.split(' ');
     setFormFirstName(names[0] || '');
@@ -169,6 +168,7 @@ export default function AdminTeachersScreen() {
     setFormJoinDate(teacher.joinedDate);
     setFormEmploymentType('');
     setSelectedCourseIds(teacher.assignedCourseIds || []);
+    if (courses.length === 0) await fetchCourses();
     setIsModalVisible(true);
   };
 
@@ -180,7 +180,7 @@ export default function AdminTeachersScreen() {
 
     setSaving(true);
     try {
-      if (selectedTeacher) {
+      if (selectedTeacher && selectedTeacher.id && selectedTeacher.id !== 'undefined') {
         const res = await api.updateTeacher(selectedTeacher.id, {
           firstName: formFirstName,
           lastName: formLastName,
@@ -223,6 +223,7 @@ export default function AdminTeachersScreen() {
           joinDate: formJoinDate,
           employmentType: formEmploymentType,
           role: 'TEACHER',
+          courseIds: selectedCourseIds.length > 0 ? selectedCourseIds : undefined,
         });
         if (res.success) {
           await fetchTeachers();
