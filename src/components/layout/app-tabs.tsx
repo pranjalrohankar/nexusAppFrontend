@@ -96,7 +96,7 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
       }
     } else if (userRole === 'admin') {
       switch (activeIndex) {
-        case 0: return <AdminDashboardScreen />;
+        case 0: return <AdminDashboardScreen onViewAllEnrollments={() => setActiveIndex(1)} />;
         case 1: return <AdminStudentsScreen />;
         case 2: return <AdminTeachersScreen />;
         case 3: return <AdminCoursesScreen />;

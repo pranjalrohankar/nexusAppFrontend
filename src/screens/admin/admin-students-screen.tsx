@@ -75,6 +75,8 @@ export default function AdminStudentsScreen() {
   const [students, setStudents] = useState<Student[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 5;
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -100,7 +102,7 @@ export default function AdminStudentsScreen() {
     try {
       const res = await api.getStudents();
       if (res.success) {
-        setStudents(res.data);
+        setStudents(res.data.slice().reverse());
       } else {
         showToast(res.message || 'Failed to load students', 'error');
       }
@@ -129,12 +131,14 @@ export default function AdminStudentsScreen() {
   const filteredStudents = students.filter(student => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
-    
     if (activeTab === 'All') return matchesSearch;
     if (activeTab === 'Active') return matchesSearch && student.active;
     if (activeTab === 'Inactive') return matchesSearch && !student.active;
     return matchesSearch;
   });
+
+  const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
+  const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeCount = students.filter(s => s.active).length;
   const inactiveCount = students.filter(s => !s.active).length;
@@ -312,7 +316,7 @@ export default function AdminStudentsScreen() {
             placeholder="Search students by name or email..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -325,7 +329,7 @@ export default function AdminStudentsScreen() {
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'All' && styles.tabItemActive]}
-            onPress={() => setActiveTab('All')}
+            onPress={() => { setActiveTab('All'); setPage(1); }}
           >
             <Text style={[styles.tabLabel, activeTab === 'All' && styles.tabLabelActive]}>
               All ({students.length})
@@ -333,7 +337,7 @@ export default function AdminStudentsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
-            onPress={() => setActiveTab('Active')}
+            onPress={() => { setActiveTab('Active'); setPage(1); }}
           >
             <Text style={[styles.tabLabel, activeTab === 'Active' && styles.tabLabelActive]}>
               Active ({activeCount})
@@ -341,7 +345,7 @@ export default function AdminStudentsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'Inactive' && styles.tabItemActive]}
-            onPress={() => setActiveTab('Inactive')}
+            onPress={() => { setActiveTab('Inactive'); setPage(1); }}
           >
             <Text style={[styles.tabLabel, activeTab === 'Inactive' && styles.tabLabelActive]}>
               Inactive ({inactiveCount})
@@ -362,7 +366,7 @@ export default function AdminStudentsScreen() {
               <Text style={styles.emptyText}>No students matched the filters.</Text>
             </View>
           ) : (
-            filteredStudents.map((item) => (
+            paginatedStudents.map((item) => (
               <View key={item.id} style={styles.studentCard}>
                 <View style={styles.cardHeader}>
                   <View style={styles.avatarCircle}>
@@ -427,10 +431,32 @@ export default function AdminStudentsScreen() {
           )}
         </View>
 
+        {!loading && totalPages > 1 && (
+          <View style={styles.pagination}>
+            <TouchableOpacity
+              style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+              onPress={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <Ionicons name="chevron-back" size={16} color={page === 1 ? '#D1D5DB' : '#7B2CBF'} />
+            </TouchableOpacity>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+              <TouchableOpacity key={n} style={[styles.pageBtn, page === n && styles.pageBtnActive]} onPress={() => setPage(n)}>
+                <Text style={[styles.pageBtnText, page === n && styles.pageBtnTextActive]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.pageBtn, page === totalPages && styles.pageBtnDisabled]}
+              onPress={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              <Ionicons name="chevron-forward" size={16} color={page === totalPages ? '#D1D5DB' : '#7B2CBF'} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      {/* ADD / EDIT MODAL */}
       <Modal
         visible={isModalVisible}
         animationType="slide"
@@ -1125,5 +1151,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
     textAlign: 'center',
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 20,
+  },
+  pageBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnActive: {
+    backgroundColor: '#7B2CBF',
+    borderColor: '#7B2CBF',
+  },
+  pageBtnDisabled: {
+    borderColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+  },
+  pageBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  pageBtnTextActive: {
+    color: '#FFFFFF',
   },
 });

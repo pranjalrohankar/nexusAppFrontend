@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,6 +48,9 @@ export default function AdminCoursesScreen() {
   const [googleMeetChecked, setGoogleMeetChecked] = useState(true);
 
   const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 5;
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,10 +66,11 @@ export default function AdminCoursesScreen() {
   };
 
   const fetchCourses = async () => {
+    setLoading(true);
     try {
       const res = await api.getAllCourses();
       const list = res?.data ?? res?.content ?? res ?? [];
-      setCourses(list.map((c: any) => ({
+      const mapped = list.map((c: any) => ({
         id: String(c.id),
         title: c.title,
         category: c.category ?? '',
@@ -76,20 +81,25 @@ export default function AdminCoursesScreen() {
         startDate: c.startDate ?? '',
         price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
         status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
-      })));
+      }));
+      setCourses(mapped.slice().reverse());
     } catch (err) {
       console.log('Failed to fetch courses', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => { fetchCourses(); }, []);
 
   const filteredCourses = courses.filter(course => {
-    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           course.instructor.toLowerCase().includes(searchQuery.toLowerCase());
-    
     return matchesSearch && course.status === activeTab;
   });
+
+  const totalPages = Math.ceil(filteredCourses.length / PAGE_SIZE);
+  const paginatedCourses = filteredCourses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeCount = courses.filter(c => c.status === 'Active').length;
   const upcomingCount = courses.filter(c => c.status === 'Upcoming').length;
@@ -207,7 +217,7 @@ export default function AdminCoursesScreen() {
             placeholder="Search courses by title or instructor..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -220,7 +230,7 @@ export default function AdminCoursesScreen() {
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
-            onPress={() => setActiveTab('Active')}
+            onPress={() => { setActiveTab('Active'); setPage(1); }}
           >
             <Text style={[styles.tabLabel, activeTab === 'Active' && styles.tabLabelActive]}>
               Active ({activeCount})
@@ -228,7 +238,7 @@ export default function AdminCoursesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'Upcoming' && styles.tabItemActive]}
-            onPress={() => setActiveTab('Upcoming')}
+            onPress={() => { setActiveTab('Upcoming'); setPage(1); }}
           >
             <Text style={[styles.tabLabel, activeTab === 'Upcoming' && styles.tabLabelActive]}>
               Upcoming ({upcomingCount})
@@ -236,7 +246,7 @@ export default function AdminCoursesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'Completed' && styles.tabItemActive]}
-            onPress={() => setActiveTab('Completed')}
+            onPress={() => { setActiveTab('Completed'); setPage(1); }}
           >
             <Text style={[styles.tabLabel, activeTab === 'Completed' && styles.tabLabelActive]}>
               Completed ({completedCount})
@@ -246,13 +256,18 @@ export default function AdminCoursesScreen() {
 
         {/* LIST */}
         <View style={styles.listContainer}>
-          {filteredCourses.length === 0 ? (
+          {loading ? (
+            <View style={styles.emptyCard}>
+              <ActivityIndicator size="large" color="#7B2CBF" />
+              <Text style={styles.emptyText}>Loading courses...</Text>
+            </View>
+          ) : filteredCourses.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="book-outline" size={32} color="#9CA3AF" />
               <Text style={styles.emptyText}>No courses scheduled under this tab.</Text>
             </View>
           ) : (
-            filteredCourses.map((item) => {
+            paginatedCourses.map((item) => {
               const progressPercent = item.maxCapacity > 0 ? (item.studentsCount / item.maxCapacity) * 100 : 0;
               return (
                 <View key={item.id} style={styles.courseCard}>
@@ -316,6 +331,30 @@ export default function AdminCoursesScreen() {
             })
           )}
         </View>
+
+        {!loading && totalPages > 1 && (
+          <View style={styles.pagination}>
+            <TouchableOpacity
+              style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+              onPress={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <Ionicons name="chevron-back" size={16} color={page === 1 ? '#D1D5DB' : '#7B2CBF'} />
+            </TouchableOpacity>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+              <TouchableOpacity key={n} style={[styles.pageBtn, page === n && styles.pageBtnActive]} onPress={() => setPage(n)}>
+                <Text style={[styles.pageBtnText, page === n && styles.pageBtnTextActive]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.pageBtn, page === totalPages && styles.pageBtnDisabled]}
+              onPress={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              <Ionicons name="chevron-forward" size={16} color={page === totalPages ? '#D1D5DB' : '#7B2CBF'} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -891,5 +930,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 20,
+  },
+  pageBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnActive: {
+    backgroundColor: '#7B2CBF',
+    borderColor: '#7B2CBF',
+  },
+  pageBtnDisabled: {
+    borderColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+  },
+  pageBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  pageBtnTextActive: {
+    color: '#FFFFFF',
   },
 });

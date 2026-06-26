@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,24 +10,52 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
-export default function AdminDashboardScreen() {
+export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewAllEnrollments?: () => void }) {
+  const [dashData, setDashData] = useState<any>(null);
+
+  useEffect(() => {
+    api.getDashboard()
+      .then((res: any) => setDashData(res?.data ?? null))
+      .catch(() => {});
+  }, []);
+
+  const formatRevenue = (amount: number) => {
+    if (!amount) return '₹0';
+    if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
+    if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+    return `₹${amount}`;
+  };
+
   const metrics = [
-    { label: 'Total Students', val: '1,245', change: '+12%', icon: 'people-outline', color: '#7B2CBF', bg: '#F3E8FF' },
-    { label: 'Total Teachers', val: '48', change: '+4%', icon: 'ribbon-outline', color: '#2563EB', bg: '#DBEAFE' },
-    { label: 'Total Courses', val: '24', change: '+2 new', icon: 'school-outline', color: '#EA580C', bg: '#FFF7ED' },
-    { label: 'Revenue', val: '₹12.5L', change: '+18%', icon: 'cash-outline', color: '#16A34A', bg: '#DCFCE7' },
+    { label: 'Total Students', val: dashData ? String(dashData.totalStudents) : '-', change: dashData?.studentsPct ?? '+0%', icon: 'people-outline', color: '#7B2CBF', bg: '#F3E8FF' },
+    { label: 'Total Teachers', val: dashData ? String(dashData.totalTeachers) : '-', change: dashData?.teachersPct ?? '+0%', icon: 'ribbon-outline', color: '#2563EB', bg: '#DBEAFE' },
+    { label: 'Total Courses', val: dashData ? String(dashData.totalCourses) : '-', change: dashData?.coursesPct ?? '+0%', icon: 'school-outline', color: '#EA580C', bg: '#FFF7ED' },
+    { label: 'Revenue', val: dashData ? formatRevenue(dashData.revenue) : '-', change: dashData?.revenuePct ?? '+0%', icon: 'cash-outline', color: '#16A34A', bg: '#DCFCE7' },
   ];
 
-  const recentEnrollments = [
-    { id: '1', name: 'Rahul Kumar', course: 'Data Science & ML', status: 'Active', time: 'Today', dotColor: '#10B981' },
-    { id: '2', name: 'Priya Patel', course: 'Full Stack Development', status: 'Active', time: 'Today', dotColor: '#10B981' },
-  ];
+  const tagColors = ['#EA580C', '#7B2CBF', '#2563EB', '#16A34A'];
+  const tagBgs   = ['#FFF7ED', '#F3E8FF', '#DBEAFE', '#DCFCE7'];
 
-  const classesToday = [
-    { id: 'c1', course: 'Data Science & ML', teacher: 'Priya Sharma', time: '8:00 PM', tagColor: '#EA580C', tagBg: '#FFF7ED' },
-    { id: 'c2', course: 'Full Stack Development', teacher: 'Rajesh Kumar', time: '10:00 AM', tagColor: '#7B2CBF', tagBg: '#F3E8FF' },
-  ];
+  const recentEnrollments: { id: string; name: string; course: string; time: string; dotColor: string }[] =
+    (dashData?.recentEnrollments ?? []).map((e: any) => ({
+      id: String(e.id),
+      name: e.studentName,
+      course: e.courseTitle,
+      time: e.enrollmentDate || 'N/A',
+      dotColor: '#10B981',
+    }));
+
+  const classesToday: { id: string; course: string; teacher: string; time: string; tagColor: string; tagBg: string }[] =
+    (dashData?.classesToday ?? []).map((c: any, idx: number) => ({
+      id: String(c.id),
+      course: c.course,
+      teacher: '',
+      time: c.time,
+      tagColor: tagColors[idx % tagColors.length],
+      tagBg: tagBgs[idx % tagBgs.length],
+    }));
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -76,7 +104,7 @@ export default function AdminDashboardScreen() {
         {/* RECENT ENROLLMENTS */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Recent Enrollments</Text>
-          <TouchableOpacity onPress={() => Alert.alert('Navigate', 'Redirecting to students directory...')}>
+          <TouchableOpacity onPress={onViewAllEnrollments}>
             <Text style={styles.viewAllLink}>View All</Text>
           </TouchableOpacity>
         </View>
@@ -106,7 +134,7 @@ export default function AdminDashboardScreen() {
             <View key={item.id} style={styles.classCard}>
               <View style={styles.classHeaderCol}>
                 <Text style={styles.classCourse}>{item.course}</Text>
-                <Text style={styles.classTeacher}>Instructor: {item.teacher}</Text>
+                <Text style={styles.classTeacher}>{item.teacher ? `Instructor: ${item.teacher}` : ''}</Text>
               </View>
               <View style={[styles.classTag, { backgroundColor: item.tagBg }]}>
                 <Text style={[styles.classTagText, { color: item.tagColor }]}>{item.time}</Text>

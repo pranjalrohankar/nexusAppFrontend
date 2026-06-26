@@ -128,6 +128,8 @@ export const api = {
   unassignCourse: (teacherId: number | string, courseId: number | string) => 
     del(`/teachers/${teacherId}/courses/${courseId}`),
 
+  getDashboard: () => get('/admin/dashboard'),
+  getAdminProfile: () => get('/admin/profile'),
   getAllCourses: () => get('/courses/all'),
   getActiveCourses: () => get('/courses/active'),
   createCourse: (data: object) => post('/courses', data),

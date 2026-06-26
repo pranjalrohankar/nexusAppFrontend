@@ -59,6 +59,8 @@ export default function AdminTeachersScreen() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 5;
   const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
   const [totalStudents, setTotalStudents] = useState(0);
 
@@ -81,7 +83,7 @@ export default function AdminTeachersScreen() {
             ? t.assignedCourses.map((c: any) => c.courseId)
             : [],
         })).filter((t: Teacher) => t.id && t.id !== 'undefined');
-        setTeachers(mapped);
+        setTeachers(mapped.slice().reverse());
         setTotalStudents(res.totalStudents ?? 0);
       }
     } catch {
@@ -121,10 +123,12 @@ export default function AdminTeachersScreen() {
   const filteredTeachers = teachers.filter(teacher => {
     const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           teacher.email.toLowerCase().includes(searchQuery.toLowerCase());
-    
     if (activeTab === 'All') return matchesSearch;
     return matchesSearch && teacher.status === activeTab;
   });
+
+  const totalPages = Math.ceil(filteredTeachers.length / PAGE_SIZE);
+  const paginatedTeachers = filteredTeachers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeCount = teachers.filter(t => t.status === 'Active').length;
 
@@ -292,7 +296,7 @@ export default function AdminTeachersScreen() {
             placeholder="Search teachers by name or specialization..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -306,7 +310,7 @@ export default function AdminTeachersScreen() {
           <View style={styles.tabsContainer}>
             <TouchableOpacity
               style={[styles.tabItem, activeTab === 'All' && styles.tabItemActive]}
-              onPress={() => setActiveTab('All')}
+              onPress={() => { setActiveTab('All'); setPage(1); }}
             >
               <Text style={[styles.tabLabel, activeTab === 'All' && styles.tabLabelActive]}>
                 All ({teachers.length})
@@ -314,7 +318,7 @@ export default function AdminTeachersScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
-              onPress={() => setActiveTab('Active')}
+              onPress={() => { setActiveTab('Active'); setPage(1); }}
             >
               <Text style={[styles.tabLabel, activeTab === 'Active' && styles.tabLabelActive]}>
                 Active ({activeCount})
@@ -340,7 +344,7 @@ export default function AdminTeachersScreen() {
               <Text style={styles.emptyText}>No teachers matched the filters.</Text>
             </View>
           ) : (
-            filteredTeachers.map((item) => (
+            paginatedTeachers.map((item) => (
             <View key={item.id} style={styles.teacherCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.avatarCircle}>
@@ -400,6 +404,30 @@ export default function AdminTeachersScreen() {
             ))
           )}
         </View>
+
+        {!loading && totalPages > 1 && (
+          <View style={styles.pagination}>
+            <TouchableOpacity
+              style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
+              onPress={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <Ionicons name="chevron-back" size={16} color={page === 1 ? '#D1D5DB' : '#7B2CBF'} />
+            </TouchableOpacity>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+              <TouchableOpacity key={n} style={[styles.pageBtn, page === n && styles.pageBtnActive]} onPress={() => setPage(n)}>
+                <Text style={[styles.pageBtnText, page === n && styles.pageBtnTextActive]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.pageBtn, page === totalPages && styles.pageBtnDisabled]}
+              onPress={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              <Ionicons name="chevron-forward" size={16} color={page === totalPages ? '#D1D5DB' : '#7B2CBF'} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -1075,5 +1103,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
     textAlign: 'center',
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 20,
+  },
+  pageBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnActive: {
+    backgroundColor: '#7B2CBF',
+    borderColor: '#7B2CBF',
+  },
+  pageBtnDisabled: {
+    borderColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+  },
+  pageBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  pageBtnTextActive: {
+    color: '#FFFFFF',
   },
 });
