@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Platform,
   ScrollView,
@@ -9,6 +9,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '../../services/api';
 import AccountSettingsScreen from './account-settings-screen';
 import AdminHelpSupportScreen from './admin-help-support-screen';
 import AdminSecuritySettingsScreen from './admin-security-settings-screen';
@@ -25,6 +26,22 @@ interface ProfileScreenProps {
 }
 
 export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student' }: ProfileScreenProps) {
+  const [adminProfile, setAdminProfile] = useState<any>(null);
+
+  useEffect(() => {
+    if (userRole === 'admin') {
+      api.getAdminProfile()
+        .then((res: any) => setAdminProfile(res?.data ?? null))
+        .catch(() => {});
+    }
+  }, [userRole]);
+
+  const formatRevenue = (amount: number) => {
+    if (!amount) return '₹0';
+    if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
+    if (amount >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+    return `₹${amount}`;
+  };
   // Sub-view Routing
   if (currentSubView === 'notifications') {
     return <NotificationsScreen onBack={() => onChangeSubView('profile')} />;
@@ -80,7 +97,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
           {/* User Info */}
           <Text style={styles.userName}>
-            {userRole === 'student' ? 'John Doe' : userRole === 'teacher' ? 'Priya Sharma' : 'Administrator'}
+            {userRole === 'student' ? 'John Doe' : userRole === 'teacher' ? 'Priya Sharma' : (adminProfile?.name ?? 'Administrator')}
           </Text>
           <Text style={styles.userRole}>
             {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
@@ -88,7 +105,9 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
           <View style={styles.joinedRow}>
             <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
-            <Text style={styles.joinedText}>Joined January 2025</Text>
+            <Text style={styles.joinedText}>
+              {userRole === 'admin' && adminProfile?.createdAt ? `Joined ${adminProfile.createdAt}` : 'Joined January 2025'}
+            </Text>
           </View>
 
           {/* Badges / Skills tags row */}
@@ -154,28 +173,28 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
                     <Ionicons name="people-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>1.2k</Text>
+                  <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalStudents) : '-'}</Text>
                   <Text style={styles.statLabel}>Students</Text>
                 </View>
                 <View style={styles.statItem}>
                   <View style={[styles.statIconContainer, { backgroundColor: '#3B82F6' }]}>
                     <Ionicons name="person-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>48</Text>
+                  <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalTeachers) : '-'}</Text>
                   <Text style={styles.statLabel}>Teachers</Text>
                 </View>
                 <View style={styles.statItem}>
                   <View style={[styles.statIconContainer, { backgroundColor: '#EA580C' }]}>
                     <Ionicons name="book-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>24</Text>
+                  <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalCourses) : '-'}</Text>
                   <Text style={styles.statLabel}>Courses</Text>
                 </View>
                 <View style={styles.statItem}>
                   <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
                     <Ionicons name="cash-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>₹12.5L</Text>
+                  <Text style={styles.statCount}>{adminProfile ? formatRevenue(adminProfile.revenue) : '-'}</Text>
                   <Text style={styles.statLabel}>Revenue</Text>
                 </View>
               </>
@@ -225,9 +244,9 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 <Text style={styles.detailLabel}>Email</Text>
                 <Text style={styles.detailValue}>
                   {userRole === 'teacher'
-                    ? 'priya.sharma@pratham.org'
+                    ? 'priya.sharma@nexus.edu'
                     : userRole === 'admin'
-                      ? 'admin@pratham.edu'
+                      ? (adminProfile?.email ?? 'admin@nexus.edu')
                       : 'john.doe@email.com'}
                 </Text>
               </View>
@@ -241,11 +260,9 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
               <View style={styles.detailTextBox}>
                 <Text style={styles.detailLabel}>Phone</Text>
                 <Text style={styles.detailValue}>
-                  {userRole === 'teacher'
-                    ? '+91 98765 43210'
-                    : userRole === 'admin'
-                      ? '+91 99999 88888'
-                      : '+91 98765 43210'}
+                  {userRole === 'admin'
+                    ? '+91 9545450788 / +91 9545450677'
+                    : '+91 98765 43210'}
                 </Text>
               </View>
             </View>
@@ -257,7 +274,11 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
               </View>
               <View style={styles.detailTextBox}>
                 <Text style={styles.detailLabel}>Location</Text>
-                <Text style={styles.detailValue}>Bangalore, Karnataka</Text>
+                <Text style={styles.detailValue}>
+                  {userRole === 'admin'
+                    ? 'Office No. 4-B, Second Floor, Ganesham Commercial -A, Survey No. 21/8-21/24, BRTS Road, Pimple Saudagar, Pune - 411027'
+                    : 'Bangalore, Karnataka'}
+                </Text>
               </View>
             </View>
           </View>
@@ -305,7 +326,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
               </View>
               <View style={styles.adminDetailRow}>
                 <Text style={styles.adminDetailLabel}>Last Login</Text>
-                <Text style={styles.adminDetailValue}>May 22, 2026 - 9:08 AM</Text>
+                <Text style={styles.adminDetailValue}>{adminProfile?.lastLogin ?? 'Not recorded'}</Text>
               </View>
               <View style={[styles.adminDetailRow, { borderBottomWidth: 0 }]}>
                 <Text style={styles.adminDetailLabel}>System Version</Text>
