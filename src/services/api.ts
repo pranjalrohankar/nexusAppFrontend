@@ -150,8 +150,8 @@ export const api = {
   updateBatch: (id: number | string, data: object) => put(`/batches/${id}`, data),
   deleteBatch: (id: number | string) => del(`/batches/${id}`),
 
-  getEnrollmentsByCourse: (courseTitle: string) => get(`/enrollments/course/${encodeURIComponent(courseTitle)}`),
-  getEnrollmentCount: (courseTitle: string) => getPublic(`/enrollments/count/course/${encodeURIComponent(courseTitle.trim())}`),
+  getEnrollmentsByCourse: (courseTitle: string) => get(`/enrollments/course?courseTitle=${encodeURIComponent(courseTitle)}`),
+  getEnrollmentCount: (courseTitle: string) => get(`/enrollments/count/course?courseTitle=${encodeURIComponent(courseTitle.trim())}`),
 
   getEnquiries: () => get('/enquiries'),
   submitEnquiry: (data: object) => post('/enquiries', data),
