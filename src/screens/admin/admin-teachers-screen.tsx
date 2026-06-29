@@ -99,7 +99,7 @@ export default function AdminTeachersScreen() {
       if (res.success && Array.isArray(res.data)) {
         setCourses(res.data.map((c: any) => ({ id: c.id, title: c.title })));
       }
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -121,8 +121,8 @@ export default function AdminTeachersScreen() {
   };
 
   const filteredTeachers = teachers.filter(teacher => {
-    const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          teacher.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      teacher.email.toLowerCase().includes(searchQuery.toLowerCase());
     if (activeTab === 'All') return matchesSearch;
     return matchesSearch && teacher.status === activeTab;
   });
@@ -268,12 +268,18 @@ export default function AdminTeachersScreen() {
       )}
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerSubtitle}>
-          {loading ? 'Loading...' : `${teachers.length} total instructors registered`}
-        </Text>
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-          <Ionicons name="add" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.countRow}>
+          <View style={styles.countLeft}>
+            <Text style={styles.countNumber}>
+              {loading ? '...' : teachers.length}
+            </Text>
+            <Text style={styles.countLabel}>Total Instructors Registered</Text>
+          </View>
+
+          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
+            <Ionicons name="add" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -339,62 +345,62 @@ export default function AdminTeachersScreen() {
             </View>
           ) : (
             paginatedTeachers.map((item) => (
-            <View key={item.id} style={styles.teacherCard}>
-              <View style={styles.cardHeader}>
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarText}>{item.name[0]}</Text>
-                </View>
-                <View style={styles.metaCol}>
-                  <Text style={styles.teacherName}>{item.name}</Text>
-                  <Text style={styles.joinedText}>Joined {item.joinedDate}</Text>
-                </View>
-                
-                <View style={styles.ratingBadge}>
-                  <Ionicons name="star" size={12} color="#FFB703" />
-                  <Text style={styles.ratingText}>{item.rating}</Text>
-                </View>
-              </View>
-
-              {/* Quick Info Grid */}
-              <View style={styles.infoBlock}>
-                <View style={styles.infoRow}>
-                  <Ionicons name="mail-outline" size={13} color="#6B7280" />
-                  <Text style={styles.infoValue}>{item.email}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="call-outline" size={13} color="#6B7280" />
-                  <Text style={styles.infoValue}>{item.phone}</Text>
-                </View>
-                <View style={styles.statsDetailsRow}>
-                  <View style={styles.miniStatCard}>
-                    <Text style={styles.miniStatVal}>{item.coursesCount}</Text>
-                    <Text style={styles.miniStatLabel}>Courses</Text>
+              <View key={item.id} style={styles.teacherCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>{item.name[0]}</Text>
                   </View>
-                  <View style={styles.miniStatCard}>
-                    <Text style={styles.miniStatVal}>{item.studentsCount}</Text>
-                    <Text style={styles.miniStatLabel}>Students</Text>
+                  <View style={styles.metaCol}>
+                    <Text style={styles.teacherName}>{item.name}</Text>
+                    <Text style={styles.joinedText}>Joined {item.joinedDate}</Text>
+                  </View>
+
+                  <View style={styles.ratingBadge}>
+                    <Ionicons name="star" size={12} color="#FFB703" />
+                    <Text style={styles.ratingText}>{item.rating}</Text>
                   </View>
                 </View>
-              </View>
 
-              {/* Actions */}
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  style={styles.editBtn}
-                  onPress={() => handleOpenEditModal(item)}
-                >
-                  <Ionicons name="create-outline" size={14} color="#7B2CBF" />
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteCardBtn}
-                  onPress={() => handleDeleteTeacher(item.id)}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#EF4444" />
-                  <Text style={styles.deleteBtnText}>Delete</Text>
-                </TouchableOpacity>
+                {/* Quick Info Grid */}
+                <View style={styles.infoBlock}>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="mail-outline" size={13} color="#6B7280" />
+                    <Text style={styles.infoValue}>{item.email}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Ionicons name="call-outline" size={13} color="#6B7280" />
+                    <Text style={styles.infoValue}>{item.phone}</Text>
+                  </View>
+                  <View style={styles.statsDetailsRow}>
+                    <View style={styles.miniStatCard}>
+                      <Text style={styles.miniStatVal}>{item.coursesCount}</Text>
+                      <Text style={styles.miniStatLabel}>Courses</Text>
+                    </View>
+                    <View style={styles.miniStatCard}>
+                      <Text style={styles.miniStatVal}>{item.studentsCount}</Text>
+                      <Text style={styles.miniStatLabel}>Students</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Actions */}
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => handleOpenEditModal(item)}
+                  >
+                    <Ionicons name="create-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteCardBtn}
+                    onPress={() => handleDeleteTeacher(item.id)}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#EF4444" />
+                    <Text style={styles.deleteBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
             ))
           )}
         </View>
@@ -652,8 +658,8 @@ export default function AdminTeachersScreen() {
                   {saving
                     ? <ActivityIndicator color="#FFF" />
                     : <Text style={styles.modalSubmitBtnText}>
-                        {selectedTeacher ? 'Save Changes' : 'Add Teacher'}
-                      </Text>}
+                      {selectedTeacher ? 'Save Changes' : 'Add Teacher'}
+                    </Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -676,25 +682,39 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     position: 'relative',
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#E9D5FF',
+  countRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  countLeft: {
+    flex: 1,
+  },
+  countNumber: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    lineHeight: 42,
+    marginBottom: -4,
+  },
+  countLabel: {
+    fontSize: 15,
+    color: '#E0CFFF',
+    fontWeight: '500',
   },
   addBtn: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    backgroundColor: '#FF7A00',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    backgroundColor: '#FF9500',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
   },
   scrollView: {
     flex: 1,
