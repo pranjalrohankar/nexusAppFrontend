@@ -155,4 +155,6 @@ export const api = {
 
   getEnquiries: () => get('/enquiries'),
   submitEnquiry: (data: object) => post('/enquiries', data),
+
+  getTeacherProfile: () => get('/teachers/profile'),
 };
