@@ -152,4 +152,7 @@ export const api = {
 
   getEnrollmentsByCourse: (courseTitle: string) => get(`/enrollments/course/${encodeURIComponent(courseTitle)}`),
   getEnrollmentCount: (courseTitle: string) => getPublic(`/enrollments/count/course/${encodeURIComponent(courseTitle.trim())}`),
+
+  getEnquiries: () => get('/enquiries'),
+  submitEnquiry: (data: object) => post('/enquiries', data),
 };

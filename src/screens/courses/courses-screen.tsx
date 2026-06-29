@@ -9,8 +9,8 @@ export default function CoursesScreen() {
   const [coursesList, setCoursesList] = useState<ExploreCourseItem[]>([]);
 
   useEffect(() => {
-    api.getActiveCourses().then((data: any) => {
-      const list = Array.isArray(data) ? data : [];
+    api.getActiveCourses().then((res: any) => {
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       setCoursesList(list.map((c: any) => ({
         id: String(c.id),
         title: c.title,

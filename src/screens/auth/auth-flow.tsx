@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
 StyleSheet,
 Text,
@@ -40,16 +40,18 @@ const [signUpPhone, setSignUpPhone] = useState('');
 const [signUpMessage, setSignUpMessage] = useState('');
 const [signUpCourse, setSignUpCourse] = useState('');
 const [showCourseModal, setShowCourseModal] = useState(false);
-
-const courses = [
-'MERN Stack Developer',
-'UI/UX Designer',
-'Full Stack Developer',
-'Power BI',
-'AR Caller',
-'SQL',
-];
+const [courses, setCourses] = useState<string[]>([]);
 const [agreeTerms, setAgreeTerms] = useState(false);
+
+useEffect(() => {
+  api.getAllCourses()
+    .then((res: any) => {
+      if (Array.isArray(res?.data)) {
+        setCourses(res.data.map((c: any) => c.title));
+      }
+    })
+    .catch(() => {});
+}, []);
 
 // Animation values
 const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -127,9 +129,25 @@ setLoading(false);
 };
 
 // Handle SignUp action (enquiry only, no login)
-const handleSignUpSubmit = () => {
-Alert.alert('Enquiry Submitted', 'Thank you! We will contact you soon.');
-transitionTo('SIGN_IN');
+const handleSignUpSubmit = async () => {
+  if (!signUpName || !signUpEmail || !signUpPhone) {
+    Alert.alert('Error', 'Please fill in name, email and phone.');
+    return;
+  }
+  try {
+    await api.submitEnquiry({
+      fullName: signUpName,
+      email: signUpEmail,
+      phoneNumber: signUpPhone,
+      message: signUpMessage,
+      course: signUpCourse,
+      termsAccepted: agreeTerms,
+    });
+    Alert.alert('Enquiry Submitted', 'Thank you! We will contact you soon.');
+    transitionTo('SIGN_IN');
+  } catch {
+    Alert.alert('Error', 'Could not submit enquiry. Please try again.');
+  }
 };
 
 // Custom Logo Component
