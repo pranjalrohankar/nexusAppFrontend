@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 interface Submission {
   id: string;
@@ -23,11 +24,29 @@ interface Submission {
 
 interface TeacherDashboardScreenProps {
   onViewSchedule?: () => void;
+  userName?: string;
 }
 
-export default function TeacherDashboardScreen({ onViewSchedule }: TeacherDashboardScreenProps) {
+export default function TeacherDashboardScreen({ onViewSchedule, userName = '' }: TeacherDashboardScreenProps) {
   const [isLive, setIsLive] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [teacherProfile, setTeacherProfile] = useState<any>(null);
+
+  useEffect(() => {
+    api.getTeacherProfile()
+      .then((res: any) => setTeacherProfile(res?.data ?? null))
+      .catch(() => {});
+  }, []);
+
+  // Derive display name: API profile name > prop name > fallback
+  const displayName = teacherProfile?.name || userName || 'Teacher';
+
+  // Build initials from display name (e.g. "Priya Sharma" → "PS")
+  const initials = displayName
+    .split(' ')
+    .slice(0, 2)
+    .map((word: string) => word.charAt(0).toUpperCase())
+    .join('');
 
   const stats = [
     { label: 'Total Students', val: '156', icon: 'people-outline', color: '#7B2CBF', bg: '#F3E8FF' },
@@ -69,7 +88,7 @@ export default function TeacherDashboardScreen({ onViewSchedule }: TeacherDashbo
         <View style={styles.headerTopRow}>
           <View>
             <Text style={styles.welcomeText}>Welcome back,</Text>
-            <Text style={styles.headerTitle}>Priya!</Text>
+            <Text style={styles.headerTitle}>{displayName.split(' ')[0]}!</Text>
           </View>
           <View style={styles.headerIcons}>
             {isLive && (
@@ -79,7 +98,7 @@ export default function TeacherDashboardScreen({ onViewSchedule }: TeacherDashbo
               </View>
             )}
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>PS</Text>
+              <Text style={styles.avatarText}>{initials}</Text>
             </View>
           </View>
         </View>

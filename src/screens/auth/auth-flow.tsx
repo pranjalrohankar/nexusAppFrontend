@@ -20,7 +20,7 @@ import { api, setToken } from '../../services/api';
 type ScreenType = 'LOGO' | 'SPLASH' | 'SIGN_IN' | 'SIGN_UP';
 
 interface AuthFlowProps {
-onSignIn: (role: 'student' | 'teacher' | 'admin') => void;
+onSignIn: (role: 'student' | 'teacher' | 'admin', name: string, email: string) => void;
 }
 
 export default function AuthFlow({ onSignIn }: AuthFlowProps) {
@@ -117,7 +117,7 @@ try {
 const res = await api.login(signInEmail, signInPassword, selectedRole);
 if (res.success) {
 setToken(res.data.token);
-onSignIn(selectedRole);
+onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '');
 } else {
 Alert.alert('Login Failed', res.message || 'Invalid credentials');
 }

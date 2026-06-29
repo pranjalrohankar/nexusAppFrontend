@@ -28,10 +28,12 @@ type ProfileSubView = 'profile' | 'notifications' | 'privacy' | 'help' | 'accoun
 
 interface AppTabsProps {
   userRole: 'student' | 'teacher' | 'admin';
+  userName: string;
+  userEmail: string;
   onLogout: () => void;
 }
 
-export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
+export default function AppTabs({ userRole, userName, userEmail, onLogout }: AppTabsProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [profileSubView, setProfileSubView] = useState<ProfileSubView>('profile');
   const [tabKeys, setTabKeys] = useState<Record<number, number>>({
@@ -79,7 +81,7 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
   const renderScreen = () => {
     if (userRole === 'teacher') {
       switch (activeIndex) {
-        case 0: return <TeacherDashboardScreen onViewSchedule={() => setActiveIndex(2)} />;
+        case 0: return <TeacherDashboardScreen onViewSchedule={() => setActiveIndex(2)} userName={userName} />;
         case 1: return <TeacherClassesScreen />;
         case 2: return <TeacherScheduleScreen />;
         case 3: return <TeacherAlertsScreen />;
@@ -90,9 +92,11 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
               currentSubView={profileSubView}
               onChangeSubView={setProfileSubView}
               userRole={userRole}
+              userName={userName}
+              userEmail={userEmail}
             />
           );
-        default: return <TeacherDashboardScreen />;
+        default: return <TeacherDashboardScreen userName={userName} />;
       }
     } else if (userRole === 'admin') {
       switch (activeIndex) {
@@ -107,6 +111,8 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
               currentSubView={profileSubView}
               onChangeSubView={setProfileSubView}
               userRole={userRole}
+              userName={userName}
+              userEmail={userEmail}
             />
           );
         default: return <AdminDashboardScreen />;
@@ -134,6 +140,8 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
               currentSubView={profileSubView}
               onChangeSubView={setProfileSubView}
               userRole={userRole}
+              userName={userName}
+              userEmail={userEmail}
             />
           );
         case 4: return <CoursesScreen key={tabKeys[4]} />;

@@ -11,6 +11,8 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'student' | 'teacher' | 'admin'>('student');
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => { loadToken(); }, []);
 
@@ -24,11 +26,13 @@ export default function TabLayout() {
       {isAuthenticated ? (
         <>
           <AnimatedSplashOverlay />
-          <AppTabs userRole={userRole} onLogout={() => setIsAuthenticated(false)} />
+          <AppTabs userRole={userRole} userName={userName} userEmail={userEmail} onLogout={() => setIsAuthenticated(false)} />
         </>
       ) : (
-        <AuthFlow onSignIn={(role) => {
+        <AuthFlow onSignIn={(role, name, email) => {
           setUserRole(role);
+          setUserName(name);
+          setUserEmail(email);
           setIsAuthenticated(true);
         }} />
       )}

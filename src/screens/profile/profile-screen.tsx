@@ -23,15 +23,23 @@ interface ProfileScreenProps {
   currentSubView: 'profile' | 'notifications' | 'privacy' | 'help' | 'account';
   onChangeSubView: (view: 'profile' | 'notifications' | 'privacy' | 'help' | 'account') => void;
   userRole?: 'student' | 'teacher' | 'admin';
+  userName?: string;
+  userEmail?: string;
 }
 
-export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student' }: ProfileScreenProps) {
+export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '' }: ProfileScreenProps) {
   const [adminProfile, setAdminProfile] = useState<any>(null);
+  const [teacherProfile, setTeacherProfile] = useState<any>(null);
 
   useEffect(() => {
     if (userRole === 'admin') {
       api.getAdminProfile()
         .then((res: any) => setAdminProfile(res?.data ?? null))
+        .catch(() => {});
+    }
+    if (userRole === 'teacher') {
+      api.getTeacherProfile()
+        .then((res: any) => setTeacherProfile(res?.data ?? null))
         .catch(() => {});
     }
   }, [userRole]);
@@ -97,7 +105,11 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
           {/* User Info */}
           <Text style={styles.userName}>
-            {userRole === 'student' ? 'John Doe' : userRole === 'teacher' ? 'Priya Sharma' : (adminProfile?.name ?? 'Administrator')}
+            {userRole === 'teacher'
+              ? ((teacherProfile?.name ?? userName) || 'Teacher')
+              : userRole === 'admin'
+              ? ((adminProfile?.name ?? userName) || 'Administrator')
+              : (userName || 'Student')}
           </Text>
           <Text style={styles.userRole}>
             {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
@@ -106,7 +118,11 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
           <View style={styles.joinedRow}>
             <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
             <Text style={styles.joinedText}>
-              {userRole === 'admin' && adminProfile?.createdAt ? `Joined ${adminProfile.createdAt}` : 'Joined January 2025'}
+              {userRole === 'teacher' && teacherProfile?.joinDate
+                ? `Joined ${teacherProfile.joinDate}`
+                : userRole === 'admin' && adminProfile?.createdAt
+                ? `Joined ${adminProfile.createdAt}`
+                : ''}
             </Text>
           </View>
 
@@ -142,14 +158,14 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
                     <Ionicons name="book-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>3</Text>
+                  <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.coursesCount) : '-'}</Text>
                   <Text style={styles.statLabel}>Courses</Text>
                 </View>
                 <View style={styles.statItem}>
                   <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
                     <Ionicons name="people-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>156</Text>
+                  <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.studentsCount) : '-'}</Text>
                   <Text style={styles.statLabel}>Students</Text>
                 </View>
                 <View style={styles.statItem}>
@@ -244,43 +260,50 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 <Text style={styles.detailLabel}>Email</Text>
                 <Text style={styles.detailValue}>
                   {userRole === 'teacher'
-                    ? 'priya.sharma@nexus.edu'
+                    ? ((teacherProfile?.email ?? userEmail) || '')
                     : userRole === 'admin'
-                      ? (adminProfile?.email ?? 'admin@nexus.edu')
-                      : 'john.doe@email.com'}
+                      ? ((adminProfile?.email ?? userEmail) || '')
+                      : (userEmail || '')}
                 </Text>
               </View>
             </View>
 
             {/* Phone */}
-            <View style={styles.detailPill}>
-              <View style={styles.detailIconBox}>
-                <Ionicons name="call-outline" size={18} color="#6B7280" />
+            {(userRole === 'teacher' ? teacherProfile?.phone : userRole === 'admin' ? adminProfile?.phone : null) ? (
+              <View style={styles.detailPill}>
+                <View style={styles.detailIconBox}>
+                  <Ionicons name="call-outline" size={18} color="#6B7280" />
+                </View>
+                <View style={styles.detailTextBox}>
+                  <Text style={styles.detailLabel}>Phone</Text>
+                  <Text style={styles.detailValue}>
+                    {userRole === 'teacher'
+                      ? teacherProfile.phone
+                      : adminProfile.phone}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.detailTextBox}>
-                <Text style={styles.detailLabel}>Phone</Text>
-                <Text style={styles.detailValue}>
-                  {userRole === 'admin'
-                    ? '+91 9545450788 / +91 9545450677'
-                    : '+91 98765 43210'}
-                </Text>
-              </View>
-            </View>
+            ) : null}
 
-            {/* Location */}
-            <View style={styles.detailPill}>
-              <View style={styles.detailIconBox}>
-                <Ionicons name="location-outline" size={18} color="#6B7280" />
+            {/* Location — teacher only, built from address fields saved by admin */}
+            {userRole === 'teacher' && (teacherProfile?.city || teacherProfile?.street) ? (
+              <View style={styles.detailPill}>
+                <View style={styles.detailIconBox}>
+                  <Ionicons name="location-outline" size={18} color="#6B7280" />
+                </View>
+                <View style={styles.detailTextBox}>
+                  <Text style={styles.detailLabel}>Location</Text>
+                  <Text style={styles.detailValue}>
+                    {[
+                      teacherProfile.street,
+                      teacherProfile.city,
+                      teacherProfile.state,
+                      teacherProfile.pinCode,
+                    ].filter(Boolean).join(', ')}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.detailTextBox}>
-                <Text style={styles.detailLabel}>Location</Text>
-                <Text style={styles.detailValue}>
-                  {userRole === 'admin'
-                    ? 'Office No. 4-B, Second Floor, Ganesham Commercial -A, Survey No. 21/8-21/24, BRTS Road, Pimple Saudagar, Pune - 411027'
-                    : 'Bangalore, Karnataka'}
-                </Text>
-              </View>
-            </View>
+            ) : null}
           </View>
         </View>
 
