@@ -1,7 +1,7 @@
+import AdminBatchesScreen from '@/screens/admin/admin-batches-screen';
 import AdminCoursesScreen from '@/screens/admin/admin-courses-screen';
 import AdminDashboardScreen from '@/screens/admin/admin-dashboard-screen';
-import AdminStudentsScreen from '@/screens/admin/admin-students-screen';
-import AdminTeachersScreen from '@/screens/admin/admin-teachers-screen';
+import AdminUsersScreen from '@/screens/admin/admin-users-screen';
 import BatchesScreen from '@/screens/batches/batches-screen';
 import CoursesScreen from '@/screens/courses/courses-screen';
 import HomeScreen from '@/screens/home/home-screen';
@@ -56,8 +56,8 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
       case 'admin':
         return [
           { name: 'Dashboard', iconActive: 'home', iconInactive: 'home-outline' },
-          { name: 'Students', iconActive: 'school', iconInactive: 'school-outline' },
-          { name: 'Teachers', iconActive: 'people', iconInactive: 'people-outline' },
+          { name: 'Users', iconActive: 'people', iconInactive: 'people-outline' },
+          { name: 'Batches', iconActive: 'albums', iconInactive: 'albums-outline' },
           { name: 'Courses', iconActive: 'book', iconInactive: 'book-outline' },
           { name: 'Profile', iconActive: 'person', iconInactive: 'person-outline' },
         ];
@@ -97,8 +97,8 @@ export default function AppTabs({ userRole, onLogout }: AppTabsProps) {
     } else if (userRole === 'admin') {
       switch (activeIndex) {
         case 0: return <AdminDashboardScreen onViewAllEnrollments={() => setActiveIndex(1)} />;
-        case 1: return <AdminStudentsScreen />;
-        case 2: return <AdminTeachersScreen />;
+        case 1: return <AdminUsersScreen />;
+        case 2: return <AdminBatchesScreen />;
         case 3: return <AdminCoursesScreen />;
         case 4:
           return (

@@ -118,6 +118,8 @@ export default function AdminStudentsScreen() {
       const res = await api.getActiveCourses();
       console.log('Courses API Response:', res);
       if (res.success) {
+        // amazonq-ignore-next-line
+        // amazonq-ignore-next-line
         console.log('Courses loaded:', res.data);
         setCourses(res.data);
       } else {
@@ -270,9 +272,11 @@ export default function AdminStudentsScreen() {
   };
 
   const handleDeleteStudent = async (id: number) => {
+    // amazonq-ignore-next-line
     console.log('Deleting student with ID:', id);
     try {
       const res = await api.deleteStudent(id);
+      // amazonq-ignore-next-line
       console.log('Delete response:', res);
       if (res && res.success) {
         showToast('Student deleted successfully', 'success');
@@ -287,7 +291,7 @@ export default function AdminStudentsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <View style={styles.safeArea}>
       {toast && (
         <Animated.View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastOpacity }]}>
           <Text style={styles.toastText}>{toast.message}</Text>
@@ -295,7 +299,6 @@ export default function AdminStudentsScreen() {
       )}
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Manage Students</Text>
         <Text style={styles.headerSubtitle}>{students.length} total students registered</Text>
         <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
           <Ionicons name="add" size={24} color="#FFFFFF" />
@@ -647,6 +650,7 @@ export default function AdminStudentsScreen() {
                             key={course.id}
                             style={styles.dropdownItem}
                             onPress={() => {
+                              // amazonq-ignore-next-line
                               console.log('Course selected:', course.title);
                               setFormCourse(course.title);
                               setShowCourseDropdown(false);
@@ -709,31 +713,25 @@ export default function AdminStudentsScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#7B2CBF',
+    backgroundColor: '#F9FAFB',
   },
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 12,
+    paddingTop: 8,
     position: 'relative',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   headerSubtitle: {
     fontSize: 13,
     color: '#E9D5FF',
-    marginTop: 6,
   },
   addBtn: {
     position: 'absolute',

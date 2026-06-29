@@ -259,21 +259,15 @@ export default function AdminTeachersScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <View style={styles.safeArea}>
       {toast && (
         <Animated.View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastOpacity }]}>
-          <Ionicons
-            name={toast.type === 'success' ? 'checkmark-circle' : 'close-circle'}
-            size={18}
-            color="#FFFFFF"
-            style={{ marginRight: 8 }}
-          />
+          <Ionicons name={toast.type === 'success' ? 'checkmark-circle' : 'close-circle'} size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Manage Teachers</Text>
         <Text style={styles.headerSubtitle}>
           {loading ? 'Loading...' : `${teachers.length} total instructors registered`}
         </Text>
@@ -666,31 +660,25 @@ export default function AdminTeachersScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#7B2CBF',
+    backgroundColor: '#F9FAFB',
   },
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 12,
+    paddingTop: 8,
     position: 'relative',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   headerSubtitle: {
     fontSize: 13,
     color: '#E9D5FF',
-    marginTop: 6,
   },
   addBtn: {
     position: 'absolute',
