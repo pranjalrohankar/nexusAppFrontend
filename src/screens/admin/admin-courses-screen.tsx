@@ -24,8 +24,21 @@ interface Course {
   studentsCount: number;
   maxCapacity: number;
   startDate: string;
+  endDate: string;
+  classTimings: string;
+  classDays: string;
   price: string;
   status: 'Active' | 'Upcoming' | 'Completed';
+  description?: string;
+  syllabusTopics?: string;
+  whatYouWillLearn?: string;
+  googleMeetLink?: string;
+  totalSessions?: number;
+}
+
+interface Teacher {
+  id: string;
+  name: string;
 }
 
 export default function AdminCoursesScreen() {
@@ -33,19 +46,27 @@ export default function AdminCoursesScreen() {
   const [activeTab, setActiveTab] = useState<'Active' | 'Upcoming' | 'Completed'>('Active');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   // Form Fields
   const [formTitle, setFormTitle] = useState('');
-  const [formCategory, setFormCategory] = useState('Data Science');
+  const [formCategory, setFormCategory] = useState('');
+  const [formInstructor, setFormInstructor] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formDuration, setFormDuration] = useState('3 Months');
-  const [formStartDate, setFormStartDate] = useState('2026-06-02');
-  const [formEndDate, setFormEndDate] = useState('2026-09-02');
-  const [formClassTime, setFormClassTime] = useState('8:00 PM - 9:30 PM');
+  const [formDuration, setFormDuration] = useState('');
+  const [formTotalSessions, setFormTotalSessions] = useState('');
+  const [formStartDate, setFormStartDate] = useState('');
+  const [formEndDate, setFormEndDate] = useState('');
+  const [formClassTime, setFormClassTime] = useState('');
+  const [formClassDays, setFormClassDays] = useState<string[]>([]);
   const [formCapacity, setFormCapacity] = useState('50');
-  const [formPrice, setFormPrice] = useState('25000');
+  const [formPrice, setFormPrice] = useState('');
   const [formStatus, setFormStatus] = useState<'Active' | 'Upcoming' | 'Completed'>('Active');
-  const [googleMeetChecked, setGoogleMeetChecked] = useState(true);
+  const [formSyllabusTopics, setFormSyllabusTopics] = useState('');
+  const [formWhatYouWillLearn, setFormWhatYouWillLearn] = useState('');
+  const [googleMeetChecked, setGoogleMeetChecked] = useState(false);
+  const [formGoogleMeetLink, setFormGoogleMeetLink] = useState('');
+  const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,25 +89,53 @@ export default function AdminCoursesScreen() {
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      const res = await api.getAllCourses();
-      const list = res?.data ?? res?.content ?? res ?? [];
-      const mapped = list.map((c: any) => ({
-        id: String(c.id),
-        title: c.title,
-        category: c.category ?? '',
-        instructor: c.instructorName ?? 'TBD',
-        duration: c.duration ?? '',
-        studentsCount: 0,
-        maxCapacity: c.maxCapacity ?? 0,
-        startDate: c.startDate ?? '',
-        price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
-        status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
+      const [courseRes, teacherRes] = await Promise.all([
+        api.getAllCourses(),
+        api.getTeachers()
+      ]);
+      
+      const list = courseRes?.data ?? courseRes?.content ?? courseRes ?? [];
+      const teacherList = teacherRes?.success ? teacherRes.data : [];
+      
+      setTeachers(teacherList.map((t: any) => ({ id: t.teacherId || t.id, name: t.name })));
+      
+      const mapped = await Promise.all(list.map(async (c: any) => {
+        const enrollmentCount = await getEnrollmentCount(c.title);
+        return {
+          id: String(c.id),
+          title: c.title,
+          category: c.category ?? '',
+          instructor: c.instructor ?? 'TBD',
+          duration: c.duration ?? '',
+          studentsCount: enrollmentCount,
+          maxCapacity: c.maxCapacity ?? 50,
+          startDate: c.startDate ?? '',
+          endDate: c.endDate ?? '',
+          classTimings: c.classTimings ?? '',
+          classDays: c.classDays ?? '',
+          price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
+          status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
+          description: c.description ?? '',
+          syllabusTopics: c.syllabusTopics ?? '',
+          whatYouWillLearn: c.whatYouWillLearn ?? '',
+          googleMeetLink: c.googleMeetLink ?? '',
+          totalSessions: c.totalSessions ?? 0,
+        };
       }));
       setCourses(mapped.slice().reverse());
     } catch (err) {
       console.log('Failed to fetch courses', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getEnrollmentCount = async (courseTitle: string) => {
+    try {
+      const res = await api.getEnrollmentCount(courseTitle);
+      return res?.count ?? 0;
+    } catch {
+      return 0;
     }
   };
 
@@ -108,16 +157,22 @@ export default function AdminCoursesScreen() {
   const handleOpenAddModal = () => {
     setSelectedCourse(null);
     setFormTitle('');
-    setFormCategory('Data Science');
+    setFormCategory('');
+    setFormInstructor('');
     setFormDescription('');
-    setFormDuration('3 Months');
-    setFormStartDate('2026-06-02');
-    setFormEndDate('2026-09-02');
-    setFormClassTime('8:00 PM - 9:30 PM');
+    setFormDuration('');
+    setFormTotalSessions('');
+    setFormStartDate('');
+    setFormEndDate('');
+    setFormClassTime('');
+    setFormClassDays([]);
     setFormCapacity('50');
-    setFormPrice('25000');
-    setFormStatus('Active');
-    setGoogleMeetChecked(true);
+    setFormPrice('');
+    setFormStatus('Upcoming');
+    setFormSyllabusTopics('');
+    setFormWhatYouWillLearn('');
+    setGoogleMeetChecked(false);
+    setFormGoogleMeetLink('');
     setIsModalVisible(true);
   };
 
@@ -125,20 +180,26 @@ export default function AdminCoursesScreen() {
     setSelectedCourse(course);
     setFormTitle(course.title);
     setFormCategory(course.category);
-    setFormDescription('Brief description of the course...');
+    setFormInstructor(course.instructor);
+    setFormDescription(course.description || '');
     setFormDuration(course.duration);
+    setFormTotalSessions(String(course.totalSessions || ''));
     setFormStartDate(course.startDate);
-    setFormEndDate('2026-09-15');
-    setFormClassTime('6:00 PM - 7:30 PM');
+    setFormEndDate(course.endDate);
+    setFormClassTime(course.classTimings);
+    setFormClassDays(course.classDays ? course.classDays.split(', ') : []);
     setFormCapacity(String(course.maxCapacity));
     setFormPrice(course.price.replace(/[^\d]/g, ''));
     setFormStatus(course.status);
-    setGoogleMeetChecked(true);
+    setFormSyllabusTopics(course.syllabusTopics || '');
+    setFormWhatYouWillLearn(course.whatYouWillLearn || '');
+    setGoogleMeetChecked(!!course.googleMeetLink);
+    setFormGoogleMeetLink(course.googleMeetLink || '');
     setIsModalVisible(true);
   };
 
   const handleSaveCourse = async () => {
-    if (!formTitle || !formCapacity || !formPrice) {
+    if (!formTitle || !formInstructor || !formCapacity || !formPrice) {
       showToast('Please fill out all required fields.', 'error');
       return;
     }
@@ -150,14 +211,20 @@ export default function AdminCoursesScreen() {
     const payload = {
       title: formTitle,
       category: formCategory,
+      instructor: formInstructor,
       description: formDescription,
       duration: formDuration,
+      totalSessions: formTotalSessions ? Number(formTotalSessions) : null,
       startDate: formStartDate || null,
       endDate: formEndDate || null,
       classTimings: formClassTime,
+      classDays: formClassDays.join(', '),
       maxCapacity: Number(formCapacity),
       price: Number(formPrice),
       status: backendStatus,
+      syllabusTopics: formSyllabusTopics,
+      whatYouWillLearn: formWhatYouWillLearn,
+      googleMeetLink: googleMeetChecked ? formGoogleMeetLink : null,
     };
 
     try {
@@ -268,7 +335,6 @@ export default function AdminCoursesScreen() {
             </View>
           ) : (
             paginatedCourses.map((item) => {
-              const progressPercent = item.maxCapacity > 0 ? (item.studentsCount / item.maxCapacity) * 100 : 0;
               return (
                 <View key={item.id} style={styles.courseCard}>
                   <View style={styles.cardHeader}>
@@ -281,7 +347,6 @@ export default function AdminCoursesScreen() {
                     </View>
                   </View>
 
-                  {/* Course specifics metrics row */}
                   <View style={styles.detailsGrid}>
                     <View style={styles.detailItem}>
                       <Ionicons name="time-outline" size={13} color="#6B7280" />
@@ -289,7 +354,7 @@ export default function AdminCoursesScreen() {
                     </View>
                     <View style={styles.detailItem}>
                       <Ionicons name="people-outline" size={13} color="#6B7280" />
-                      <Text style={styles.detailVal}>{item.studentsCount}/{item.maxCapacity}</Text>
+                      <Text style={styles.detailVal}>{item.studentsCount}/{item.maxCapacity} enrolled</Text>
                     </View>
                     <View style={styles.detailItem}>
                       <Ionicons name="calendar-outline" size={13} color="#6B7280" />
@@ -297,19 +362,10 @@ export default function AdminCoursesScreen() {
                     </View>
                   </View>
 
-                  {/* Progress bar */}
-                  <View style={styles.progressRow}>
-                    <View style={styles.progressBarBg}>
-                      <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
-                    </View>
-                    <Text style={styles.progressPercent}>{Math.round(progressPercent)}%</Text>
-                  </View>
-
                   <View style={styles.priceRow}>
                     <Text style={styles.priceVal}>{item.price}</Text>
                   </View>
 
-                  {/* Actions */}
                   <View style={styles.cardActions}>
                     <TouchableOpacity
                       style={styles.editBtn}
@@ -392,6 +448,7 @@ export default function AdminCoursesScreen() {
             <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Basic Info */}
               <Text style={styles.formSectionTitle}>Basic Information</Text>
+              
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>Course Title *</Text>
                 <TextInput
@@ -402,32 +459,63 @@ export default function AdminCoursesScreen() {
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
+
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Category</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formCategory}
-                  onChangeText={setFormCategory}
-                  placeholder="e.g. Web Development"
-                  placeholderTextColor="#9CA3AF"
-                />
+                <Text style={styles.fieldLabel}>Instructor *</Text>
+                <TouchableOpacity 
+                  style={styles.dropdown} 
+                  onPress={() => setShowInstructorDropdown(!showInstructorDropdown)}
+                >
+                  <Ionicons name="person-outline" size={16} color="#9CA3AF" />
+                  <Text style={[styles.dropdownText, !formInstructor && styles.dropdownPlaceholder]}>
+                    {formInstructor || 'Select Instructor'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+                {showInstructorDropdown && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
+                      {teachers.length === 0 ? (
+                        <View style={styles.dropdownItem}>
+                          <Text style={{ color: '#9CA3AF' }}>No teachers available</Text>
+                        </View>
+                      ) : (
+                        teachers.map(t => (
+                          <TouchableOpacity 
+                            key={t.id} 
+                            style={styles.dropdownItem} 
+                            onPress={() => { 
+                              setFormInstructor(t.name); 
+                              setShowInstructorDropdown(false); 
+                            }}
+                          >
+                            <Text>{t.name}</Text>
+                            {formInstructor === t.name && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
+
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Course Description</Text>
+                <Text style={styles.fieldLabel}>Course Overview *</Text>
                 <TextInput
                   style={[styles.modalInput, styles.textArea]}
                   value={formDescription}
                   onChangeText={setFormDescription}
                   multiline={true}
-                  placeholder="Brief description of the course..."
+                  placeholder="Brief overview of the course..."
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
 
               {/* Duration & Schedule */}
               <Text style={styles.formSectionTitle}>Duration & Schedule</Text>
+              
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Duration</Text>
+                <Text style={styles.fieldLabel}>Duration *</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={formDuration}
@@ -436,6 +524,7 @@ export default function AdminCoursesScreen() {
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
+
               <View style={styles.formRow}>
                 <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
                   <Text style={styles.fieldLabel}>Start Date *</Text>
@@ -443,7 +532,7 @@ export default function AdminCoursesScreen() {
                     style={styles.modalInput}
                     value={formStartDate}
                     onChangeText={setFormStartDate}
-                    placeholder="2026-06-02"
+                    placeholder="DD/MM/YYYY"
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
@@ -453,24 +542,95 @@ export default function AdminCoursesScreen() {
                     style={styles.modalInput}
                     value={formEndDate}
                     onChangeText={setFormEndDate}
-                    placeholder="2026-09-02"
+                    placeholder="DD/MM/YYYY"
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
               </View>
+
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Class Timings *</Text>
+                <Text style={styles.fieldLabel}>Class Days *</Text>
+                <View style={styles.daysRow}>
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                    <TouchableOpacity 
+                      key={day} 
+                      style={[styles.dayChip, formClassDays.includes(day) && styles.dayChipActive]} 
+                      onPress={() => {
+                        setFormClassDays(prev => 
+                          prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                        );
+                      }}
+                    >
+                      <Text style={[styles.dayChipText, formClassDays.includes(day) && styles.dayChipTextActive]}>
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Class Time *</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={formClassTime}
                   onChangeText={setFormClassTime}
-                  placeholder="e.g. 8:00 PM - 9:30 PM"
+                  placeholder="e.g. 8:00 PM - 10:00 PM"
                   placeholderTextColor="#9CA3AF"
                 />
-              </View>  
+              </View>
 
-              {/* Enrollment & Pricing */}
-              <Text style={styles.formSectionTitle}>Enrollment & Pricing</Text>
+              {/* Additional Details */}
+              <Text style={styles.formSectionTitle}>Additional Details</Text>
+
+              <View style={styles.formRow}>
+                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Duration</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={formDuration}
+                    onChangeText={setFormDuration}
+                    placeholder="e.g. 3 months"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>Total Sessions</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={formTotalSessions}
+                    onChangeText={setFormTotalSessions}
+                    keyboardType="number-pad"
+                    placeholder="48"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Course Syllabus/Topics</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.textArea]}
+                  value={formSyllabusTopics}
+                  onChangeText={setFormSyllabusTopics}
+                  multiline={true}
+                  placeholder="List main topics covered in the course..."
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>What you will learn</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.textArea]}
+                  value={formWhatYouWillLearn}
+                  onChangeText={setFormWhatYouWillLearn}
+                  multiline={true}
+                  placeholder="Enter the pointers..."
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
               <View style={styles.formRow}>
                 <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
                   <Text style={styles.fieldLabel}>Max Capacity *</Text>
@@ -495,18 +655,7 @@ export default function AdminCoursesScreen() {
                   />
                 </View>
               </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Course Status</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formStatus}
-                  onChangeText={(val) => setFormStatus(val as any)}
-                  placeholder="Active / Upcoming / Completed"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
 
-              {/* Meet link generation toggle */}
               <TouchableOpacity
                 style={styles.meetCheckboxRow}
                 onPress={() => setGoogleMeetChecked(!googleMeetChecked)}
@@ -516,9 +665,13 @@ export default function AdminCoursesScreen() {
                   size={20}
                   color="#7B2CBF"
                 />
-                <Text style={styles.checkboxTextLabel}>
-                  Auto-generate Google Meet link for this course.
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.checkboxTextLabel}>Google Meet Link</Text>
+                  <Text style={styles.checkboxSubtext}>
+                    The platform will auto-generate Google Meet links to add and manage. 
+                    This link will be visible to students once created and once after it's created.
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               <View style={styles.modalActionRow}>
@@ -866,7 +1019,7 @@ const styles = StyleSheet.create({
   },
   meetCheckboxRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
     marginTop: 16,
     paddingVertical: 4,
@@ -874,7 +1027,79 @@ const styles = StyleSheet.create({
   checkboxTextLabel: {
     fontSize: 12,
     color: '#374151',
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  checkboxSubtext: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    height: 42,
+    paddingHorizontal: 12,
+    backgroundColor: '#F9FAFB',
+    gap: 8,
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1F2937',
+  },
+  dropdownPlaceholder: {
+    color: '#9CA3AF',
+  },
+  dropdownList: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    marginTop: 4,
+    maxHeight: 200,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  dayChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFF',
+  },
+  dayChipActive: {
+    backgroundColor: '#7B2CBF',
+    borderColor: '#7B2CBF',
+  },
+  dayChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  dayChipTextActive: {
+    color: '#FFF',
   },
   modalActionRow: {
     flexDirection: 'row',
