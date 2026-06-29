@@ -202,12 +202,15 @@ export default function AdminBatchesScreen() {
       )}
 
       {/* Header */}
+      {/* HEADER - Matching your image */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Batches</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>Batches</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
+            <Ionicons name="add" size={24} color="#FFF" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.headerSubtitle}>{batches.length} total batches</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-          <Ionicons name="add" size={24} color="#FFF" />
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -266,71 +269,71 @@ export default function AdminBatchesScreen() {
           filteredBatches.map((batch) => {
             const selectedCourse = courses.find(c => c.title === batch.selectCourse);
             return (
-            <View key={batch.id} style={styles.batchCard}>
-              <View style={styles.batchHeader}>
-                <View style={styles.batchIconBox}>
-                  <Ionicons name="book" size={20} color="#7B2CBF" />
+              <View key={batch.id} style={styles.batchCard}>
+                <View style={styles.batchHeader}>
+                  <View style={styles.batchIconBox}>
+                    <Ionicons name="book" size={20} color="#7B2CBF" />
+                  </View>
+                  <View style={styles.batchHeaderText}>
+                    <Text style={styles.batchName}>{batch.batchName}</Text>
+                    <Text style={styles.batchCourse}>{batch.selectCourse}</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(batch.status) }]}>
+                    <Text style={styles.statusText}>{batch.status === 'ACTIVE' ? 'Active' : batch.status === 'UPCOMING' ? 'Upcoming' : 'Completed'}</Text>
+                  </View>
+                  <TouchableOpacity>
+                    <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.batchHeaderText}>
-                  <Text style={styles.batchName}>{batch.batchName}</Text>
-                  <Text style={styles.batchCourse}>{batch.selectCourse}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(batch.status) }]}>
-                  <Text style={styles.statusText}>{batch.status === 'ACTIVE' ? 'Active' : batch.status === 'UPCOMING' ? 'Upcoming' : 'Completed'}</Text>
-                </View>
-                <TouchableOpacity>
-                  <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-              </View>
 
-              <View style={styles.batchInfoGrid}>
-                <View style={styles.infoColumn}>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="person-outline" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>{batch.instructor}</Text>
+                <View style={styles.batchInfoGrid}>
+                  <View style={styles.infoColumn}>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="person-outline" size={16} color="#6B7280" />
+                      <Text style={styles.infoText}>{batch.instructor}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                      <Text style={styles.infoText}>
+                        {batch.startDate ? new Date(batch.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
+                      </Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.batchDaysText}>{formatClassDays(batch.classDays)}</Text>
+                    </View>
                   </View>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>
-                      {batch.startDate ? new Date(batch.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
-                    </Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Text style={styles.batchDaysText}>{formatClassDays(batch.classDays)}</Text>
+                  <View style={styles.infoColumn}>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="time-outline" size={16} color="#6B7280" />
+                      <Text style={styles.infoText}>{selectedCourse?.classTimings || '8:00 PM - 9:30 PM'}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                      <Text style={styles.infoText}>
+                        {batch.endDate ? new Date(batch.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No end date'}
+                      </Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="people-outline" size={16} color="#6B7280" />
+                      <Text style={styles.infoText}>{batch.studentsCount || 0} students</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={styles.infoColumn}>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>{selectedCourse?.classTimings || '8:00 PM - 9:30 PM'}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>
-                      {batch.endDate ? new Date(batch.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No end date'}
-                    </Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Ionicons name="people-outline" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>{batch.studentsCount || 0} students</Text>
-                  </View>
-                </View>
-              </View>
 
-              <View style={styles.batchActions}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(batch)}>
-                  <Ionicons name="create-outline" size={16} color="#7B2CBF" />
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(batch.id)}>
-                  <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.viewStudentsBtn}>
-                  <Text style={styles.viewStudentsBtnText}>View Students</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#FFF" />
-                </TouchableOpacity>
+                <View style={styles.batchActions}>
+                  <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(batch)}>
+                    <Ionicons name="create-outline" size={16} color="#7B2CBF" />
+                    <Text style={styles.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(batch.id)}>
+                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.viewStudentsBtn}>
+                    <Text style={styles.viewStudentsBtnText}>View Students</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
             );
           })
         )}
@@ -410,20 +413,20 @@ export default function AdminBatchesScreen() {
               <View style={styles.dateRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>Start Date *</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="YYYY-MM-DD" 
-                    value={formStartDate} 
+                  <TextInput
+                    style={styles.input}
+                    placeholder="YYYY-MM-DD"
+                    value={formStartDate}
                     onChangeText={setFormStartDate}
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.fieldLabel}>End Date *</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="YYYY-MM-DD" 
-                    value={formEndDate} 
+                  <TextInput
+                    style={styles.input}
+                    placeholder="YYYY-MM-DD"
+                    value={formEndDate}
                     onChangeText={setFormEndDate}
                     placeholderTextColor="#9CA3AF"
                   />
@@ -466,13 +469,59 @@ const styles = StyleSheet.create({
   toastSuccess: { backgroundColor: '#10B981' },
   toastError: { backgroundColor: '#EF4444' },
   toastText: { color: '#FFF', fontWeight: '600', fontSize: 13, textAlign: 'center' },
-  header: { backgroundColor: '#7B2CBF', paddingHorizontal: 20, paddingVertical: 20, position: 'relative' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFF', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' },
-  headerSubtitle: { fontSize: 13, color: '#E9D5FF', marginTop: 4 },
-  addBtn: { position: 'absolute', right: 20, top: 20, backgroundColor: '#FF7A00', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', elevation: 4 },
-  scrollView: { flex: 1 },
+header: { 
+  backgroundColor: '#7B2CBF', 
+  paddingHorizontal: 20, 
+  paddingTop: 60, 
+  paddingBottom: 20 
+},
+headerTop: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  // marginBottom: 8,
+},
+headerTitle: { 
+  fontSize: 28, 
+  fontWeight: 'bold', 
+  color: '#FFF',
+  fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' 
+},
+headerSubtitle: { 
+  fontSize: 15, 
+  color: '#E9D5FF', 
+  fontWeight: '500' 
+},
+addBtn: { 
+  top:10,
+  backgroundColor: '#FF9500', 
+  width: 48, 
+  height: 48, 
+  borderRadius: 14, 
+  justifyContent: 'center', 
+  alignItems: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.25,
+  shadowRadius: 6,
+  elevation: 6,
+},
+scrollView: { flex: 1 },
   scrollContent: { padding: 20 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 46, marginBottom: 16 },
+searchContainer: { 
+  flexDirection: 'row', 
+  alignItems: 'center', 
+  backgroundColor: '#FFF', 
+  borderRadius: 16, 
+  paddingHorizontal: 16, 
+  height: 52, 
+  marginBottom: 16,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 4,
+  elevation: 3 
+},
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1F2937' },
   filterTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
