@@ -97,6 +97,11 @@ async function get(path: string) {
   return handleResponse(res);
 }
 
+async function getPublic(path: string) {
+  const res = await fetch(`${BASE_URL}${path}`);
+  return handleResponse(res);
+}
+
 async function put(path: string, body: object) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'PUT',
@@ -134,8 +139,8 @@ export const api = {
 
   getDashboard: () => get('/admin/dashboard'),
   getAdminProfile: () => get('/admin/profile'),
-  getAllCourses: () => get('/courses/all'),
-  getActiveCourses: () => get('/courses/active'),
+  getAllCourses: () => getPublic('/courses/all'),
+  getActiveCourses: () => getPublic('/courses/active'),
   createCourse: (data: object) => post('/courses', data),
   updateCourse: (id: number | string, data: object) => put(`/courses/${id}`, data),
   deleteCourse: (id: number | string) => del(`/courses/${id}`),
@@ -146,5 +151,5 @@ export const api = {
   deleteBatch: (id: number | string) => del(`/batches/${id}`),
 
   getEnrollmentsByCourse: (courseTitle: string) => get(`/enrollments/course/${encodeURIComponent(courseTitle)}`),
-  getEnrollmentCount: (courseTitle: string) => get(`/enrollments/count/course/${encodeURIComponent(courseTitle)}`),
+  getEnrollmentCount: (courseTitle: string) => getPublic(`/enrollments/count/course/${encodeURIComponent(courseTitle.trim())}`),
 };
