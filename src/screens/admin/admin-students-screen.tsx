@@ -232,7 +232,7 @@ export default function AdminStudentsScreen() {
         showToast('Password is required for new enrollment', 'error');
         return;
       }
-      
+
       setSaving(true);
       try {
         // Backend will check if user exists and either:
@@ -299,10 +299,16 @@ export default function AdminStudentsScreen() {
       )}
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerSubtitle}>{students.length} total students registered</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-          <Ionicons name="add" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.countRow}>
+          <View style={styles.countLeft}>
+            <Text style={styles.countNumber}>{students.length}</Text>
+            <Text style={styles.countLabel}>Total Students Registered</Text>
+          </View>
+
+          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
+            <Ionicons name="add" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -705,8 +711,8 @@ export default function AdminStudentsScreen() {
                   {saving
                     ? <ActivityIndicator color="#FFF" />
                     : <Text style={styles.modalSubmitBtnText}>
-                        {selectedStudent ? 'Save Changes' : 'Add Student'}
-                      </Text>}
+                      {selectedStudent ? 'Save Changes' : 'Add Student'}
+                    </Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -729,25 +735,51 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     position: 'relative',
   },
+
+  countRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  countLeft: {
+    flex: 1,
+  },
+  countContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  countNumber: {
+    fontSize: 42,           // Big attractive number
+    fontWeight: '700',
+    color: '#FFFFFF',
+    lineHeight: 42,
+    marginBottom: -4,
+  },
+
+  countLabel: {
+    fontSize: 15,
+    color: '#E0CFFF',       // Light purple for elegance
+    fontWeight: '500',
+  },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 20,
     color: '#E9D5FF',
   },
   addBtn: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    backgroundColor: '#FF7A00',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    backgroundColor: '#FF9500',   // Vibrant orange
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
   },
   scrollView: {
     flex: 1,
