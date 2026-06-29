@@ -44,8 +44,8 @@ function EnquiryDetailModal({ enquiry, idx, onClose }: { enquiry: any; idx: numb
                 <Text style={det.metaText}>{enquiry.createdAt ?? ''}</Text>
                 {enquiry.phoneNumber ? (
                   <><Text style={det.metaDot}> · </Text>
-                  <Ionicons name="globe-outline" size={12} color="#9CA3AF" />
-                  <Text style={det.metaText}> website</Text></>
+                    <Ionicons name="globe-outline" size={12} color="#9CA3AF" />
+                    <Text style={det.metaText}> website</Text></>
                 ) : null}
               </View>
             </View>
@@ -98,11 +98,11 @@ function EnquiryDetailModal({ enquiry, idx, onClose }: { enquiry: any; idx: numb
             <View style={det.section}>
               <Text style={det.sectionLabel}>QUICK ACTIONS</Text>
               <View style={det.actionsRow}>
-                <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`tel:${enquiry.phoneNumber}`)}>                  
+                <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`tel:${enquiry.phoneNumber}`)}>
                   <Ionicons name="call-outline" size={15} color="#16A34A" />
                   <Text style={[det.actionText, { color: '#16A34A' }]}>Call</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`mailto:${enquiry.email}`)}>                  
+                <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`mailto:${enquiry.email}`)}>
                   <Ionicons name="mail-outline" size={15} color="#2563EB" />
                   <Text style={[det.actionText, { color: '#2563EB' }]}>Email</Text>
                 </TouchableOpacity>
@@ -299,6 +299,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   const [dashData, setDashData] = useState<any>(null);
   const [enquiries, setEnquiries] = useState<any[]>([]);
   const [showEnquiries, setShowEnquiries] = useState(false);
+  const [showNewEnquiryPopup, setShowNewEnquiryPopup] = useState(false);   // ← NEW
 
   const fetchEnquiries = () => {
     api.getEnquiries()
@@ -306,15 +307,16 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
         const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
         setEnquiries(list);
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   useEffect(() => {
     api.getDashboard()
       .then((res: any) => setDashData(res?.data ?? null))
-      .catch(() => {});
+      .catch(() => { });
     fetchEnquiries();
   }, []);
+
 
   const formatRevenue = (amount: number) => {
     if (!amount) return '₹0';
@@ -331,7 +333,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   ];
 
   const tagColors = ['#EA580C', '#7B2CBF', '#2563EB', '#16A34A'];
-  const tagBgs   = ['#FFF7ED', '#F3E8FF', '#DBEAFE', '#DCFCE7'];
+  const tagBgs = ['#FFF7ED', '#F3E8FF', '#DBEAFE', '#DCFCE7'];
 
   const recentEnrollments: { id: string; name: string; course: string; time: string; dotColor: string }[] =
     (dashData?.recentEnrollments ?? []).map((e: any) => ({
@@ -367,12 +369,16 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             style={styles.alertBtn}
             onPress={() => { fetchEnquiries(); setShowEnquiries(true); }}
           >
-            <Ionicons name="notifications-outline" size={20} color="#FFF" />
-            {enquiries.length > 0 && (
-              <View style={styles.badgeDot}>
-                <Text style={styles.badgeCount}>{enquiries.length > 99 ? '99+' : enquiries.length}</Text>
-              </View>
-            )}
+            <View style={styles.iconContainer}>
+              <Ionicons name="mail-outline" size={24} color="#FFF" />
+              {enquiries.length > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeCount}>
+                    {enquiries.length > 99 ? '99+' : enquiries.length}
+                  </Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
         <Text style={styles.headerTitle}>Admin Dashboard</Text>
@@ -507,6 +513,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 3,
   },
+
+  alertBtn: {
+  width: 48,
+  height: 48,
+  borderRadius: 12,
+  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+iconContainer: {
+  position: 'relative',
+  width: 48,
+  height: 48,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+badge: {
+  position: 'absolute',
+  top: -4,
+  right: -4,
+  backgroundColor: '#EF4444',
+  minWidth: 20,
+  height: 20,
+  borderRadius: 10,
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingHorizontal: 4,
+  borderWidth: 2,
+  borderColor: '#7B2CBF',   // Matches your header color
+},
   badgeCount: {
     color: '#FFF',
     fontSize: 9,
