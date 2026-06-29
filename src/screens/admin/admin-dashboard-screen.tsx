@@ -514,15 +514,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
 
-  alertBtn: {
-  width: 48,
-  height: 48,
-  borderRadius: 12,
-  backgroundColor: 'rgba(255, 255, 255, 0.15)',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
 iconContainer: {
   position: 'relative',
   width: 48,
