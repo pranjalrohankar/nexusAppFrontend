@@ -43,7 +43,7 @@ interface Teacher {
 
 export default function AdminCoursesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'Active' | 'Upcoming' | 'Completed'>('Active');
+  const [activeTab, setActiveTab] = useState<'All' | 'Active' | 'Upcoming' | 'Completed'>('All');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -144,6 +144,7 @@ export default function AdminCoursesScreen() {
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           course.instructor.toLowerCase().includes(searchQuery.toLowerCase());
+    if (activeTab === 'All') return matchesSearch;
     return matchesSearch && course.status === activeTab;
   });
 
@@ -296,6 +297,14 @@ export default function AdminCoursesScreen() {
         {/* SUB-TABS */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'All' && styles.tabItemActive]}
+            onPress={() => { setActiveTab('All'); setPage(1); }}
+          >
+            <Text style={[styles.tabLabel, activeTab === 'All' && styles.tabLabelActive]}>
+              All ({courses.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
             onPress={() => { setActiveTab('Active'); setPage(1); }}
           >
@@ -342,8 +351,17 @@ export default function AdminCoursesScreen() {
                       <Text style={styles.courseTitle}>{item.title}</Text>
                       <Text style={styles.instructorName}>Instructor: {item.instructor}</Text>
                     </View>
-                    <View style={[styles.statusBadge, styles.statusActive]}>
-                      <Text style={styles.statusActiveText}>{item.status}</Text>
+                    <View style={[styles.statusBadge,
+                      item.status === 'Active' ? styles.statusActive :
+                      item.status === 'Upcoming' ? styles.statusUpcoming :
+                      styles.statusCompleted
+                    ]}>
+                      <Text style={[
+                        styles.statusBadgeText,
+                        item.status === 'Active' ? styles.statusActiveText :
+                        item.status === 'Upcoming' ? styles.statusUpcomingText :
+                        styles.statusCompletedText
+                      ]}>{item.status}</Text>
                     </View>
                   </View>
 
@@ -861,8 +879,28 @@ const styles = StyleSheet.create({
   statusActive: {
     backgroundColor: '#ECFDF5',
   },
+  statusUpcoming: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusCompleted: {
+    backgroundColor: '#F3F4F6',
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   statusActiveText: {
     color: '#10B981',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  statusUpcomingText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  statusCompletedText: {
+    color: '#6B7280',
     fontSize: 10,
     fontWeight: 'bold',
   },
