@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,8 @@ import HelpSupportScreen from './help-support-screen';
 import NotificationsScreen from './notifications-screen';
 import PrivacySecurityScreen from './privacy-security-screen';
 
+const PROFILE_PHOTO_KEY = 'user_profile_photo';
+
 interface ProfileScreenProps {
   onLogout: () => void;
   currentSubView: 'profile' | 'notifications' | 'privacy' | 'help' | 'account';
@@ -30,8 +34,24 @@ interface ProfileScreenProps {
 export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '' }: ProfileScreenProps) {
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  const loadPhoto = useCallback(() => {
+    AsyncStorage.getItem(PROFILE_PHOTO_KEY)
+      .then(uri => setPhotoUri(uri ?? null))
+      .catch(() => {});
+  }, []);
+
+  const refreshTeacherProfile = useCallback(() => {
+    if (userRole === 'teacher') {
+      api.getTeacherProfile()
+        .then((res: any) => setTeacherProfile(res?.data ?? null))
+        .catch(() => {});
+    }
+  }, [userRole]);
 
   useEffect(() => {
+    loadPhoto();
     if (userRole === 'admin') {
       api.getAdminProfile()
         .then((res: any) => setAdminProfile(res?.data ?? null))
@@ -43,6 +63,13 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
         .catch(() => {});
     }
   }, [userRole]);
+
+  // If the stored photo URI is broken/invalid, clear it so the
+  // initials-avatar fallback can render instead of a blank box.
+  const handlePhotoError = useCallback(() => {
+    setPhotoUri(null);
+    AsyncStorage.removeItem(PROFILE_PHOTO_KEY).catch(() => {});
+  }, []);
 
   const formatRevenue = (amount: number) => {
     if (!amount) return '₹0';
@@ -66,14 +93,20 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
     if (userRole === 'admin') {
       return <AdminHelpSupportScreen onBack={() => onChangeSubView('profile')} />;
     }
-    return <HelpSupportScreen onBack={() => onChangeSubView('profile')} />;
+    return <HelpSupportScreen onBack={() => onChangeSubView('profile')} teacherProfile={userRole === 'teacher' ? teacherProfile : null} />;
   }
 
   if (currentSubView === 'account') {
     if (userRole === 'admin') {
       return <AdminSystemSettingsScreen onBack={() => onChangeSubView('profile')} />;
     }
-    return <AccountSettingsScreen onBack={() => onChangeSubView('profile')} userRole={userRole} />;
+    return (
+      <AccountSettingsScreen
+        onBack={() => { loadPhoto(); refreshTeacherProfile(); onChangeSubView('profile'); }}
+        userRole={userRole}
+        teacherProfile={userRole === 'teacher' ? teacherProfile : null}
+      />
+    );
   }
 
   return (
@@ -84,24 +117,38 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. CURVED PURPLE HEADER */}
+        {/* 1. PURPLE HEADER (always rounded — matches design for every role) */}
         <View style={styles.headerBanner}>
-          <Text style={styles.headerTitle}>My Profile</Text>
+          <Text style={styles.headerTitle}>{userRole === 'teacher' ? 'Profile' : 'My Profile'}</Text>
         </View>
 
-        {/* 2. PROFILE DETAILS CARD */}
-        <View style={styles.profileCard}>
-          {/* Avatar Container */}
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {userRole === 'student' ? 'J' : userRole === 'teacher' ? 'P' : 'A'}
-              </Text>
+        {/* 2. PROFILE DETAILS CARD — avatar sits on top overlapping header */}
+        <View style={styles.profileCardOuter}>
+          {/* AVATAR floats above card */}
+          <View style={styles.avatarFloatContainer}>
+            <View style={styles.avatarWrapper}>
+              {photoUri ? (
+                <Image
+                  source={{ uri: photoUri }}
+                  style={styles.avatarImage}
+                  onError={handlePhotoError}
+                />
+              ) : (
+                <View style={styles.avatarCircle}>
+                  <Text style={styles.avatarText}>
+                    {userRole === 'teacher'
+                      ? ((teacherProfile?.name ?? '').charAt(0).toUpperCase() || 'T')
+                      : userRole === 'admin'
+                      ? ((adminProfile?.name ?? '').charAt(0).toUpperCase() || 'A')
+                      : ((userName ?? '').charAt(0).toUpperCase() || 'S')}
+                  </Text>
+                </View>
+              )}
             </View>
-            <TouchableOpacity style={styles.cameraBadge} activeOpacity={0.8}>
-              <Ionicons name="camera" size={12} color="#FF7A00" />
-            </TouchableOpacity>
           </View>
+
+          {/* WHITE CARD */}
+          <View style={styles.profileCard}>
 
           {/* User Info */}
           <Text style={styles.userName}>
@@ -112,29 +159,51 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
               : (userName || 'Student')}
           </Text>
           <Text style={styles.userRole}>
-            {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+            {userRole === 'teacher'
+              ? 'Senior Instructor'
+              : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
           </Text>
 
           <View style={styles.joinedRow}>
-            <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
             <Text style={styles.joinedText}>
               {userRole === 'teacher' && teacherProfile?.joinDate
-                ? `Joined ${teacherProfile.joinDate}`
-                : userRole === 'admin' && adminProfile?.createdAt
-                ? `Joined ${adminProfile.createdAt}`
+                ? `📅 Since ${teacherProfile.joinDate}`
+                : userRole === 'teacher'
+                ? '📅 Since January 2024'
                 : ''}
             </Text>
+            {userRole !== 'teacher' && (
+              <>
+                <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
+                <Text style={styles.joinedText}>
+                  {userRole === 'admin' && adminProfile?.createdAt
+                    ? `Joined ${adminProfile.createdAt}`
+                    : ''}
+                </Text>
+              </>
+            )}
           </View>
 
           {/* Badges / Skills tags row */}
           <View style={styles.badgesWrapper}>
             {userRole === 'teacher' ? (
-              <>
-                <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Data Science</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#ECFDF5' }]}><Text style={[styles.skillsBadgeText, { color: '#10B981' }]}>Machine Learning</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#FFF7ED' }]}><Text style={[styles.skillsBadgeText, { color: '#EA580C' }]}>Python</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#E0F2FE' }]}><Text style={[styles.skillsBadgeText, { color: '#0369A1' }]}>Full Stack</Text></View>
-              </>
+              teacherProfile?.specialization
+                ? teacherProfile.specialization.split(',').map((spec: string, i: number) => {
+                    const colors = [
+                      { bg: '#F3E8FF', text: '#7B2CBF' },
+                      { bg: '#ECFDF5', text: '#10B981' },
+                      { bg: '#FFF7ED', text: '#EA580C' },
+                      { bg: '#E0F2FE', text: '#0369A1' },
+                      { bg: '#FEE2E2', text: '#DC2626' },
+                    ];
+                    const c = colors[i % colors.length];
+                    return (
+                      <View key={i} style={[styles.skillsBadge, { backgroundColor: c.bg }]}>
+                        <Text style={[styles.skillsBadgeText, { color: c.text }]}>{spec.trim()}</Text>
+                      </View>
+                    );
+                  })
+                : null
             ) : userRole === 'admin' ? (
               <>
                 <View style={[styles.skillsBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.skillsBadgeText, { color: '#DC2626' }]}>Security</Text></View>
@@ -162,25 +231,18 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <Text style={styles.statLabel}>Courses</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
+                  <View style={[styles.statIconContainer, { backgroundColor: '#3B82F6' }]}>
                     <Ionicons name="people-outline" size={18} color="#FFF" />
                   </View>
                   <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.studentsCount) : '-'}</Text>
                   <Text style={styles.statLabel}>Students</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#8B5CF6' }]}>
-                    <Ionicons name="calendar-outline" size={18} color="#FFF" />
+                  <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
                   </View>
-                  <Text style={styles.statCount}>48</Text>
+                  <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.classesCount ?? 48) : '48'}</Text>
                   <Text style={styles.statLabel}>Classes</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#FF7A00' }]}>
-                    <Ionicons name="star-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>4.9</Text>
-                  <Text style={styles.statLabel}>Rating</Text>
                 </View>
               </>
             ) : userRole === 'admin' ? (
@@ -252,7 +314,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
           {/* Contact Details Pills */}
           <View style={styles.contactDetails}>
             {/* Email */}
-            <View style={styles.detailPill}>
+            <View style={[styles.detailPill, userRole === 'teacher' && { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
               <View style={styles.detailIconBox}>
                 <Ionicons name="mail-outline" size={18} color="#6B7280" />
               </View>
@@ -270,7 +332,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
             {/* Phone */}
             {(userRole === 'teacher' ? teacherProfile?.phone : userRole === 'admin' ? adminProfile?.phone : null) ? (
-              <View style={styles.detailPill}>
+              <View style={[styles.detailPill, userRole === 'teacher' && { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
                 <View style={styles.detailIconBox}>
                   <Ionicons name="call-outline" size={18} color="#6B7280" />
                 </View>
@@ -287,7 +349,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
             {/* Location — teacher only, built from address fields saved by admin */}
             {userRole === 'teacher' && (teacherProfile?.city || teacherProfile?.street) ? (
-              <View style={styles.detailPill}>
+              <View style={[styles.detailPill, { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
                 <View style={styles.detailIconBox}>
                   <Ionicons name="location-outline" size={18} color="#6B7280" />
                 </View>
@@ -306,36 +368,10 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
             ) : null}
           </View>
         </View>
+        </View>{/* profileCardOuter */}
 
-        {/* DYNAMIC SECTION (Achievements for Teacher, Roster control for Admin, Enrolled Courses for Student) */}
-        {userRole === 'teacher' ? (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Achievements</Text>
-            <View style={styles.achievementsCard}>
-              <View style={styles.achievementItem}>
-                <Ionicons name="trophy-outline" size={18} color="#FFB703" />
-                <View>
-                  <Text style={styles.achievementTitle}>Top Rated Instructor</Text>
-                  <Text style={styles.achievementYear}>Awarded 2025</Text>
-                </View>
-              </View>
-              <View style={styles.achievementItem}>
-                <Ionicons name="people-outline" size={18} color="#7B2CBF" />
-                <View>
-                  <Text style={styles.achievementTitle}>100+ Students Taught</Text>
-                  <Text style={styles.achievementYear}>Milestone Achievement</Text>
-                </View>
-              </View>
-              <View style={styles.achievementItem}>
-                <Ionicons name="medal-outline" size={18} color="#10B981" />
-                <View>
-                  <Text style={styles.achievementTitle}>Best Course Content</Text>
-                  <Text style={styles.achievementYear}>Ranked #1 in 2026</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        ) : userRole === 'admin' ? (
+        {/* DYNAMIC SECTION (System Administration for Admin, Enrolled Courses for Student — teacher has no section) */}
+        {userRole === 'teacher' ? null : userRole === 'admin' ? (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>System Administration</Text>
             <View style={styles.achievementsCard}>
@@ -464,30 +500,34 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </TouchableOpacity>
 
-              {/* Notifications */}
-              <TouchableOpacity
-                style={styles.settingsItem}
-                activeOpacity={0.7}
-                onPress={() => onChangeSubView('notifications')}
-              >
-                <Ionicons name="notifications-outline" size={20} color="#4B5563" />
-                <Text style={styles.settingsItemText}>Notifications</Text>
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>3</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-              </TouchableOpacity>
+              {/* Notifications — student only */}
+              {userRole !== 'teacher' && (
+                <TouchableOpacity
+                  style={styles.settingsItem}
+                  activeOpacity={0.7}
+                  onPress={() => onChangeSubView('notifications')}
+                >
+                  <Ionicons name="notifications-outline" size={20} color="#4B5563" />
+                  <Text style={styles.settingsItemText}>Notifications</Text>
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>3</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
 
-              {/* Privacy & Security */}
-              <TouchableOpacity
-                style={styles.settingsItem}
-                activeOpacity={0.7}
-                onPress={() => onChangeSubView('privacy')}
-              >
-                <Ionicons name="lock-closed-outline" size={20} color="#4B5563" />
-                <Text style={styles.settingsItemText}>Privacy & Security</Text>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-              </TouchableOpacity>
+              {/* Privacy & Security — student only */}
+              {userRole !== 'teacher' && (
+                <TouchableOpacity
+                  style={styles.settingsItem}
+                  activeOpacity={0.7}
+                  onPress={() => onChangeSubView('privacy')}
+                >
+                  <Ionicons name="lock-closed-outline" size={20} color="#4B5563" />
+                  <Text style={styles.settingsItemText}>Privacy & Security</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
 
               {/* Help & Support */}
               <TouchableOpacity
@@ -495,7 +535,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 activeOpacity={0.7}
                 onPress={() => onChangeSubView('help')}
               >
-                <Ionicons name="help-circle-outline" size={20} color="#4B5563" />
+                <Ionicons name="help-circle-outline" size={20} color="#E05A00" />
                 <Text style={styles.settingsItemText}>Help & Support</Text>
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </TouchableOpacity>
@@ -504,15 +544,17 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
         </View>
 
         {/* 5. LOGOUT BUTTON */}
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={18} color="#EF4444" style={styles.logoutIcon} />
+        <TouchableOpacity style={[styles.logoutButton, { borderRadius: 14 }]} onPress={onLogout} activeOpacity={0.8}>
           <Text style={styles.logoutText}>Logout</Text>
+          <Ionicons name="arrow-forward" size={18} color="#EF4444" />
         </TouchableOpacity>
 
         {/* 6. COPYRIGHT FOOTER */}
         <View style={styles.footerContainer}>
           <Text style={styles.footerText}>Nexus Corporate Training Center v1.0.0</Text>
-          <Text style={styles.footerText}>© 2026 Nexus Corporate Training Center. All rights reserved.</Text>
+          <Text style={styles.footerText}>
+            {userRole === 'teacher' ? 'Teacher Portal' : '© 2026 Nexus Corporate Training Center. All rights reserved.'}
+          </Text>
         </View>
 
         {/* Bottom spacer to account for floating tab bar */}
@@ -543,7 +585,7 @@ const styles = StyleSheet.create({
   // Curved purple banner header
   headerBanner: {
     backgroundColor: '#7B2CBF',
-    height: 140,
+    height: 155,
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
     paddingHorizontal: 24,
@@ -555,13 +597,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
+  // Avatar floats between header and card
+  avatarFloatContainer: {
+    alignItems: 'center',
+    marginBottom: -52,
+    zIndex: 10,
+  },
+  // Outer container: positions avatar over the card
+  profileCardOuter: {
+    marginHorizontal: 20,
+    marginTop: -52,
+  },
   // Profile Info Card
   profileCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    marginHorizontal: 20,
-    marginTop: -55, // Overlap the curved header
-    padding: 24,
+    paddingTop: 68,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -571,47 +624,56 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F3F4F6',
   },
-  // Overlapping avatar
+  // Avatar wrapper (relative so camera badge positions correctly)
   avatarWrapper: {
-    marginTop: -55, // Negative margin to overlap card top boundary
     position: 'relative',
-    marginBottom: 16,
+    zIndex: 20,
   },
   avatarCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: '#7B2CBF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#7B2CBF',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#E5E7EB', // visible placeholder bg while loading, instead of a blank/invisible box
   },
   avatarText: {
     color: '#FFFFFF',
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
   },
   cameraBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: '#FFD7B5',
+    bottom: 2,
+    right: 2,
+    backgroundColor: '#FF7A00',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 3,
-    elevation: 2,
+    elevation: 3,
   },
   userName: {
     fontSize: 22,

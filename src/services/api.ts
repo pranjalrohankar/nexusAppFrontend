@@ -158,4 +158,5 @@ export const api = {
   submitEnquiry: (data: object) => post('/enquiries', data),
 
   getTeacherProfile: () => get('/teachers/profile'),
+  updateTeacherProfile: (data: object) => put('/teachers/profile', data),
 };
