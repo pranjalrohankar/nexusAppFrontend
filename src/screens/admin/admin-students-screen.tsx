@@ -183,9 +183,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormPinCode(student.pinCode || '560001');
     setFormGuardianName(student.guardianName || '');
     setFormGuardianPhone(student.guardianPhone || '');
-    setFormCourse(student.course || 'Data Science & Machine Learning');
-    setFormEnrollmentDate(student.enrollmentDate || '2026-06-02');
-    setFormPaymentStatus(student.paymentStatus || 'Paid');
+    // Prefer data from the first enrollment record (most up-to-date)
+    const firstEnrollment = student.enrollments && student.enrollments.length > 0 ? student.enrollments[0] : null;
+    setFormCourse(firstEnrollment?.courseTitle || student.course || '');
+    setFormEnrollmentDate(firstEnrollment?.enrollmentDate || student.enrollmentDate || '');
+    setFormPaymentStatus(firstEnrollment?.paymentStatus || student.paymentStatus || 'Pending');
     setIsModalVisible(true);
   };
 
@@ -693,15 +695,50 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.fieldLabel}>Payment Status</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formPaymentStatus}
-                    onChangeText={setFormPaymentStatus}
-                    placeholder="e.g. Paid"
-                    placeholderTextColor="#9CA3AF"
-                  />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Payment Status *</Text>
+                <View style={styles.paymentStatusRow}>
+                  {(['Paid', 'Pending', 'Failed'] as const).map(status => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.paymentChip,
+                        formPaymentStatus === status && (
+                          status === 'Paid' ? styles.paymentChipPaid :
+                          status === 'Pending' ? styles.paymentChipPending :
+                          styles.paymentChipFailed
+                        ),
+                      ]}
+                      onPress={() => setFormPaymentStatus(status)}
+                    >
+                      <Ionicons
+                        name={
+                          status === 'Paid' ? 'checkmark-circle-outline' :
+                          status === 'Pending' ? 'time-outline' :
+                          'close-circle-outline'
+                        }
+                        size={15}
+                        color={
+                          formPaymentStatus === status
+                            ? '#FFF'
+                            : status === 'Paid' ? '#10B981'
+                            : status === 'Pending' ? '#F59E0B'
+                            : '#EF4444'
+                        }
+                      />
+                      <Text style={[
+                        styles.paymentChipText,
+                        formPaymentStatus === status
+                          ? styles.paymentChipTextActive
+                          : status === 'Paid' ? { color: '#10B981' }
+                          : status === 'Pending' ? { color: '#F59E0B' }
+                          : { color: '#EF4444' },
+                      ]}>
+                        {status}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
 
@@ -1166,6 +1203,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  paymentStatusRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  paymentChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  paymentChipPaid: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  paymentChipPending: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
+  },
+  paymentChipFailed: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
+  },
+  paymentChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  paymentChipTextActive: {
+    color: '#FFFFFF',
   },
   modalActionRow: {
     flexDirection: 'row',
