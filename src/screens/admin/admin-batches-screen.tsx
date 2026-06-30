@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
@@ -194,7 +196,7 @@ export default function AdminBatchesScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       {toast && (
         <Animated.View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastOpacity }]}>
           <Text style={styles.toastText}>{toast.message}</Text>
@@ -202,19 +204,30 @@ export default function AdminBatchesScreen() {
       )}
 
       {/* Header */}
-      {/* HEADER - Matching your image */}
       <View style={styles.header}>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
+          ]}
+          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>Batches</Text>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.headerTitle}>Batches</Text>
+            <Text style={styles.headerSubtitle}>{batches.length} total batches</Text>
+          </View>
           <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
             <Ionicons name="add" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerSubtitle}>{batches.length} total batches</Text>
-      </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Search */}
+        {/* Search bar inside header */}
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
@@ -224,34 +237,47 @@ export default function AdminBatchesScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : null}
         </View>
+      </View>
 
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Filter Tabs */}
         <View style={styles.filterTabs}>
           {(['All', 'Active', 'Upcoming', 'Completed'] as FilterTab[]).map((tab) => (
             <TouchableOpacity
               key={tab}
-              style={[styles.filterTab, filterTab === tab && styles.filterTabActive]}
+              style={[styles.filterTab,
+                tab === 'Active' && styles.filterTabGreen,
+                tab === 'Upcoming' && styles.filterTabAmber,
+                tab === 'Completed' && styles.filterTabGrayBg,
+                filterTab === tab && styles.filterTabActive]}
               onPress={() => setFilterTab(tab)}
             >
               <Text style={[styles.filterTabText, filterTab === tab && styles.filterTabTextActive]}>
-                {tab} {tab === 'Active' ? activeCount : tab === 'Upcoming' ? upcomingCount : tab === 'Completed' ? completedCount : batches.length}
+                {tab}{tab === 'Active' ? ` ${activeCount}` : tab === 'Upcoming' ? ` ${upcomingCount}` : tab === 'Completed' ? ` ${completedCount}` : ''}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+        {/* Stats Card - matching students/teachers style */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: '#10B981' }]}>{activeCount}</Text>
             <Text style={styles.statLabel}>Active</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: '#F59E0B' }]}>{upcomingCount}</Text>
             <Text style={styles.statLabel}>Upcoming</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: '#6B7280' }]}>{completedCount}</Text>
             <Text style={styles.statLabel}>Completed</Text>
           </View>
@@ -459,80 +485,105 @@ export default function AdminBatchesScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   toast: { position: 'absolute', top: 60, left: 20, right: 20, zIndex: 999, borderRadius: 12, padding: 14, elevation: 8 },
   toastSuccess: { backgroundColor: '#10B981' },
   toastError: { backgroundColor: '#EF4444' },
   toastText: { color: '#FFF', fontWeight: '600', fontSize: 13, textAlign: 'center' },
-header: { 
-  backgroundColor: '#7B2CBF', 
-  paddingHorizontal: 20, 
-  paddingTop: 60, 
-  paddingBottom: 20 
-},
-headerTop: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  // marginBottom: 8,
-},
-headerTitle: { 
-  fontSize: 28, 
-  fontWeight: 'bold', 
-  color: '#FFF',
-  fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' 
-},
-headerSubtitle: { 
-  fontSize: 15, 
-  color: '#E9D5FF', 
-  fontWeight: '500' 
-},
-addBtn: { 
-  top:10,
-  backgroundColor: '#FF9500', 
-  width: 48, 
-  height: 48, 
-  borderRadius: 14, 
-  justifyContent: 'center', 
-  alignItems: 'center',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 3 },
-  shadowOpacity: 0.25,
-  shadowRadius: 6,
-  elevation: 6,
-},
-scrollView: { flex: 1 },
+  header: {
+    backgroundColor: '#7B2CBF',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  headerAccentLine: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  headerTextCol: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#E9D5FF',
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  addBtn: {
+    backgroundColor: '#FF9500',
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
   scrollContent: { padding: 20 },
-searchContainer: { 
-  flexDirection: 'row', 
-  alignItems: 'center', 
-  backgroundColor: '#FFF', 
-  borderRadius: 16, 
-  paddingHorizontal: 16, 
-  height: 52, 
-  marginBottom: 16,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 4,
-  elevation: 3 
-},
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 46,
+  },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1F2937' },
-  filterTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  filterTab: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB' },
-  filterTabActive: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
-  filterTabText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
+  filterTabs: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
+  filterTab: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, backgroundColor: 'rgba(123,44,191,0.10)' },
+  filterTabGreen: { backgroundColor: 'rgba(16,185,129,0.12)' },
+  filterTabAmber: { backgroundColor: 'rgba(245,158,11,0.12)' },
+  filterTabGrayBg: { backgroundColor: 'rgba(107,114,128,0.10)' },
+  filterTabActive: { backgroundColor: '#7B2CBF' },
+  filterTabText: { fontSize: 13, fontWeight: '600', color: '#7B2CBF' },
   filterTabTextActive: { color: '#FFF' },
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  statCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  statValue: { fontSize: 24, fontWeight: 'bold' },
-  statLabel: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  // Stats card matching students/teachers
+  statsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: { fontSize: 22, fontWeight: 'bold' },
+  statLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 },
+  statDivider: { width: 1, height: 32, backgroundColor: '#F3F4F6' },
   emptyState: { alignItems: 'center', marginTop: 60 },
   emptyText: { fontSize: 14, color: '#9CA3AF', marginTop: 12 },
   batchCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },

@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
@@ -264,25 +265,34 @@ export default function AdminCoursesScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Manage Courses</Text>
-        <Text style={styles.headerSubtitle}>{courses.length} total training courses</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-          <Ionicons name="add" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* SEARCH BAR */}
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
+          ]}
+          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.headerTitle}>Manage Courses</Text>
+            <Text style={styles.headerSubtitle}>{courses.length} total courses</Text>
+          </View>
+          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
+            <Ionicons name="add" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+        {/* Search bar inside header */}
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search courses by title or instructor..."
+            placeholder="Search courses, instructors..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
@@ -293,41 +303,50 @@ export default function AdminCoursesScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
+      </View>
 
-        {/* SUB-TABS */}
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'All' && styles.tabItemActive]}
-            onPress={() => { setActiveTab('All'); setPage(1); }}
-          >
-            <Text style={[styles.tabLabel, activeTab === 'All' && styles.tabLabelActive]}>
-              All ({courses.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
-            onPress={() => { setActiveTab('Active'); setPage(1); }}
-          >
-            <Text style={[styles.tabLabel, activeTab === 'Active' && styles.tabLabelActive]}>
-              Active ({activeCount})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'Upcoming' && styles.tabItemActive]}
-            onPress={() => { setActiveTab('Upcoming'); setPage(1); }}
-          >
-            <Text style={[styles.tabLabel, activeTab === 'Upcoming' && styles.tabLabelActive]}>
-              Upcoming ({upcomingCount})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'Completed' && styles.tabItemActive]}
-            onPress={() => { setActiveTab('Completed'); setPage(1); }}
-          >
-            <Text style={[styles.tabLabel, activeTab === 'Completed' && styles.tabLabelActive]}>
-              Completed ({completedCount})
-            </Text>
-          </TouchableOpacity>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* FILTER PILL TABS */}
+        <View style={styles.filterTabsRow}>
+          {(['All', 'Active', 'Upcoming', 'Completed'] as const).map((tab) => {
+            const count = tab === 'All' ? courses.length : tab === 'Active' ? activeCount : tab === 'Upcoming' ? upcomingCount : completedCount;
+            const pillStyle = tab === 'Active' ? styles.filterPillGreen : tab === 'Upcoming' ? styles.filterPillAmber : tab === 'Completed' ? styles.filterPillGray : styles.filterPill;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[pillStyle, activeTab === tab && styles.filterPillActive]}
+                onPress={() => { setActiveTab(tab); setPage(1); }}
+              >
+                <Text style={[styles.filterPillText, activeTab === tab && styles.filterPillTextActive]}>
+                  {tab}{tab !== 'All' ? ` ${count}` : ''}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* STATS ROW */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#10B981' }]}>{activeCount}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{upcomingCount}</Text>
+            <Text style={styles.statLabel}>Upcoming</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#6B7280' }]}>{completedCount}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
+          </View>
         </View>
 
         {/* LIST */}
@@ -724,8 +743,22 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    position: 'relative',
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  headerAccentLine: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  headerTextCol: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
@@ -736,50 +769,30 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 13,
     color: '#E9D5FF',
-    marginTop: 6,
+    fontWeight: '600',
+    marginTop: 3,
   },
   addBtn: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    backgroundColor: '#FF7A00',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    backgroundColor: '#FF9500',
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  bottomSpacer: {
-    height: 100,
-  },
-  // Search bar
+  // Search bar (now inside header)
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
     borderRadius: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     height: 46,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
   },
   searchIcon: {
     marginRight: 8,
@@ -790,37 +803,92 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     height: '100%',
   },
-  // Sub-tabs
-  tabsContainer: {
+  // Filter pill tabs
+  filterTabsRow: {
     flexDirection: 'row',
-    marginBottom: 20,
-    backgroundColor: '#F3F4F6',
-    padding: 4,
-    borderRadius: 12,
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: 'wrap',
   },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123,44,191,0.10)',
   },
-  tabItemActive: {
+  filterPillGreen: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(16,185,129,0.12)',
+  },
+  filterPillAmber: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(245,158,11,0.12)',
+  },
+  filterPillGray: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(107,114,128,0.10)',
+  },
+  filterPillActive: {
+    backgroundColor: '#7B2CBF',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7B2CBF',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
+  },
+  // Stats card
+  statsCard: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  tabLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
   },
-  tabLabelActive: {
-    color: '#7B2CBF',
-    fontWeight: '700',
+  statNumber: {
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#F3F4F6',
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  scrollContent: {
+    padding: 20,
+  },
+  bottomSpacer: {
+    height: 100,
   },
   // List
   listContainer: {
