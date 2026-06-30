@@ -149,6 +149,7 @@ export const api = {
   createBatch: (data: object) => post('/batches', data),
   updateBatch: (id: number | string, data: object) => put(`/batches/${id}`, data),
   deleteBatch: (id: number | string) => del(`/batches/${id}`),
+  getBatchStudents: (batchId: number | string) => get(`/batches/${batchId}/students`),
 
   getEnrollmentsByCourse: (courseTitle: string) => get(`/enrollments/course?courseTitle=${encodeURIComponent(courseTitle)}`),
   getEnrollmentCount: (courseTitle: string) => get(`/enrollments/count/course?courseTitle=${encodeURIComponent(courseTitle.trim())}`),

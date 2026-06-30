@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
+import BatchStudentsScreen from './batch-students-screen';
 
 type FilterTab = 'All' | 'Active' | 'Upcoming' | 'Completed';
 type BatchStatus = 'ACTIVE' | 'UPCOMING' | 'COMPLETED';
@@ -42,6 +43,7 @@ export default function AdminBatchesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+  const [viewingBatch, setViewingBatch] = useState<Batch | null>(null);
 
   const [formBatchName, setFormBatchName] = useState('');
   const [formCourse, setFormCourse] = useState('');
@@ -195,6 +197,16 @@ export default function AdminBatchesScreen() {
     return days.map(d => d.substring(0, 3)).join(', ');
   };
 
+  // Show BatchStudentsScreen when View Students is tapped
+  if (viewingBatch) {
+    return (
+      <BatchStudentsScreen
+        batch={viewingBatch}
+        onBack={() => setViewingBatch(null)}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {toast && (
@@ -248,21 +260,36 @@ export default function AdminBatchesScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Filter Tabs */}
         <View style={styles.filterTabs}>
-          {(['All', 'Active', 'Upcoming', 'Completed'] as FilterTab[]).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.filterTab,
-                tab === 'Active' && styles.filterTabGreen,
-                tab === 'Upcoming' && styles.filterTabAmber,
-                tab === 'Completed' && styles.filterTabGrayBg,
-                filterTab === tab && styles.filterTabActive]}
-              onPress={() => setFilterTab(tab)}
-            >
-              <Text style={[styles.filterTabText, filterTab === tab && styles.filterTabTextActive]}>
-                {tab}{tab === 'Active' ? ` ${activeCount}` : tab === 'Upcoming' ? ` ${upcomingCount}` : tab === 'Completed' ? ` ${completedCount}` : ''}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={[styles.filterTab, filterTab === 'All' && styles.filterTabActiveAll]}
+            onPress={() => setFilterTab('All')}
+          >
+            <Text style={[styles.filterTabText, filterTab === 'All' && styles.filterTabTextActive]}>All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, styles.filterTabGreen, filterTab === 'Active' && styles.filterTabActiveGreen]}
+            onPress={() => setFilterTab('Active')}
+          >
+            <Text style={[styles.filterTabText, styles.filterTabTextGreen, filterTab === 'Active' && styles.filterTabTextActive]}>
+              Active {activeCount}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, styles.filterTabAmber, filterTab === 'Upcoming' && styles.filterTabActiveAmber]}
+            onPress={() => setFilterTab('Upcoming')}
+          >
+            <Text style={[styles.filterTabText, styles.filterTabTextAmber, filterTab === 'Upcoming' && styles.filterTabTextActive]}>
+              Upcoming {upcomingCount}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, styles.filterTabGrayBg, filterTab === 'Completed' && styles.filterTabActiveGray]}
+            onPress={() => setFilterTab('Completed')}
+          >
+            <Text style={[styles.filterTabText, styles.filterTabTextGray, filterTab === 'Completed' && styles.filterTabTextActive]}>
+              Completed {completedCount}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Card - matching students/teachers style */}
@@ -296,67 +323,87 @@ export default function AdminBatchesScreen() {
             const selectedCourse = courses.find(c => c.title === batch.selectCourse);
             return (
               <View key={batch.id} style={styles.batchCard}>
+                {/* Card Header: icon + name/course + status + menu */}
                 <View style={styles.batchHeader}>
                   <View style={styles.batchIconBox}>
-                    <Ionicons name="book" size={20} color="#7B2CBF" />
+                    <Ionicons name="book" size={20} color="#FFFFFF" />
                   </View>
                   <View style={styles.batchHeaderText}>
                     <Text style={styles.batchName}>{batch.batchName}</Text>
                     <Text style={styles.batchCourse}>{batch.selectCourse}</Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: getStatusColor(batch.status) }]}>
-                    <Text style={styles.statusText}>{batch.status === 'ACTIVE' ? 'Active' : batch.status === 'UPCOMING' ? 'Upcoming' : 'Completed'}</Text>
+                    <Text style={styles.statusText}>
+                      {batch.status === 'ACTIVE' ? 'Active' : batch.status === 'UPCOMING' ? 'Upcoming' : 'Completed'}
+                    </Text>
                   </View>
-                  <TouchableOpacity>
-                    <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
+                  <TouchableOpacity style={{ marginLeft: 6 }}>
+                    <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
                 </View>
 
+                {/* Info Grid: 2 columns */}
                 <View style={styles.batchInfoGrid}>
+                  {/* Left column */}
                   <View style={styles.infoColumn}>
                     <View style={styles.infoRow}>
-                      <Ionicons name="person-outline" size={16} color="#6B7280" />
+                      <Ionicons name="person-outline" size={14} color="#6B7280" />
                       <Text style={styles.infoText}>{batch.instructor}</Text>
                     </View>
                     <View style={styles.infoRow}>
-                      <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                      <Ionicons name="calendar-outline" size={14} color="#6B7280" />
                       <Text style={styles.infoText}>
-                        {batch.startDate ? new Date(batch.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
+                        {batch.startDate
+                          ? new Date(batch.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'No date'}
                       </Text>
                     </View>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.batchDaysText}>{formatClassDays(batch.classDays)}</Text>
-                    </View>
+                    {batch.classDays && batch.classDays.length > 0 && (
+                      <View style={styles.daysChipRow}>
+                        <View style={styles.daysChip}>
+                          <Text style={styles.daysChipText}>{formatClassDays(batch.classDays)}</Text>
+                        </View>
+                      </View>
+                    )}
                   </View>
+                  {/* Right column */}
                   <View style={styles.infoColumn}>
                     <View style={styles.infoRow}>
-                      <Ionicons name="time-outline" size={16} color="#6B7280" />
-                      <Text style={styles.infoText}>{selectedCourse?.classTimings || '8:00 PM - 9:30 PM'}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                      <Ionicons name="time-outline" size={14} color="#6B7280" />
                       <Text style={styles.infoText}>
-                        {batch.endDate ? new Date(batch.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No end date'}
+                        {selectedCourse?.classTimings || batch.courseTimings || '—'}
                       </Text>
                     </View>
                     <View style={styles.infoRow}>
-                      <Ionicons name="people-outline" size={16} color="#6B7280" />
-                      <Text style={styles.infoText}>{batch.studentsCount || 0} students</Text>
+                      <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+                      <Text style={styles.infoText}>
+                        {batch.endDate
+                          ? new Date(batch.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'No end date'}
+                      </Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Ionicons name="people-outline" size={14} color="#6B7280" />
+                      <Text style={styles.infoText}>{batch.studentsCount ?? 0} students</Text>
                     </View>
                   </View>
                 </View>
 
+                {/* Actions */}
                 <View style={styles.batchActions}>
                   <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(batch)}>
-                    <Ionicons name="create-outline" size={16} color="#7B2CBF" />
+                    <Ionicons name="create-outline" size={15} color="#7B2CBF" />
                     <Text style={styles.editBtnText}>Edit</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(batch.id)}>
-                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={15} color="#EF4444" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.viewStudentsBtn}>
+                  <TouchableOpacity
+                    style={styles.viewStudentsBtn}
+                    onPress={() => setViewingBatch({ ...batch, courseTimings: selectedCourse?.classTimings || '' })}
+                  >
                     <Text style={styles.viewStudentsBtnText}>View Students</Text>
-                    <Ionicons name="chevron-forward" size={16} color="#FFF" />
+                    <Ionicons name="chevron-forward" size={15} color="#FFF" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -558,8 +605,14 @@ const styles = StyleSheet.create({
   filterTabGreen: { backgroundColor: 'rgba(16,185,129,0.12)' },
   filterTabAmber: { backgroundColor: 'rgba(245,158,11,0.12)' },
   filterTabGrayBg: { backgroundColor: 'rgba(107,114,128,0.10)' },
-  filterTabActive: { backgroundColor: '#7B2CBF' },
+  filterTabActiveAll: { backgroundColor: '#7B2CBF' },
+  filterTabActiveGreen: { backgroundColor: '#10B981' },
+  filterTabActiveAmber: { backgroundColor: '#F59E0B' },
+  filterTabActiveGray: { backgroundColor: '#6B7280' },
   filterTabText: { fontSize: 13, fontWeight: '600', color: '#7B2CBF' },
+  filterTabTextGreen: { color: '#10B981' },
+  filterTabTextAmber: { color: '#F59E0B' },
+  filterTabTextGray: { color: '#6B7280' },
   filterTabTextActive: { color: '#FFF' },
   // Stats card matching students/teachers
   statsCard: {
@@ -586,26 +639,29 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, height: 32, backgroundColor: '#F3F4F6' },
   emptyState: { alignItems: 'center', marginTop: 60 },
   emptyText: { fontSize: 14, color: '#9CA3AF', marginTop: 12 },
-  batchCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
-  batchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  batchIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  batchCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  batchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  batchIconBox: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#4F6EF7', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   batchHeaderText: { flex: 1 },
-  batchName: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
+  batchName: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
   batchCourse: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  statusBadge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, marginRight: 8 },
-  statusText: { fontSize: 10, fontWeight: 'bold', color: '#FFF' },
-  batchInfoGrid: { flexDirection: 'row', marginBottom: 12, gap: 16 },
-  infoColumn: { flex: 1 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  infoText: { fontSize: 13, color: '#4B5563', flex: 1 },
+  statusBadge: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 20, marginRight: 4 },
+  statusText: { fontSize: 11, fontWeight: 'bold', color: '#FFF' },
+  batchInfoGrid: { flexDirection: 'row', marginBottom: 14, gap: 8 },
+  infoColumn: { flex: 1, gap: 6 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  infoText: { fontSize: 12, color: '#4B5563', flex: 1 },
+  daysChipRow: { flexDirection: 'row', marginTop: 2 },
+  daysChip: { backgroundColor: '#F3E8FF', borderRadius: 20, paddingVertical: 4, paddingHorizontal: 12, alignSelf: 'flex-start' },
+  daysChipText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
   batchDays: { backgroundColor: '#F9FAFB', borderRadius: 8, padding: 8, marginBottom: 12 },
   batchDaysText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
-  batchActions: { flexDirection: 'row', gap: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12 },
-  editBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3E8FF', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, gap: 6, flex: 1 },
-  editBtnText: { fontSize: 12, fontWeight: 'bold', color: '#7B2CBF' },
-  deleteBtn: { backgroundColor: '#FEE2E2', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, justifyContent: 'center' },
-  viewStudentsBtn: { flex: 0.8, flexDirection: 'row', backgroundColor: '#7B2CBF', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, justifyContent: 'center', alignItems: 'center', gap: 4 },
-  viewStudentsBtnText: { fontSize: 12, fontWeight: 'bold', color: '#FFF' },
+  batchActions: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12, alignItems: 'center' },
+  editBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3E8FF', paddingVertical: 10, borderRadius: 10, gap: 6 },
+  editBtnText: { fontSize: 13, fontWeight: 'bold', color: '#7B2CBF' },
+  deleteBtn: { width: 40, height: 40, backgroundColor: '#FEE2E2', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  viewStudentsBtn: { flex: 1.4, flexDirection: 'row', backgroundColor: '#7B2CBF', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 4 },
+  viewStudentsBtnText: { fontSize: 13, fontWeight: 'bold', color: '#FFF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: '#F9FAFB', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '90%' },
   modalHeader: { backgroundColor: '#7B2CBF', padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
