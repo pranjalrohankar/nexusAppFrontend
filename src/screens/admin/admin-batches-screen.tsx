@@ -537,7 +537,7 @@ export default function AdminBatchesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
+  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   toast: { position: 'absolute', top: 60, left: 20, right: 20, zIndex: 999, borderRadius: 12, padding: 14, elevation: 8 },
   toastSuccess: { backgroundColor: '#10B981' },
