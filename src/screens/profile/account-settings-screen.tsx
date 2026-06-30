@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useState, useEffect } from 'react';
 import {
   Alert,
   ActivityIndicator,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,39 +17,50 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../services/api';
 
+const PROFILE_PHOTO_KEY = 'user_profile_photo';
+
 interface AccountSettingsScreenProps {
   onBack: () => void;
   userRole?: 'student' | 'teacher' | 'admin';
   teacherProfile?: any;
 }
 
-export default function AccountSettingsScreen({ onBack, userRole = 'student', teacherProfile: initialProfile }: AccountSettingsScreenProps) {
+export default function AccountSettingsScreen({
+  onBack,
+  userRole = 'student',
+  teacherProfile: initialProfile,
+}: AccountSettingsScreenProps) {
   const [profile, setProfile] = useState<any>(initialProfile ?? null);
   const [loading, setLoading] = useState(!initialProfile && userRole === 'teacher');
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
-  // Editable fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [pinCode, setPinCode] = useState('');
+  const [street, setStreet] = useState('');
 
-  // Populate form from profile
+  // Load saved photo
+  useEffect(() => {
+    AsyncStorage.getItem(PROFILE_PHOTO_KEY)
+      .then(uri => { if (uri) setPhotoUri(uri); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch profile if not passed
   useEffect(() => {
     if (userRole === 'teacher' && !initialProfile) {
       api.getTeacherProfile()
-        .then((res: any) => {
-          const data = res?.data ?? null;
-          setProfile(data);
-        })
-        .catch(() => setLoading(false))
+        .then((res: any) => setProfile(res?.data ?? null))
+        .catch(() => {})
         .finally(() => setLoading(false));
     }
   }, [userRole, initialProfile]);
 
+  // Fill form fields
   useEffect(() => {
     const data = profile ?? initialProfile;
     if (data) {
@@ -59,17 +73,103 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student', te
     }
   }, [profile, initialProfile]);
 
-  const roleLabel = userRole === 'teacher' ? 'Senior Instructor' : userRole === 'admin' ? 'Administrator' : 'Student';
+  const roleLabel =
+    userRole === 'teacher' ? 'Senior Instructor' :
+    userRole === 'admin' ? 'Administrator' : 'Student';
 
   const initials = name
     ? name.split(' ').slice(0, 2).map((w: string) => w.charAt(0).toUpperCase()).join('')
     : userRole === 'teacher' ? 'T' : userRole === 'admin' ? 'A' : 'S';
 
-  const email = profile?.email ?? '';
-  const joinDate = profile?.joinDate ?? '';
+  const email = profile?.email ?? (initialProfile?.email ?? '');
+  const joinDate = profile?.joinDate ?? (initialProfile?.joinDate ?? '');
+  const location = [city, state, pinCode].filter(Boolean).join(', ');
 
-  const location = [street, city, state, pinCode].filter(Boolean).join(', ');
+  // If the stored photo URI is broken/invalid, clear it so the
+  // initials-avatar fallback can render instead of a blank box.
+  const handlePhotoError = () => {
+    setPhotoUri(null);
+    AsyncStorage.removeItem(PROFILE_PHOTO_KEY).catch(() => {});
+  };
 
+  // ── Photo picker with Remove option ──────────────────────────────────────
+  const handleChangePhoto = async () => {
+    if (Platform.OS === 'web') {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        setPhotoUri(uri);
+        await AsyncStorage.setItem(PROFILE_PHOTO_KEY, uri);
+      }
+      return;
+    }
+
+    const options: any[] = [
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission Required', 'Please allow photo library access in Settings.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+          if (!result.canceled && result.assets.length > 0) {
+            const uri = result.assets[0].uri;
+            setPhotoUri(uri);
+            await AsyncStorage.setItem(PROFILE_PHOTO_KEY, uri);
+          }
+        },
+      },
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+          if (!result.canceled && result.assets.length > 0) {
+            const uri = result.assets[0].uri;
+            setPhotoUri(uri);
+            await AsyncStorage.setItem(PROFILE_PHOTO_KEY, uri);
+          }
+        },
+      },
+    ];
+
+    // Only show Remove option if photo exists
+    if (photoUri) {
+      options.push({
+        text: 'Remove Photo',
+        style: 'destructive',
+        onPress: async () => {
+          setPhotoUri(null);
+          await AsyncStorage.removeItem(PROFILE_PHOTO_KEY);
+        },
+      });
+    }
+
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Profile Photo', 'Choose an option', options);
+  };
+
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSaveChanges = async () => {
     if (!name.trim()) {
       Alert.alert('Validation Error', 'Name cannot be empty.');
@@ -80,7 +180,6 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student', te
       if (userRole === 'teacher') {
         await (api as any).updateTeacherProfile({ name, phone, street, city, state, pinCode });
       }
-      // Show success banner, then go back after 1.5s
       setSuccessMsg('Changes saved successfully!');
       setTimeout(() => {
         setSuccessMsg('');
@@ -93,22 +192,18 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student', te
     }
   };
 
-  const handleChangePhoto = () => {
-    Alert.alert('Change Profile Photo', 'Camera and gallery integration coming soon!');
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
               <Ionicons name="arrow-back" size={24} color="#FFF" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Account Settings</Text>
           </View>
         </View>
-        <View style={styles.loadingContainer}>
+        <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color="#7B2CBF" />
         </View>
       </SafeAreaView>
@@ -117,10 +212,18 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student', te
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* HEADER */}
+      {/* Success banner */}
+      {successMsg ? (
+        <View style={styles.successBanner}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+          <Text style={styles.successText}>{successMsg}</Text>
+        </View>
+      ) : null}
+
+      {/* Purple header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={onBack}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Account Settings</Text>
@@ -128,164 +231,152 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student', te
       </View>
 
       <ScrollView
-        style={styles.scrollView}
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* AVATAR */}
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{initials}</Text>
+        {/* ── AVATAR CARD ── */}
+        <View style={styles.avatarCard}>
+          <TouchableOpacity
+            style={styles.avatarWrapper}
+            onPress={handleChangePhoto}
+            activeOpacity={0.85}
+          >
+            {photoUri ? (
+              <Image
+                source={{ uri: photoUri }}
+                style={styles.avatarImage}
+                onError={handlePhotoError}
+              />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <Ionicons name="camera" size={15} color="#FFF" />
             </View>
-            <TouchableOpacity style={styles.cameraBadge} onPress={handleChangePhoto} activeOpacity={0.8}>
-              <Ionicons name="camera" size={14} color="#FF7A00" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.profileName}>{name || '—'}</Text>
-          <Text style={styles.profileRole}>{roleLabel}</Text>
+          </TouchableOpacity>
+          <Text style={styles.avatarName}>{name || '—'}</Text>
+          <Text style={styles.avatarRole}>{roleLabel}</Text>
         </View>
 
-        {/* FORM CARD */}
-        <View style={styles.formCard}>
-          <Text style={styles.sectionHeading}>Personal Information</Text>
+        {/* ── PERSONAL INFORMATION ── */}
+        <Text style={styles.sectionTitle}>Personal Information</Text>
+        <View style={styles.infoCard}>
 
           {/* Full Name */}
-          <Text style={styles.inputLabel}>Full Name</Text>
-          <View style={styles.inputWrapper}>
-            <View style={[styles.inputIconBox, { backgroundColor: '#F3E8FF' }]}>
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#EDE9FF' }]}>
               <Ionicons name="person-outline" size={18} color="#7B2CBF" />
             </View>
-            <TextInput
-              style={styles.textInput}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your name"
-              placeholderTextColor="#9CA3AF"
-            />
-            <Ionicons name="create-outline" size={16} color="#9CA3AF" />
-          </View>
-
-          {/* Email — read only */}
-          <Text style={styles.inputLabel}>Email</Text>
-          <View style={[styles.inputWrapper, styles.readOnlyWrapper]}>
-            <View style={[styles.inputIconBox, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="mail-outline" size={18} color="#EA580C" />
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Full Name</Text>
+              <TextInput
+                style={styles.rowInput}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter full name"
+                placeholderTextColor="#C4C4C4"
+              />
             </View>
-            <TextInput
-              style={[styles.textInput, styles.readOnlyText]}
-              value={email}
-              editable={false}
-            />
-            <Ionicons name="lock-closed" size={14} color="#9CA3AF" />
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
+          <View style={styles.divider} />
+
+          {/* Email */}
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#FFF3E8' }]}>
+              <Ionicons name="mail-outline" size={18} color="#FF8C00" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Email</Text>
+              <Text style={styles.rowValue}>{email || '—'}</Text>
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
+          </View>
+          <View style={styles.divider} />
 
           {/* Phone */}
-          <Text style={styles.inputLabel}>Phone</Text>
-          <View style={styles.inputWrapper}>
-            <View style={[styles.inputIconBox, { backgroundColor: '#ECFDF5' }]}>
-              <Ionicons name="call-outline" size={18} color="#10B981" />
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#E8FFF3' }]}>
+              <Ionicons name="call-outline" size={18} color="#22C55E" />
             </View>
-            <TextInput
-              style={styles.textInput}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              placeholder="Enter phone number"
-              placeholderTextColor="#9CA3AF"
-            />
-            <Ionicons name="create-outline" size={16} color="#9CA3AF" />
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Phone</Text>
+              <TextInput
+                style={styles.rowInput}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="Enter phone number"
+                placeholderTextColor="#C4C4C4"
+              />
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
+          <View style={styles.divider} />
 
           {/* Location */}
-          <Text style={styles.inputLabel}>Location</Text>
-          <View style={styles.inputWrapper}>
-            <View style={[styles.inputIconBox, { backgroundColor: '#EFF6FF' }]}>
-              <Ionicons name="location-outline" size={18} color="#3B82F6" />
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#EEF4FF' }]}>
+              <Ionicons name="location-outline" size={18} color="#6B8FFF" />
             </View>
-            <TextInput
-              style={styles.textInput}
-              value={city}
-              onChangeText={setCity}
-              placeholder="City"
-              placeholderTextColor="#9CA3AF"
-            />
-            <Ionicons name="create-outline" size={16} color="#9CA3AF" />
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Location</Text>
+              <TextInput
+                style={styles.rowInput}
+                value={city}
+                onChangeText={setCity}
+                placeholder="City"
+                placeholderTextColor="#C4C4C4"
+              />
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
-          {/* State & PIN side-by-side */}
-          <View style={styles.rowInputs}>
-            <View style={[styles.inputWrapper, { flex: 1 }]}>
-              <TextInput
-                style={styles.textInput}
-                value={state}
-                onChangeText={setState}
-                placeholder="State"
-                placeholderTextColor="#9CA3AF"
-              />
+          <View style={styles.divider} />
+
+          {/* Member Since */}
+          <View style={[styles.row, { borderBottomWidth: 0 }]}>
+            <View style={[styles.iconBox, { backgroundColor: '#F3E8FF' }]}>
+              <Ionicons name="calendar-outline" size={18} color="#7B2CBF" />
             </View>
-            <View style={[styles.inputWrapper, { flex: 1 }]}>
-              <TextInput
-                style={styles.textInput}
-                value={pinCode}
-                onChangeText={setPinCode}
-                placeholder="PIN Code"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="number-pad"
-              />
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Member Since</Text>
+              <Text style={styles.rowValue}>{joinDate || '—'}</Text>
             </View>
           </View>
 
-          {/* Member Since — read only */}
-          {joinDate ? (
-            <>
-              <Text style={styles.inputLabel}>Member Since</Text>
-              <View style={[styles.inputWrapper, styles.readOnlyWrapper]}>
-                <View style={[styles.inputIconBox, { backgroundColor: '#F3E8FF' }]}>
-                  <Ionicons name="calendar-outline" size={18} color="#7B2CBF" />
-                </View>
-                <TextInput
-                  style={[styles.textInput, styles.readOnlyText]}
-                  value={joinDate}
-                  editable={false}
-                />
-                <Ionicons name="lock-closed" size={14} color="#9CA3AF" />
-              </View>
-            </>
-          ) : null}
-
-          {/* Role — read only */}
-          <Text style={styles.inputLabel}>Role</Text>
-          <View style={[styles.inputWrapper, styles.readOnlyWrapper]}>
-            <View style={[styles.inputIconBox, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="school-outline" size={18} color="#EA580C" />
-            </View>
-            <TextInput
-              style={[styles.textInput, styles.readOnlyText]}
-              value={roleLabel}
-              editable={false}
-            />
-            <Ionicons name="lock-closed" size={14} color="#9CA3AF" />
-          </View>
         </View>
 
-        {/* SAVE BUTTON */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSaveChanges} activeOpacity={0.8} disabled={saving}>
+        {/* ── SAVE BUTTON ── */}
+        <TouchableOpacity
+          style={styles.saveBtn}
+          onPress={handleSaveChanges}
+          activeOpacity={0.85}
+          disabled={saving}
+        >
           {saving
             ? <ActivityIndicator size="small" color="#FFF" />
-            : <>
-                <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              </>
+            : <Text style={styles.saveBtnText}>Save Changes</Text>}
+        </TouchableOpacity>
+
+        {/* ── DELETE ACCOUNT ── */}
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          activeOpacity={0.8}
+          onPress={() =>
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account. Contact admin to proceed.',
+              [{ text: 'OK' }],
+            )
           }
+        >
+          <Text style={styles.deleteBtnText}>Delete Account</Text>
         </TouchableOpacity>
 
-        {/* DELETE ACCOUNT */}
-        <TouchableOpacity style={styles.deleteButton} activeOpacity={0.8}
-          onPress={() => Alert.alert('Delete Account', 'This will permanently delete your account. Contact admin to proceed.')}>
-          <Text style={styles.deleteButtonText}>Delete Account</Text>
-        </TouchableOpacity>
-
-        <View style={styles.bottomSpacer} />
+        <View style={styles.spacer} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -293,70 +384,130 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student', te
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
-  header: { backgroundColor: '#7B2CBF', height: 70, justifyContent: 'center', paddingHorizontal: 20 },
-  headerContent: {
-    flexDirection: 'row', alignItems: 'center', width: '100%',
-    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined, alignSelf: 'center',
+
+  successBanner: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999,
+    backgroundColor: '#10B981', flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, gap: 8,
   },
-  backButton: { padding: 4 },
+  successText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+
+  header: {
+    backgroundColor: '#7B2CBF',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 4,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  backBtn: { padding: 4, marginRight: 12 },
   headerTitle: {
-    color: '#FFFFFF', fontSize: 20, fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', marginLeft: 16,
+    color: '#FFF', fontSize: 22, fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB' },
-  scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
+
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+
+  scroll: { flex: 1, backgroundColor: '#F5F5F5' },
   scrollContent: {
-    padding: 20, width: '100%',
-    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined, alignSelf: 'center',
+    paddingHorizontal: 16, paddingTop: 0, paddingBottom: 40,
+    width: '100%',
+    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
+    alignSelf: 'center',
   },
-  bottomSpacer: { height: 100 },
-  // Avatar
-  avatarContainer: { alignItems: 'center', marginTop: 10, marginBottom: 24 },
-  avatarWrapper: { position: 'relative', marginBottom: 10 },
+
+  // Avatar card — white rounded card matching the image
+  avatarCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  avatarWrapper: { position: 'relative', marginBottom: 12 },
   avatarCircle: {
-    width: 90, height: 90, borderRadius: 45, backgroundColor: '#7B2CBF',
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#7B2CBF',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#7B2CBF', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
   },
-  avatarText: { color: '#FFFFFF', fontSize: 30, fontWeight: 'bold' },
+  avatarImage: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#E5E7EB', // visible placeholder bg while loading, instead of a blank/invisible box
+  },
+  avatarInitials: { color: '#FFF', fontSize: 32, fontWeight: 'bold' },
   cameraBadge: {
-    position: 'absolute', bottom: 0, right: 0, backgroundColor: '#FF7A00',
-    width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#FFF',
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#FF7A00',
+    width: 28, height: 28, borderRadius: 14,
+    borderWidth: 2, borderColor: '#FFF',
     justifyContent: 'center', alignItems: 'center',
   },
-  profileName: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginTop: 4 },
-  profileRole: { fontSize: 13, color: '#6B7280', marginTop: 2, fontWeight: '500' },
-  // Form
-  formCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20,
-    borderWidth: 1, borderColor: '#E5E7EB',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.03, shadowRadius: 8, elevation: 3, marginBottom: 20,
+  avatarName: { fontSize: 18, fontWeight: 'bold', color: '#1A1A1A' },
+  avatarRole: { fontSize: 13, color: '#888', marginTop: 3 },
+
+  // Section title
+  sectionTitle: {
+    fontSize: 16, fontWeight: 'bold', color: '#1A1A1A',
+    marginBottom: 12, marginTop: 4,
   },
-  sectionHeading: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
-  inputLabel: { fontSize: 11, fontWeight: '600', color: '#6B7280', marginTop: 14, marginBottom: 6 },
-  inputWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12,
-    height: 48, paddingHorizontal: 12, backgroundColor: '#F9FAFB', gap: 10,
+
+  // Info card — white card with flat rows separated by dividers
+  infoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  readOnlyWrapper: { backgroundColor: '#F3F4F6' },
-  inputIconBox: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  textInput: { flex: 1, fontSize: 13, color: '#1F2937', height: '100%' },
-  readOnlyText: { color: '#6B7280' },
-  rowInputs: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  // Buttons
-  saveButton: {
-    backgroundColor: '#7B2CBF', flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', borderRadius: 14, height: 52, gap: 8,
-    shadowColor: '#7B2CBF', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4, marginBottom: 12,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
   },
-  saveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
-  deleteButton: {
-    borderWidth: 1, borderColor: '#FECACA', borderRadius: 14,
-    height: 48, justifyContent: 'center', alignItems: 'center',
+  iconBox: {
+    width: 38, height: 38, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
   },
-  deleteButtonText: { color: '#EF4444', fontSize: 14, fontWeight: '600' },
+  rowContent: { flex: 1 },
+  rowLabel: { fontSize: 11, color: '#999', marginBottom: 2, fontWeight: '500' },
+  rowValue: { fontSize: 14, color: '#1A1A1A', fontWeight: '500' },
+  rowInput: {
+    fontSize: 14, color: '#1A1A1A', fontWeight: '500',
+    padding: 0, margin: 0,
+  },
+  divider: { height: 1, backgroundColor: '#F0F0F0', marginLeft: 50 },
+
+  // Save button — full width purple
+  saveBtn: {
+    backgroundColor: '#7B2CBF',
+    borderRadius: 14, height: 52,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#7B2CBF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+
+  // Delete account — outline red
+  deleteBtn: {
+    borderRadius: 14, height: 52,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: '#EF4444',
+    backgroundColor: '#FFF',
+  },
+  deleteBtnText: { color: '#EF4444', fontSize: 15, fontWeight: '600' },
+
+  spacer: { height: 40 },
 });
