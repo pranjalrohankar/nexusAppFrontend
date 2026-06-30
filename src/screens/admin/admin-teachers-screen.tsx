@@ -380,10 +380,12 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                   </View>
                   <View style={styles.statsDetailsRow}>
                     <View style={styles.miniStatCard}>
+                      <Ionicons name="book-outline" size={14} color="#7B2CBF" style={{ marginBottom: 2 }} />
                       <Text style={styles.miniStatVal}>{item.coursesCount}</Text>
                       <Text style={styles.miniStatLabel}>Courses</Text>
                     </View>
                     <View style={styles.miniStatCard}>
+                      <Ionicons name="people-outline" size={14} color="#10B981" style={{ marginBottom: 2 }} />
                       <Text style={styles.miniStatVal}>{item.studentsCount}</Text>
                       <Text style={styles.miniStatLabel}>Students</Text>
                     </View>
