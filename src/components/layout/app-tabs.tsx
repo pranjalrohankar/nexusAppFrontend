@@ -201,7 +201,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
             })}
           </View>
 
-          {/* Bottom Logout Area */}
+          {/* Bottom Logout Button */}
           <TouchableOpacity style={styles.webLogoutButton} onPress={onLogout}>
             <Ionicons name="log-out-outline" size={20} color="#EF4444" />
             <Text style={styles.webLogoutLabel}>Logout</Text>
@@ -223,37 +223,39 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
       {/* SCREEN CONTAINER */}
       <View style={styles.screenContainer}>{renderScreen()}</View>
 
-      {/* BOTTOM TAB BAR */}
-      <View style={styles.tabBar}>
-        {tabs.map((tab, idx) => {
-          const isActive = idx === activeIndex;
-          return (
-            <TouchableOpacity
-              key={idx}
-              style={[styles.tabButton, isActive && styles.tabButtonActive]}
-              onPress={() => {
-                if (idx === activeIndex) {
-                  setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
-                } else {
-                  setActiveIndex(idx);
-                  if (tab.name === 'Profile') {
-                    setProfileSubView('profile');
+      {/* BOTTOM TAB BAR — hidden when a profile sub-view is open */}
+      {profileSubView === 'profile' && (
+        <View style={styles.tabBar}>
+          {tabs.map((tab, idx) => {
+            const isActive = idx === activeIndex;
+            return (
+              <TouchableOpacity
+                key={idx}
+                style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                onPress={() => {
+                  if (idx === activeIndex) {
+                    setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
+                  } else {
+                    setActiveIndex(idx);
+                    if (tab.name === 'Profile') {
+                      setProfileSubView('profile');
+                    }
                   }
-                }
-              }}
-            >
-              <Ionicons
-                name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
-                size={20}
-                color={isActive ? "#FFFFFF" : "#9CA3AF"}
-              />
-              <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
-                {tab.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                }}
+              >
+                <Ionicons
+                  name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
+                  size={20}
+                  color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                />
+                <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
+                  {tab.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

@@ -66,14 +66,14 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
     if (userRole === 'admin') {
       return <AdminHelpSupportScreen onBack={() => onChangeSubView('profile')} />;
     }
-    return <HelpSupportScreen onBack={() => onChangeSubView('profile')} />;
+    return <HelpSupportScreen onBack={() => onChangeSubView('profile')} teacherProfile={userRole === 'teacher' ? teacherProfile : null} />;
   }
 
   if (currentSubView === 'account') {
     if (userRole === 'admin') {
       return <AdminSystemSettingsScreen onBack={() => onChangeSubView('profile')} />;
     }
-    return <AccountSettingsScreen onBack={() => onChangeSubView('profile')} userRole={userRole} />;
+    return <AccountSettingsScreen onBack={() => onChangeSubView('profile')} userRole={userRole} teacherProfile={userRole === 'teacher' ? teacherProfile : null} />;
   }
 
   return (
@@ -95,7 +95,11 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
           <View style={styles.avatarWrapper}>
             <View style={styles.avatarCircle}>
               <Text style={styles.avatarText}>
-                {userRole === 'student' ? 'J' : userRole === 'teacher' ? 'P' : 'A'}
+                {userRole === 'teacher'
+                  ? ((teacherProfile?.name ?? '').charAt(0).toUpperCase() || 'T')
+                  : userRole === 'admin'
+                  ? ((adminProfile?.name ?? '').charAt(0).toUpperCase() || 'A')
+                  : ((userName ?? '').charAt(0).toUpperCase() || 'S')}
               </Text>
             </View>
             <TouchableOpacity style={styles.cameraBadge} activeOpacity={0.8}>
@@ -129,12 +133,23 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
           {/* Badges / Skills tags row */}
           <View style={styles.badgesWrapper}>
             {userRole === 'teacher' ? (
-              <>
-                <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Data Science</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#ECFDF5' }]}><Text style={[styles.skillsBadgeText, { color: '#10B981' }]}>Machine Learning</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#FFF7ED' }]}><Text style={[styles.skillsBadgeText, { color: '#EA580C' }]}>Python</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#E0F2FE' }]}><Text style={[styles.skillsBadgeText, { color: '#0369A1' }]}>Full Stack</Text></View>
-              </>
+              teacherProfile?.specialization
+                ? teacherProfile.specialization.split(',').map((spec: string, i: number) => {
+                    const colors = [
+                      { bg: '#F3E8FF', text: '#7B2CBF' },
+                      { bg: '#ECFDF5', text: '#10B981' },
+                      { bg: '#FFF7ED', text: '#EA580C' },
+                      { bg: '#E0F2FE', text: '#0369A1' },
+                      { bg: '#FEE2E2', text: '#DC2626' },
+                    ];
+                    const c = colors[i % colors.length];
+                    return (
+                      <View key={i} style={[styles.skillsBadge, { backgroundColor: c.bg }]}>
+                        <Text style={[styles.skillsBadgeText, { color: c.text }]}>{spec.trim()}</Text>
+                      </View>
+                    );
+                  })
+                : null
             ) : userRole === 'admin' ? (
               <>
                 <View style={[styles.skillsBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.skillsBadgeText, { color: '#DC2626' }]}>Security</Text></View>

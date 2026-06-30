@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -110,7 +111,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
         <Text style={styles.sectionHeader}>Security Options</Text>
         <View style={styles.cardContainer}>
           {/* Change Password */}
-          <TouchableOpacity style={styles.rowItem}>
+          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}
+            onPress={() => Alert.alert('Change Password', 'A password reset link will be sent to your registered email address.')}>
             <View style={[styles.iconContainer, { backgroundColor: '#FAF5FF' }]}>
               <Ionicons name="lock-closed-outline" size={18} color="#7B2CBF" />
             </View>
@@ -122,7 +124,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
           </TouchableOpacity>
 
           {/* Two-Factor Authentication */}
-          <TouchableOpacity style={styles.rowItem}>
+          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}
+            onPress={() => Alert.alert('Two-Factor Authentication', 'Two-factor authentication adds an extra layer of security. This feature will be available soon.')}>
             <View style={[styles.iconContainer, { backgroundColor: '#ECFDF5' }]}>
               <Ionicons name="key-outline" size={18} color="#10B981" />
             </View>
@@ -134,7 +137,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
           </TouchableOpacity>
 
           {/* Login History */}
-          <TouchableOpacity style={[styles.rowItem, { borderBottomWidth: 0 }]}>
+          <TouchableOpacity style={[styles.rowItem, { borderBottomWidth: 0 }]} activeOpacity={0.7}
+            onPress={() => Alert.alert('Login History', 'Your last login was recorded. Detailed login history will be available in a future update.')}>
             <View style={[styles.iconContainer, { backgroundColor: '#EFF6FF' }]}>
               <Ionicons name="phone-portrait-outline" size={18} color="#3B82F6" />
             </View>
@@ -153,7 +157,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             We are committed to protecting your personal information. Your data is encrypted and stored
             securely. We never share your information with third parties without your consent.
           </Text>
-          <TouchableOpacity style={styles.outlineButton}>
+          <TouchableOpacity style={styles.outlineButton} activeOpacity={0.8}
+            onPress={() => Alert.alert('Privacy Policy', 'Our full privacy policy is available at nexusctc.com/privacy')}>
             <Text style={styles.outlineButtonText}>Read Full Privacy Policy</Text>
           </TouchableOpacity>
         </View>
@@ -165,7 +170,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             By using Nexus Corporate Training Center, you agree to our terms of service and community
             guidelines.
           </Text>
-          <TouchableOpacity style={styles.outlineButton}>
+          <TouchableOpacity style={styles.outlineButton} activeOpacity={0.8}
+            onPress={() => Alert.alert('Terms of Service', 'Our full terms of service are available at nexusctc.com/terms')}>
             <Text style={styles.outlineButtonText}>Read Terms of Service</Text>
           </TouchableOpacity>
         </View>
@@ -184,12 +190,18 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             </View>
           </View>
           <View style={styles.dataButtonsRow}>
-            <TouchableOpacity style={styles.downloadButton}>
-              <Text style={styles.downloadButtonText}>Download Data</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.deleteButton}>
-              <Text style={styles.deleteButtonText}>Delete Account</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.downloadButton} activeOpacity={0.8}
+            onPress={() => Alert.alert('Download Data', 'Your data export request has been received. You will receive an email with your data within 24 hours.')}>
+            <Text style={styles.downloadButtonText}>Download Data</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteButton} activeOpacity={0.8}
+            onPress={() => Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account and all associated data. This action cannot be undone. Please contact your administrator to proceed.',
+              [{ text: 'Cancel', style: 'cancel' }, { text: 'Contact Admin', style: 'destructive', onPress: () => {} }]
+            )}>
+            <Text style={styles.deleteButtonText}>Delete Account</Text>
+          </TouchableOpacity>
           </View>
         </View>
 
