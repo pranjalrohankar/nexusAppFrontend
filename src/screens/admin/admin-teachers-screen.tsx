@@ -5,7 +5,6 @@ import {
   View,
   TouchableOpacity,
   ScrollView,
-  Platform,
   TextInput,
   Modal,
   ActivityIndicator,
@@ -33,7 +32,7 @@ interface Course {
   title: string;
 }
 
-export default function AdminTeachersScreen() {
+export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { onRegisterAdd?: (fn: () => void) => void; onCountChange?: (count: number) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'All' | 'Active' | 'Inactive'>('All');
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -83,7 +82,9 @@ export default function AdminTeachersScreen() {
             ? t.assignedCourses.map((c: any) => c.courseId)
             : [],
         })).filter((t: Teacher) => t.id && t.id !== 'undefined');
-        setTeachers(mapped.slice().reverse());
+        const list = mapped.slice().reverse();
+        setTeachers(list);
+        if (onCountChange) onCountChange(list.length);
         setTotalStudents(res.totalStudents ?? 0);
       }
     } catch {
@@ -91,7 +92,7 @@ export default function AdminTeachersScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onCountChange]);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -105,6 +106,7 @@ export default function AdminTeachersScreen() {
   useEffect(() => {
     fetchTeachers();
     fetchCourses();
+    if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
   }, [fetchTeachers, fetchCourses]);
 
   const [saving, setSaving] = useState(false);
@@ -266,21 +268,6 @@ export default function AdminTeachersScreen() {
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.countRow}>
-          <View style={styles.countLeft}>
-            <Text style={styles.countNumber}>
-              {loading ? '...' : teachers.length}
-            </Text>
-            <Text style={styles.countLabel}>Total Instructors Registered</Text>
-          </View>
-
-          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-            <Ionicons name="add" size={26} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -305,29 +292,49 @@ export default function AdminTeachersScreen() {
           ) : null}
         </View>
 
-        {/* SUB-TABS AND STATISTICS METRIC */}
-        <View style={styles.headerMetricsRow}>
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === 'All' && styles.tabItemActive]}
-              onPress={() => { setActiveTab('All'); setPage(1); }}
-            >
-              <Text style={[styles.tabLabel, activeTab === 'All' && styles.tabLabelActive]}>
-                All ({teachers.length})
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
-              onPress={() => { setActiveTab('Active'); setPage(1); }}
-            >
-              <Text style={[styles.tabLabel, activeTab === 'Active' && styles.tabLabelActive]}>
-                Active ({activeCount})
-              </Text>
-            </TouchableOpacity>
+        {/* FILTER PILL TABS */}
+        <View style={styles.filterTabsRow}>
+          <TouchableOpacity
+            style={[styles.filterPill, activeTab === 'All' && styles.filterPillActive]}
+            onPress={() => { setActiveTab('All'); setPage(1); }}
+          >
+            <Text style={[styles.filterPillText, activeTab === 'All' && styles.filterPillTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterPill, styles.filterPillActive2, activeTab === 'Active' && styles.filterPillActive]}
+            onPress={() => { setActiveTab('Active'); setPage(1); }}
+          >
+            <Text style={[styles.filterPillText, activeTab === 'Active' && styles.filterPillTextActive]}>
+              Active {activeCount}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterPill, styles.filterPillInactive2, activeTab === 'Inactive' && styles.filterPillActive]}
+            onPress={() => { setActiveTab('Inactive'); setPage(1); }}
+          >
+            <Text style={[styles.filterPillText, activeTab === 'Inactive' && styles.filterPillTextActive]}>
+              Inactive {teachers.filter(t => t.status === 'Inactive').length}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* STATS ROW */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#7B2CBF' }]}>{teachers.length}</Text>
+            <Text style={styles.statLabel}>Total</Text>
           </View>
-          <View style={styles.statBadgeCard}>
-            <Text style={styles.statBadgeVal}>{totalStudents}</Text>
-            <Text style={styles.statBadgeLabel}>Students</Text>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#10B981' }]}>{activeCount}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#FF9500' }]}>{totalStudents}</Text>
+            <Text style={styles.statLabel}>Students</Text>
           </View>
         </View>
 
@@ -675,46 +682,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  header: {
-    backgroundColor: '#7B2CBF',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    paddingTop: 8,
-    position: 'relative',
-  },
-  countRow: {
+  filterTabsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: 'wrap',
   },
-  countLeft: {
-    flex: 1,
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123,44,191,0.10)',
   },
-  countNumber: {
-    fontSize: 42,
-    fontWeight: '700',
+  filterPillActive: {
+    backgroundColor: '#7B2CBF',
+  },
+  filterPillActive2: {
+    backgroundColor: 'rgba(16,185,129,0.12)',
+  },
+  filterPillInactive2: {
+    backgroundColor: 'rgba(107,114,128,0.10)',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7B2CBF',
+  },
+  filterPillTextActive: {
     color: '#FFFFFF',
-    lineHeight: 42,
-    marginBottom: -4,
   },
-  countLabel: {
-    fontSize: 15,
-    color: '#E0CFFF',
-    fontWeight: '500',
-  },
-  addBtn: {
-    width: 52,
-    height: 52,
-    backgroundColor: '#FF9500',
+  statsCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    justifyContent: 'center',
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-around',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#7B2CBF',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#F3F4F6',
   },
   scrollView: {
     flex: 1,
@@ -752,67 +782,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     height: '100%',
   },
-  // Sub-tabs & metrics row
-  headerMetricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    gap: 16,
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    padding: 4,
-    borderRadius: 12,
-    flex: 2,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  tabItemActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  tabLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  tabLabelActive: {
-    color: '#7B2CBF',
-    fontWeight: '700',
-  },
-  statBadgeCard: {
-    flex: 1,
-    backgroundColor: '#FAF5FF',
-    borderWidth: 1,
-    borderColor: '#E8DFFA',
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statBadgeVal: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#7B2CBF',
-  },
-  statBadgeLabel: {
-    fontSize: 9,
-    color: '#9CA3AF',
-    fontWeight: '500',
-    marginTop: 2,
-  },
+
   // List
   listContainer: {
     gap: 16,

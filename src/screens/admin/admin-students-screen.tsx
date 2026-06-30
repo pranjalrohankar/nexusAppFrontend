@@ -48,7 +48,7 @@ interface Course {
   status: string;
 }
 
-export default function AdminStudentsScreen() {
+export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { onRegisterAdd?: (fn: () => void) => void; onCountChange?: (count: number) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'All' | 'Active' | 'Inactive'>('All');
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -95,6 +95,7 @@ export default function AdminStudentsScreen() {
   useEffect(() => {
     loadStudents();
     loadCourses();
+    if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
   }, []);
 
   const loadStudents = async () => {
@@ -102,7 +103,9 @@ export default function AdminStudentsScreen() {
     try {
       const res = await api.getStudents();
       if (res.success) {
-        setStudents(res.data.slice().reverse());
+        const list = res.data.slice().reverse();
+        setStudents(list);
+        if (onCountChange) onCountChange(list.length);
       } else {
         showToast(res.message || 'Failed to load students', 'error');
       }
@@ -290,6 +293,8 @@ export default function AdminStudentsScreen() {
     }
   };
 
+  const coursesCount = students.reduce((sum, s) => sum + (s.coursesCount || 0), 0);
+
   return (
     <View style={styles.safeArea}>
       {toast && (
@@ -297,20 +302,6 @@ export default function AdminStudentsScreen() {
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.countRow}>
-          <View style={styles.countLeft}>
-            <Text style={styles.countNumber}>{students.length}</Text>
-            <Text style={styles.countLabel}>Total Students Registered</Text>
-          </View>
-
-          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-            <Ionicons name="add" size={26} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -334,32 +325,50 @@ export default function AdminStudentsScreen() {
           ) : null}
         </View>
 
-        {/* SUB-TABS COUNTERS */}
-        <View style={styles.tabsContainer}>
+        {/* FILTER PILL TABS */}
+        <View style={styles.filterTabsRow}>
           <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'All' && styles.tabItemActive]}
+            style={[styles.filterPill, activeTab === 'All' && styles.filterPillActive]}
             onPress={() => { setActiveTab('All'); setPage(1); }}
           >
-            <Text style={[styles.tabLabel, activeTab === 'All' && styles.tabLabelActive]}>
-              All ({students.length})
+            <Text style={[styles.filterPillText, activeTab === 'All' && styles.filterPillTextActive]}>
+              All
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'Active' && styles.tabItemActive]}
+            style={[styles.filterPill, styles.filterPillActive2, activeTab === 'Active' && styles.filterPillActive]}
             onPress={() => { setActiveTab('Active'); setPage(1); }}
           >
-            <Text style={[styles.tabLabel, activeTab === 'Active' && styles.tabLabelActive]}>
-              Active ({activeCount})
+            <Text style={[styles.filterPillText, activeTab === 'Active' && styles.filterPillTextActive]}>
+              Active {activeCount}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'Inactive' && styles.tabItemActive]}
+            style={[styles.filterPill, styles.filterPillInactive2, activeTab === 'Inactive' && styles.filterPillActive]}
             onPress={() => { setActiveTab('Inactive'); setPage(1); }}
           >
-            <Text style={[styles.tabLabel, activeTab === 'Inactive' && styles.tabLabelActive]}>
-              Inactive ({inactiveCount})
+            <Text style={[styles.filterPillText, activeTab === 'Inactive' && styles.filterPillTextActive]}>
+              Inactive {inactiveCount}
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* STATS ROW */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#7B2CBF' }]}>{students.length}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#10B981' }]}>{activeCount}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#FF9500' }]}>{coursesCount}</Text>
+            <Text style={styles.statLabel}>Courses</Text>
+          </View>
         </View>
 
         {/* LIST */}
@@ -724,6 +733,70 @@ export default function AdminStudentsScreen() {
 }
 
 const styles = StyleSheet.create({
+  filterTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: 'wrap',
+  },
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123,44,191,0.10)',
+  },
+  filterPillActive: {
+    backgroundColor: '#7B2CBF',
+  },
+  filterPillActive2: {
+    backgroundColor: 'rgba(16,185,129,0.12)',
+  },
+  filterPillInactive2: {
+    backgroundColor: 'rgba(107,114,128,0.10)',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7B2CBF',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
+  },
+  statsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#7B2CBF',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#F3F4F6',
+  },
   safeArea: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -817,38 +890,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     height: '100%',
   },
-  // Sub-tabs
-  tabsContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    backgroundColor: '#F3F4F6',
-    padding: 4,
-    borderRadius: 12,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  tabItemActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  tabLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  tabLabelActive: {
-    color: '#7B2CBF',
-    fontWeight: '700',
-  },
+
   // List
   listContainer: {
     gap: 16,

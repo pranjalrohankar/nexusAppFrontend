@@ -11,6 +11,7 @@ import {
   Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
@@ -358,12 +359,34 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* HEADER */}
       <View style={styles.header}>
+        {/* Exact gradient accent line */}
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)',
+            'rgba(9,2,0,0.14)',
+            'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)',
+            'rgba(118,62,11,0.573)',
+            'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)',
+            '#FB8B24',
+            'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)',
+            'rgba(118,62,11,0.573)',
+            'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)',
+            'rgba(9,2,0,0.14)',
+            'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <View style={styles.headerTopRow}>
-          <View>
-            <Text style={styles.logoText}>
-              NE<Text style={styles.logoTextGold}>X</Text>US
-            </Text>
-            <Text style={styles.logoSubtext}>ADMIN CONSOLE</Text>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.headerTitle}>Admin Dashboard</Text>
+            <Text style={styles.headerSubtitle}>Overview of your training center</Text>
           </View>
           <TouchableOpacity
             style={styles.alertBtn}
@@ -381,8 +404,6 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             </View>
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerTitle}>Admin Dashboard</Text>
-        <Text style={styles.headerSubtitle}>Overview of your training center</Text>
       </View>
 
       <ScrollView
@@ -462,84 +483,26 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#7B2CBF',
+    backgroundColor: '#F9FAFB',
   },
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
+    paddingTop: 8,
     paddingBottom: 24,
+  },
+  headerAccentLine: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
   },
   headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
   },
-  logoText: {
-    fontSize: 22,
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 1.5,
-  },
-  logoTextGold: {
-    color: '#FFB703',
-  },
-  logoSubtext: {
-    fontSize: 8,
-    color: '#FFB703',
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginTop: 1,
-  },
-  alertBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  badgeDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 3,
-  },
-
-iconContainer: {
-  position: 'relative',
-  width: 48,
-  height: 48,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-badge: {
-  position: 'absolute',
-  top: -4,
-  right: -4,
-  backgroundColor: '#EF4444',
-  minWidth: 20,
-  height: 20,
-  borderRadius: 10,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingHorizontal: 4,
-  borderWidth: 2,
-  borderColor: '#7B2CBF',   // Matches your header color
-},
-  badgeCount: {
-    color: '#FFF',
-    fontSize: 9,
-    fontWeight: 'bold',
+  headerTextCol: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
@@ -550,7 +513,42 @@ badge: {
   headerSubtitle: {
     fontSize: 13,
     color: '#E9D5FF',
-    marginTop: 6,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  alertBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    position: 'relative',
+    width: 46,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 2,
+    borderColor: '#7B2CBF',
+  },
+  badgeCount: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
   scrollView: {
     flex: 1,
