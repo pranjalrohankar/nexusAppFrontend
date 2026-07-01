@@ -800,7 +800,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   statsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EFF6FF',
     borderRadius: 16,
     marginBottom: 16,
     paddingVertical: 16,
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 3,
   },

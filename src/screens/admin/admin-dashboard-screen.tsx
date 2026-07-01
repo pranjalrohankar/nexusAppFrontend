@@ -483,7 +483,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#7B2CBF',
   },
   header: {
     backgroundColor: '#7B2CBF',

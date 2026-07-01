@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   statsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EFF6FF',
     borderRadius: 16,
     marginBottom: 16,
     paddingVertical: 16,
