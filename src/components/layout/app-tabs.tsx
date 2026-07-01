@@ -6,6 +6,7 @@ import BatchesScreen from '@/screens/batches/batches-screen';
 import CoursesScreen from '@/screens/courses/courses-screen';
 import HomeScreen from '@/screens/home/home-screen';
 import ProfileScreen from '@/screens/profile/profile-screen';
+import StudyMaterialsScreen from '@/screens/teacher/study-materials-screen';
 import TeacherAlertsScreen from '@/screens/teacher/teacher-alerts-screen';
 import TeacherClassesScreen from '@/screens/teacher/teacher-classes-screen';
 import TeacherDashboardScreen from '@/screens/teacher/teacher-dashboard-screen';
@@ -35,8 +36,11 @@ interface AppTabsProps {
 }
 
 export default function AppTabs({ userRole, userName, userEmail, onLogout }: AppTabsProps) {
+
   const [activeIndex, setActiveIndex] = useState(0);
   const [showUploadRecording, setShowUploadRecording] = useState(false);
+  const [showStudyMaterials, setShowStudyMaterials] = useState(false);
+
   const [profileSubView, setProfileSubView] = useState<ProfileSubView>('profile');
   const [tabKeys, setTabKeys] = useState<Record<number, number>>({
     0: 0,
@@ -83,11 +87,16 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
   const renderScreen = () => {
     if (userRole === 'teacher') {
       if (showUploadRecording) {
-    return <UploadRecordingScreen onClose={() => setShowUploadRecording(false)} />;
-  }
+        return <UploadRecordingScreen onClose={() => setShowUploadRecording(false)} />;
+      }
+
+      if (showStudyMaterials) {
+        return <StudyMaterialsScreen onClose={() => setShowStudyMaterials(false)} />;
+      }
       switch (activeIndex) {
         case 0: return <TeacherDashboardScreen onViewSchedule={() => setActiveIndex(2)} userName={userName}
-          onUploadRecording={() => setShowUploadRecording(true)} 
+          onUploadRecording={() => setShowUploadRecording(true)}
+          onUploadStudyMaterial={() => setShowStudyMaterials(true)}
         />;
         case 1: return <TeacherClassesScreen />;
         case 2: return <TeacherScheduleScreen />;

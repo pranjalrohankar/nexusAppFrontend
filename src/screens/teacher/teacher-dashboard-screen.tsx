@@ -20,10 +20,11 @@ const { width } = Dimensions.get('window');
 interface TeacherDashboardScreenProps {
   onViewSchedule?: () => void;
   onUploadRecording?: () => void;   // ← Add this line
+  onUploadStudyMaterial?: () => void;
   userName?: string;
 }
 
-export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecording, userName = '' }: TeacherDashboardScreenProps) {
+export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecording, onUploadStudyMaterial, userName = '' }: TeacherDashboardScreenProps) {
   const navigation = useNavigation();   // ← Added
   const [isLive, setIsLive] = useState(false);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
@@ -94,7 +95,7 @@ export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecordi
 
           <TouchableOpacity
             style={[styles.actionBtn, styles.uploadMaterialBtn]}
-            onPress={() => Alert.alert('Upload Study Material', 'Feature coming soon or integrate your upload logic here.')}
+            onPress={onUploadStudyMaterial}   // ← Changed to prop
           >
             <View style={styles.actionContent}>
               <Ionicons name="document-outline" size={28} color="#FFFFFF" />
