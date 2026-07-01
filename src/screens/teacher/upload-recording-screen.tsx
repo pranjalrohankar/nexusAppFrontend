@@ -41,7 +41,8 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       if (result.assets && result.assets.length > 0) {
         const file = result.assets[0];
         setSelectedFile(file);
-        Alert.alert('Success', `Selected: ${file.name}\nSize: ${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+        const fileSizeInMB = ((file.size ?? 0) / (1024 * 1024)).toFixed(2);
+        Alert.alert('Success', `Selected: ${file.name}\nSize: ${fileSizeInMB} MB`);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick video');
