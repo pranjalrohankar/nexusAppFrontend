@@ -10,6 +10,7 @@ import TeacherAlertsScreen from '@/screens/teacher/teacher-alerts-screen';
 import TeacherClassesScreen from '@/screens/teacher/teacher-classes-screen';
 import TeacherDashboardScreen from '@/screens/teacher/teacher-dashboard-screen';
 import TeacherScheduleScreen from '@/screens/teacher/teacher-schedule-screen';
+import UploadRecordingScreen from '@/screens/teacher/upload-recording-screen';
 import TestsScreen from '@/screens/tests/tests-screen';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
@@ -35,6 +36,7 @@ interface AppTabsProps {
 
 export default function AppTabs({ userRole, userName, userEmail, onLogout }: AppTabsProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showUploadRecording, setShowUploadRecording] = useState(false);
   const [profileSubView, setProfileSubView] = useState<ProfileSubView>('profile');
   const [tabKeys, setTabKeys] = useState<Record<number, number>>({
     0: 0,
@@ -80,8 +82,13 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
   // Render correct screen component based on active tab
   const renderScreen = () => {
     if (userRole === 'teacher') {
+      if (showUploadRecording) {
+    return <UploadRecordingScreen onClose={() => setShowUploadRecording(false)} />;
+  }
       switch (activeIndex) {
-        case 0: return <TeacherDashboardScreen onViewSchedule={() => setActiveIndex(2)} userName={userName} />;
+        case 0: return <TeacherDashboardScreen onViewSchedule={() => setActiveIndex(2)} userName={userName}
+          onUploadRecording={() => setShowUploadRecording(true)} 
+        />;
         case 1: return <TeacherClassesScreen />;
         case 2: return <TeacherScheduleScreen />;
         case 3: return <TeacherAlertsScreen />;

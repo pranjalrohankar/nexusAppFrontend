@@ -12,23 +12,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';   // ← Added
 import { api } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
 interface TeacherDashboardScreenProps {
   onViewSchedule?: () => void;
+  onUploadRecording?: () => void;   // ← Add this line
   userName?: string;
 }
 
-export default function TeacherDashboardScreen({ onViewSchedule, userName = '' }: TeacherDashboardScreenProps) {
+export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecording, userName = '' }: TeacherDashboardScreenProps) {
+  const navigation = useNavigation();   // ← Added
   const [isLive, setIsLive] = useState(false);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
 
   useEffect(() => {
     api.getTeacherProfile()
       .then((res: any) => setTeacherProfile(res?.data ?? null))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const displayName = teacherProfile?.name || userName || 'Priya';
@@ -82,8 +85,7 @@ export default function TeacherDashboardScreen({ onViewSchedule, userName = '' }
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
             style={[styles.actionBtn, styles.uploadRecordingsBtn]}
-            onPress={() => Alert.alert('Upload Recordings', 'Feature coming soon or integrate your upload logic here.')}
-          >
+            onPress={onUploadRecording}          >
             <View style={styles.actionContent}>
               <Ionicons name="videocam-outline" size={28} color="#FFFFFF" />
               <Text style={styles.actionBtnText}>Upload Recordings</Text>
