@@ -45,3 +45,17 @@ coverage/
 
 expo-env.d.ts
 # @end expo-cli
+
+# Android / Gradle cache (important to avoid merge conflicts)
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+
+# React Native autolinking generated files
+android/build/generated/autolinking/
+
+# Temporary Gradle files
+*.bin
+*.lock
+*.sha
