@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
+  ActivityIndicator,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -11,58 +15,215 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '../../services/api';
+
+const PROFILE_PHOTO_KEY = 'user_profile_photo';
 
 interface AccountSettingsScreenProps {
   onBack: () => void;
   userRole?: 'student' | 'teacher' | 'admin';
+  teacherProfile?: any;
 }
 
-export default function AccountSettingsScreen({ onBack, userRole = 'student' }: AccountSettingsScreenProps) {
-  const getDefaultName = () => {
-    if (userRole === 'teacher') return 'Priya Sharma';
-    if (userRole === 'admin') return 'Administrator';
-    return 'John Doe';
+export default function AccountSettingsScreen({
+  onBack,
+  userRole = 'student',
+  teacherProfile: initialProfile,
+}: AccountSettingsScreenProps) {
+  const [profile, setProfile] = useState<any>(initialProfile ?? null);
+  const [loading, setLoading] = useState(!initialProfile && userRole === 'teacher');
+  const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [pinCode, setPinCode] = useState('');
+  const [street, setStreet] = useState('');
+
+  // Load saved photo
+  useEffect(() => {
+    AsyncStorage.getItem(PROFILE_PHOTO_KEY)
+      .then(uri => { if (uri) setPhotoUri(uri); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch profile if not passed
+  useEffect(() => {
+    if (userRole === 'teacher' && !initialProfile) {
+      api.getTeacherProfile()
+        .then((res: any) => setProfile(res?.data ?? null))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [userRole, initialProfile]);
+
+  // Fill form fields
+  useEffect(() => {
+    const data = profile ?? initialProfile;
+    if (data) {
+      setName(data.name ?? '');
+      setPhone(data.phone ?? '');
+      setStreet(data.street ?? '');
+      setCity(data.city ?? '');
+      setState(data.state ?? '');
+      setPinCode(data.pinCode ?? '');
+    }
+  }, [profile, initialProfile]);
+
+  const roleLabel =
+    userRole === 'teacher' ? 'Senior Instructor' :
+    userRole === 'admin' ? 'Administrator' : 'Student';
+
+  const initials = name
+    ? name.split(' ').slice(0, 2).map((w: string) => w.charAt(0).toUpperCase()).join('')
+    : userRole === 'teacher' ? 'T' : userRole === 'admin' ? 'A' : 'S';
+
+  const email = profile?.email ?? (initialProfile?.email ?? '');
+  const joinDate = profile?.joinDate ?? (initialProfile?.joinDate ?? '');
+  const location = [city, state, pinCode].filter(Boolean).join(', ');
+
+  // If the stored photo URI is broken/invalid, clear it so the
+  // initials-avatar fallback can render instead of a blank box.
+  const handlePhotoError = () => {
+    setPhotoUri(null);
+    AsyncStorage.removeItem(PROFILE_PHOTO_KEY).catch(() => {});
   };
 
-  const getDefaultEmail = () => {
-    if (userRole === 'teacher') return 'priya.sharma@pratham.org';
-    if (userRole === 'admin') return 'admin@pratham.edu';
-    return 'john.doe@email.com';
-  };
-
-  const getDefaultPhone = () => {
-    if (userRole === 'teacher') return '+91 98765 43210';
-    if (userRole === 'admin') return '+91 99999 88888';
-    return '+91 98765 43210';
-  };
-
-  const [name, setName] = useState(getDefaultName());
-  const [email, setEmail] = useState(getDefaultEmail());
-  const [phone, setPhone] = useState(getDefaultPhone());
-  const [location, setLocation] = useState('Bangalore, Karnataka');
-
-  const roleLabel = userRole === 'teacher' ? 'Teacher' : userRole === 'admin' ? 'Administrator' : 'Student';
-
-  const handleSaveChanges = () => {
-    if (!name || !email || !phone || !location) {
-      Alert.alert('Error', 'Please fill in all editable fields.');
+  // ── Photo picker with Remove option ──────────────────────────────────────
+  const handleChangePhoto = async () => {
+    if (Platform.OS === 'web') {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        setPhotoUri(uri);
+        await AsyncStorage.setItem(PROFILE_PHOTO_KEY, uri);
+      }
       return;
     }
-    Alert.alert('Success', 'Your changes have been saved successfully!', [
-      { text: 'OK', onPress: onBack },
-    ]);
+
+    const options: any[] = [
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission Required', 'Please allow photo library access in Settings.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+          if (!result.canceled && result.assets.length > 0) {
+            const uri = result.assets[0].uri;
+            setPhotoUri(uri);
+            await AsyncStorage.setItem(PROFILE_PHOTO_KEY, uri);
+          }
+        },
+      },
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+          if (!result.canceled && result.assets.length > 0) {
+            const uri = result.assets[0].uri;
+            setPhotoUri(uri);
+            await AsyncStorage.setItem(PROFILE_PHOTO_KEY, uri);
+          }
+        },
+      },
+    ];
+
+    // Only show Remove option if photo exists
+    if (photoUri) {
+      options.push({
+        text: 'Remove Photo',
+        style: 'destructive',
+        onPress: async () => {
+          setPhotoUri(null);
+          await AsyncStorage.removeItem(PROFILE_PHOTO_KEY);
+        },
+      });
+    }
+
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Profile Photo', 'Choose an option', options);
   };
 
-  const handleChangePhoto = () => {
-    Alert.alert('Change Profile Photo', 'Camera and gallery integration coming soon!');
+  // ── Save ──────────────────────────────────────────────────────────────────
+  const handleSaveChanges = async () => {
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Name cannot be empty.');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (userRole === 'teacher') {
+        await (api as any).updateTeacherProfile({ name, phone, street, city, state, pinCode });
+      }
+      setSuccessMsg('Changes saved successfully!');
+      setTimeout(() => {
+        setSuccessMsg('');
+        onBack();
+      }, 1500);
+    } catch {
+      Alert.alert('Error', 'Failed to save changes. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+              <Ionicons name="arrow-back" size={24} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Account Settings</Text>
+          </View>
+        </View>
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#7B2CBF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* 1. HEADER BANNER */}
+      {/* Success banner */}
+      {successMsg ? (
+        <View style={styles.successBanner}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+          <Text style={styles.successText}>{successMsg}</Text>
+        </View>
+      ) : null}
+
+      {/* Purple header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={onBack}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Account Settings</Text>
@@ -70,275 +231,283 @@ export default function AccountSettingsScreen({ onBack, userRole = 'student' }: 
       </View>
 
       <ScrollView
-        style={styles.scrollView}
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 2. AVATAR CHANGE BOX */}
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {userRole === 'teacher' ? 'P' : userRole === 'admin' ? 'A' : 'J'}
-              </Text>
+        {/* ── AVATAR CARD ── */}
+        <View style={styles.avatarCard}>
+          <TouchableOpacity
+            style={styles.avatarWrapper}
+            onPress={handleChangePhoto}
+            activeOpacity={0.85}
+          >
+            {photoUri ? (
+              <Image
+                source={{ uri: photoUri }}
+                style={styles.avatarImage}
+                onError={handlePhotoError}
+              />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <Ionicons name="camera" size={15} color="#FFF" />
             </View>
-            <TouchableOpacity style={styles.cameraBadge} onPress={handleChangePhoto} activeOpacity={0.8}>
-              <Ionicons name="camera" size={14} color="#FF7A00" />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.changePhotoBtn} onPress={handleChangePhoto}>
-            <Text style={styles.changePhotoText}>Change Profile Picture</Text>
           </TouchableOpacity>
+          <Text style={styles.avatarName}>{name || '—'}</Text>
+          <Text style={styles.avatarRole}>{roleLabel}</Text>
         </View>
 
-        {/* 3. SETTINGS FORM CARD */}
-        <View style={styles.formCard}>
+        {/* ── PERSONAL INFORMATION ── */}
+        <Text style={styles.sectionTitle}>Personal Information</Text>
+        <View style={styles.infoCard}>
+
           {/* Full Name */}
-          <Text style={styles.inputLabel}>Full Name</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="person-outline" size={18} color="#6B7280" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your name"
-              placeholderTextColor="#9CA3AF"
-            />
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#EDE9FF' }]}>
+              <Ionicons name="person-outline" size={18} color="#7B2CBF" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Full Name</Text>
+              <TextInput
+                style={styles.rowInput}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter full name"
+                placeholderTextColor="#C4C4C4"
+              />
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
+          <View style={styles.divider} />
 
-          {/* Email Address */}
-          <Text style={styles.inputLabel}>Email Address</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="mail-outline" size={18} color="#6B7280" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              placeholder="Enter your email"
-              placeholderTextColor="#9CA3AF"
-            />
+          {/* Email */}
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#FFF3E8' }]}>
+              <Ionicons name="mail-outline" size={18} color="#FF8C00" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Email</Text>
+              <Text style={styles.rowValue}>{email || '—'}</Text>
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
+          <View style={styles.divider} />
 
-          {/* Phone Number */}
-          <Text style={styles.inputLabel}>Phone Number</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="call-outline" size={18} color="#6B7280" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              placeholder="Enter your phone number"
-              placeholderTextColor="#9CA3AF"
-            />
+          {/* Phone */}
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#E8FFF3' }]}>
+              <Ionicons name="call-outline" size={18} color="#22C55E" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Phone</Text>
+              <TextInput
+                style={styles.rowInput}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="Enter phone number"
+                placeholderTextColor="#C4C4C4"
+              />
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
+          <View style={styles.divider} />
 
           {/* Location */}
-          <Text style={styles.inputLabel}>Location</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="location-outline" size={18} color="#6B7280" style={styles.inputIcon} />
-            <TextInput
-              style={styles.textInput}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="Enter your location"
-              placeholderTextColor="#9CA3AF"
-            />
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: '#EEF4FF' }]}>
+              <Ionicons name="location-outline" size={18} color="#6B8FFF" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Location</Text>
+              <TextInput
+                style={styles.rowInput}
+                value={city}
+                onChangeText={setCity}
+                placeholder="City"
+                placeholderTextColor="#C4C4C4"
+              />
+            </View>
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
+          </View>
+          <View style={styles.divider} />
+
+          {/* Member Since */}
+          <View style={[styles.row, { borderBottomWidth: 0 }]}>
+            <View style={[styles.iconBox, { backgroundColor: '#F3E8FF' }]}>
+              <Ionicons name="calendar-outline" size={18} color="#7B2CBF" />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Member Since</Text>
+              <Text style={styles.rowValue}>{joinDate || '—'}</Text>
+            </View>
           </View>
 
-          {/* User Role (Read-only) */}
-          <Text style={styles.inputLabel}>{roleLabel} Role</Text>
-          <View style={[styles.inputWrapper, styles.disabledInputWrapper]}>
-            <Ionicons name="school-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
-            <TextInput
-              style={[styles.textInput, styles.disabledTextInput]}
-              value={roleLabel}
-              editable={false}
-            />
-            <Ionicons name="lock-closed" size={14} color="#9CA3AF" style={styles.lockIcon} />
-          </View>
         </View>
 
-        {/* 4. SAVE BUTTON */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSaveChanges} activeOpacity={0.8}>
-          <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={styles.saveIcon} />
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+        {/* ── SAVE BUTTON ── */}
+        <TouchableOpacity
+          style={styles.saveBtn}
+          onPress={handleSaveChanges}
+          activeOpacity={0.85}
+          disabled={saving}
+        >
+          {saving
+            ? <ActivityIndicator size="small" color="#FFF" />
+            : <Text style={styles.saveBtnText}>Save Changes</Text>}
         </TouchableOpacity>
 
-        {/* Bottom Spacer */}
-        <View style={styles.bottomSpacer} />
+        {/* ── DELETE ACCOUNT ── */}
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          activeOpacity={0.8}
+          onPress={() =>
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account. Contact admin to proceed.',
+              [{ text: 'OK' }],
+            )
+          }
+        >
+          <Text style={styles.deleteBtnText}>Delete Account</Text>
+        </TouchableOpacity>
+
+        <View style={styles.spacer} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#7B2CBF',
+  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
+
+  successBanner: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999,
+    backgroundColor: '#10B981', flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, gap: 8,
   },
+  successText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+
   header: {
     backgroundColor: '#7B2CBF',
-    height: 70,
-    justifyContent: 'center',
     paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 4,
   },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
-    alignSelf: 'center',
-  },
-  backButton: {
-    padding: 4,
-  },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  backBtn: { padding: 4, marginRight: 12 },
   headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
+    color: '#FFF', fontSize: 22, fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    marginLeft: 16,
   },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
+
+  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+
+  scroll: { flex: 1, backgroundColor: '#F5F5F5' },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 16, paddingTop: 0, paddingBottom: 40,
     width: '100%',
     maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
     alignSelf: 'center',
   },
-  bottomSpacer: {
-    height: 100,
-  },
-  // Avatar Container
-  avatarContainer: {
+
+  // Avatar card — white rounded card matching the image
+  avatarCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
     alignItems: 'center',
-    marginTop: 10,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
     marginBottom: 24,
-  },
-  avatarWrapper: {
-    position: 'relative',
-    marginBottom: 12,
-  },
-  avatarCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#7B2CBF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#7B2CBF',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 34,
-    fontWeight: 'bold',
-  },
-  cameraBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#FFD7B5',
-    justifyContent: 'center',
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  changePhotoBtn: {
-    paddingVertical: 4,
-  },
-  changePhotoText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#7B2CBF',
-  },
-  // Form card
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
-    marginBottom: 24,
   },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    height: 44,
-    paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 13,
-    color: '#1F2937',
-    height: '100%',
-  },
-  disabledInputWrapper: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
-  },
-  disabledTextInput: {
-    color: '#9CA3AF',
-  },
-  lockIcon: {
-    marginLeft: 8,
-  },
-  // Save Changes Button
-  saveButton: {
+  avatarWrapper: { position: 'relative', marginBottom: 12 },
+  avatarCircle: {
+    width: 90, height: 90, borderRadius: 45,
     backgroundColor: '#7B2CBF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarImage: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#E5E7EB', // visible placeholder bg while loading, instead of a blank/invisible box
+  },
+  avatarInitials: { color: '#FFF', fontSize: 32, fontWeight: 'bold' },
+  cameraBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#FF7A00',
+    width: 28, height: 28, borderRadius: 14,
+    borderWidth: 2, borderColor: '#FFF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarName: { fontSize: 18, fontWeight: 'bold', color: '#1A1A1A' },
+  avatarRole: { fontSize: 13, color: '#888', marginTop: 3 },
+
+  // Section title
+  sectionTitle: {
+    fontSize: 16, fontWeight: 'bold', color: '#1A1A1A',
+    marginBottom: 12, marginTop: 4,
+  },
+
+  // Info card — white card with flat rows separated by dividers
+  infoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    height: 48,
-    gap: 8,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  iconBox: {
+    width: 38, height: 38, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  rowContent: { flex: 1 },
+  rowLabel: { fontSize: 11, color: '#999', marginBottom: 2, fontWeight: '500' },
+  rowValue: { fontSize: 14, color: '#1A1A1A', fontWeight: '500' },
+  rowInput: {
+    fontSize: 14, color: '#1A1A1A', fontWeight: '500',
+    padding: 0, margin: 0,
+  },
+  divider: { height: 1, backgroundColor: '#F0F0F0', marginLeft: 50 },
+
+  // Save button — full width purple
+  saveBtn: {
+    backgroundColor: '#7B2CBF',
+    borderRadius: 14, height: 52,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12,
     shadowColor: '#7B2CBF',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
-  saveIcon: {
-    marginTop: 0,
+  saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+
+  // Delete account — outline red
+  deleteBtn: {
+    borderRadius: 14, height: 52,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: '#EF4444',
+    backgroundColor: '#FFF',
   },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+  deleteBtnText: { color: '#EF4444', fontSize: 15, fontWeight: '600' },
+
+  spacer: { height: 40 },
 });
