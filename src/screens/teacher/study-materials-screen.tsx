@@ -377,10 +377,10 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
           )}
         </View>
 
-        <TouchableOpacity style={styles.uploadNewBtn} onPress={() => setShowUploadModal(true)}>
+        {/* <TouchableOpacity style={styles.uploadNewBtn} onPress={() => setShowUploadModal(true)}>
           <Ionicons name="cloud-upload-outline" size={24} color="#7B2CBF" />
           <Text style={styles.uploadNewText}>Upload New Material</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </ScrollView>
 
       <Modal
