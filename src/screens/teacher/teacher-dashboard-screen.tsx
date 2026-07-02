@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';   // ← Added
 import { api } from '../../services/api';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -38,10 +39,10 @@ export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecordi
   const displayName = teacherProfile?.name || userName || 'Priya';
 
   const stats = [
-    { label: 'Total Students', val: '156', icon: 'people', bgColor: '#F3E8FF', iconBg: '#7B2CBF', iconColor: '#FFFFFF' },
-    { label: 'Active Courses', val: '3', icon: 'book', bgColor: '#FEF3E8', iconBg: '#F97316', iconColor: '#FFFFFF' },
-    { label: 'Classes This Week', val: '8', icon: 'calendar', bgColor: '#EFF6FF', iconBg: '#3B82F6', iconColor: '#FFFFFF' },
-    { label: 'Completed', val: '24', icon: 'videocam', bgColor: '#F0FDF4', iconBg: '#22C55E', iconColor: '#FFFFFF' },
+    { label: 'Total Students', val: '156', icon: 'people', iconBg: '#7B2CBF', iconColor: '#FFFFFF' },
+    { label: 'Active Courses', val: '3', icon: 'book', iconBg: '#F97316', iconColor: '#FFFFFF' },
+    { label: 'Classes This Week', val: '8', icon: 'calendar', iconBg: '#3B82F6', iconColor: '#FFFFFF' },
+    { label: 'Completed', val: '24', icon: 'videocam', iconBg: '#22C55E', iconColor: '#FFFFFF' },
   ];
 
   const handleStartClass = () => {
@@ -58,7 +59,23 @@ export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecordi
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
 
       {/* HEADER */}
+      {/* HEADER */}
       <View style={styles.header}>
+        {/* Gradient Accent Line - Matching your image */}
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
+
         <Text style={styles.welcomeText}>Welcome {displayName.split(' ')[0]}!</Text>
         <Text style={styles.headerSubtitle}>Here's your teaching schedule for today</Text>
       </View>
@@ -71,7 +88,7 @@ export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecordi
         {/* STATS GRID */}
         <View style={styles.statsGrid}>
           {stats.map((stat, index) => (
-            <View key={index} style={[styles.statCard, { backgroundColor: stat.bgColor }]}>
+            <View key={index} style={[styles.statCard,]}>
               <View style={[styles.statIconContainer, { backgroundColor: stat.iconBg }]}>
                 <Ionicons name={stat.icon as any} size={24} color={stat.iconColor} />
               </View>
@@ -143,12 +160,19 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 12 : 8,
+    paddingTop: Platform.OS === 'android' ? 16 : 10,
     paddingBottom: 24,
+  },
+  headerAccentLine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
   },
   welcomeText: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 15, color: '#E9D5FF', marginTop: 4, fontWeight: '500' },
-  scrollView: { flex: 1, backgroundColor: '#F8FAFC' },
+  scrollView: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { padding: 20, paddingBottom: 40 },
 
   // Stats
@@ -165,12 +189,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 9,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: 'rgba(241, 245, 249, 0.9)',
   },
   statIconContainer: {
     width: 48,
