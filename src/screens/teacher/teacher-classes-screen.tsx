@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Student {
   id: string;
@@ -215,6 +216,19 @@ export default function TeacherClassesScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* MAIN CLASSES HEADER */}
       <View style={styles.header}>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <Text style={styles.headerTitle}>My Classes</Text>
         <Text style={styles.headerSubtitle}>Manage your courses and Google Meet links.</Text>
       </View>
@@ -328,7 +342,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
     paddingBottom: 20,
+    paddingTop: Platform.OS === 'android' ? 16 : 10,
   },
+
+  headerAccentLine: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 4,
+},
+
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
