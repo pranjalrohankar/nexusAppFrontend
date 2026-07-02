@@ -39,10 +39,10 @@ export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecordi
   const displayName = teacherProfile?.name || userName || 'Priya';
 
   const stats = [
-    { label: 'Total Students', val: '156', icon: 'people', bgColor: '#F3E8FF', iconBg: '#7B2CBF', iconColor: '#FFFFFF' },
-    { label: 'Active Courses', val: '3', icon: 'book', bgColor: '#FEF3E8', iconBg: '#F97316', iconColor: '#FFFFFF' },
-    { label: 'Classes This Week', val: '8', icon: 'calendar', bgColor: '#EFF6FF', iconBg: '#3B82F6', iconColor: '#FFFFFF' },
-    { label: 'Completed', val: '24', icon: 'videocam', bgColor: '#F0FDF4', iconBg: '#22C55E', iconColor: '#FFFFFF' },
+    { label: 'Total Students', val: '156', icon: 'people', iconBg: '#7B2CBF', iconColor: '#FFFFFF' },
+    { label: 'Active Courses', val: '3', icon: 'book', iconBg: '#F97316', iconColor: '#FFFFFF' },
+    { label: 'Classes This Week', val: '8', icon: 'calendar', iconBg: '#3B82F6', iconColor: '#FFFFFF' },
+    { label: 'Completed', val: '24', icon: 'videocam', iconBg: '#22C55E', iconColor: '#FFFFFF' },
   ];
 
   const handleStartClass = () => {
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   welcomeText: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 15, color: '#E9D5FF', marginTop: 4, fontWeight: '500' },
-  scrollView: { flex: 1, backgroundColor: '#F8FAFC' },
+  scrollView: { flex: 1, backgroundColor: '#FFFFFF' },
   scrollContent: { padding: 20, paddingBottom: 40 },
 
   // Stats
@@ -183,19 +183,19 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 28,
   },
-  statCard: {
-    width: (width - 52) / 2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
+ statCard: {
+  width: (width - 52) / 2,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 16,
+  padding: 16,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.2,
+  shadowRadius: 12,
+  elevation: 9,
+  borderWidth: 1,
+  borderColor: 'rgba(241, 245, 249, 0.9)',
+},
   statIconContainer: {
     width: 48,
     height: 48,
