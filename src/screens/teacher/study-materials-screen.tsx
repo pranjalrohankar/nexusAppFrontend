@@ -63,7 +63,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         setMaterials(JSON.parse(savedData));
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load materials');
+      console.error('Failed to load materials');
     }
   };
 
@@ -75,26 +75,10 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     const allCount = materials.length;
     const pdfCount = materials.filter(m => m.type === 'PDF').length;
     const pptCount = materials.filter(m => m.type === 'PPT').length;
-
     return [`All (${allCount})`, `PDF (${pdfCount})`, `PPT (${pptCount})`];
   };
 
   const filters = getFilters();
-
-  const blobToDataURL = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result);
-        } else {
-          reject(new Error('Unable to read file data'));
-        }
-      };
-      reader.onerror = () => reject(new Error('Failed to read blob'));
-      reader.readAsDataURL(blob);
-    });
-  };
 
   const handleFileSelect = async () => {
     try {
@@ -106,20 +90,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
       if (result.canceled) return;
 
       if (result.assets && result.assets.length > 0) {
-        const pickedFile = result.assets[0];
-
-        if (Platform.OS === 'web' && pickedFile.uri) {
-          try {
-            const response = await fetch(pickedFile.uri);
-            const blob = await response.blob();
-            const dataUrl = await blobToDataURL(blob);
-            setSelectedFile({ ...pickedFile, uri: dataUrl });
-          } catch (error) {
-            setSelectedFile(pickedFile);
-          }
-        } else {
-          setSelectedFile(pickedFile);
-        }
+        setSelectedFile(result.assets[0]);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to select file');
@@ -131,17 +102,14 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
       Alert.alert('Error', 'Please enter title');
       return;
     }
-
     if (!selectedFile) {
       Alert.alert('Error', 'Please select file');
       return;
     }
-
     if (!course.trim()) {
       Alert.alert('Error', 'Please enter course');
       return;
     }
-
     if (!batch.trim()) {
       Alert.alert('Error', 'Please enter batch');
       return;
@@ -184,24 +152,15 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
       'Delete Material',
       'Are you sure you want to delete this material?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            try {
-              const updatedMaterials = materials.filter(item => item.id !== id);
-
-              setMaterials(updatedMaterials);
-              await saveMaterials(updatedMaterials);
-
-              Alert.alert('Success', 'Material deleted successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete material');
-            }
+            const updatedMaterials = materials.filter(item => item.id !== id);
+            setMaterials(updatedMaterials);
+            await saveMaterials(updatedMaterials);
+            Alert.alert('Success', 'Material deleted successfully');
           },
         },
       ]
@@ -211,65 +170,30 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   const handleOpenMaterial = async (item: Material) => {
     try {
       if (!item.fileUri) {
-        Alert.alert('Error', 'No file available to download.');
+        Alert.alert('Error', 'No file available to open.');
         return;
       }
-
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const createDownload = (href: string) => {
-          const link = document.createElement('a');
-          link.href = href;
-          link.download = item.fileName || 'material.pdf';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        };
-
-        if (item.fileUri.startsWith('data:')) {
-          createDownload(item.fileUri);
-          return;
-        }
-
-        try {
-          const response = await fetch(item.fileUri);
-          const blob = await response.blob();
-          const downloadUrl = window.URL.createObjectURL(blob);
-          createDownload(downloadUrl);
-          window.URL.revokeObjectURL(downloadUrl);
-        } catch (webError) {
-          createDownload(item.fileUri);
-        }
-        return;
-      }
-
-      const supported = await Linking.canOpenURL(item.fileUri);
-      if (!supported) {
-        Alert.alert('Error', 'No app available to open this file.');
-        return;
-      }
-
       await Linking.openURL(item.fileUri);
     } catch (error) {
-      Alert.alert('Error', 'Failed to download file');
+      Alert.alert('Error', 'Failed to open file');
     }
   };
 
   const filteredMaterials = materials.filter(item => {
-    const search = searchQuery.toLowerCase();
+    const search = searchQuery.toLowerCase().trim();
 
-    const matchesSearch =
+    const matchesSearch = 
       item.title.toLowerCase().includes(search) ||
+      item.description.toLowerCase().includes(search) ||
       item.course.toLowerCase().includes(search) ||
       item.batch.toLowerCase().includes(search);
 
     if (activeFilter.startsWith('PDF')) {
       return matchesSearch && item.type === 'PDF';
     }
-
     if (activeFilter.startsWith('PPT')) {
       return matchesSearch && item.type === 'PPT';
     }
-
     return matchesSearch;
   });
 
@@ -331,7 +255,9 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
         <View style={styles.materialsList}>
           {filteredMaterials.length === 0 ? (
-            <Text style={styles.noResults}>No materials found</Text>
+            <Text style={styles.noResults}>
+              {searchQuery ? 'No materials found matching your search' : 'No materials available'}
+            </Text>
           ) : (
             filteredMaterials.map(item => (
               <TouchableOpacity
@@ -376,13 +302,9 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
             ))
           )}
         </View>
-
-        {/* <TouchableOpacity style={styles.uploadNewBtn} onPress={() => setShowUploadModal(true)}>
-          <Ionicons name="cloud-upload-outline" size={24} color="#7B2CBF" />
-          <Text style={styles.uploadNewText}>Upload New Material</Text>
-        </TouchableOpacity> */}
       </ScrollView>
 
+      {/* Upload Modal */}
       <Modal
         visible={showUploadModal}
         animationType="slide"
@@ -403,10 +325,8 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                 <View style={styles.uploadIcon}>
                   <Ionicons name="cloud-upload-outline" size={48} color="#7B2CBF" />
                 </View>
-
                 <Text style={styles.dropText}>Tap to browse file</Text>
                 <Text style={styles.supportedTypes}>PDF, PPT, DOC, Video, Image, ZIP</Text>
-
                 {selectedFile && (
                   <Text style={styles.selectedFileText}>
                     Selected: {selectedFile.name}
@@ -460,7 +380,6 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
               </View>
 
               <Text style={styles.label}>File Type</Text>
-
               <View style={styles.fileTypeContainer}>
                 {fileTypes.map(type => (
                   <TouchableOpacity
@@ -845,6 +764,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#94A3B8',
     fontSize: 16,
-    marginTop: 40,
+    marginTop: 60,
+    fontWeight: '500',
   },
 });
