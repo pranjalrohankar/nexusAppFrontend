@@ -88,7 +88,7 @@ export default function TeacherDashboardScreen({ onViewSchedule, onUploadRecordi
         {/* STATS GRID */}
         <View style={styles.statsGrid}>
           {stats.map((stat, index) => (
-            <View key={index} style={[styles.statCard, { backgroundColor: stat.bgColor }]}>
+            <View key={index} style={[styles.statCard,]}>
               <View style={[styles.statIconContainer, { backgroundColor: stat.iconBg }]}>
                 <Ionicons name={stat.icon as any} size={24} color={stat.iconColor} />
               </View>
@@ -183,19 +183,19 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 28,
   },
- statCard: {
-  width: (width - 52) / 2,
-  backgroundColor: '#FFFFFF',
-  borderRadius: 16,
-  padding: 16,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.2,
-  shadowRadius: 12,
-  elevation: 9,
-  borderWidth: 1,
-  borderColor: 'rgba(241, 245, 249, 0.9)',
-},
+  statCard: {
+    width: (width - 52) / 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(241, 245, 249, 0.9)',
+  },
   statIconContainer: {
     width: 48,
     height: 48,
