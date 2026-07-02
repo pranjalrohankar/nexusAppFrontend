@@ -200,19 +200,19 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+  <TouchableOpacity onPress={onClose} style={styles.backButton}>
+    <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+  </TouchableOpacity>
 
-        <View>
-          <Text style={styles.headerTitle}>Study Materials</Text>
-          <Text style={styles.headerSubtitle}>{materials.length} files</Text>
-        </View>
+  <View style={styles.headerTitleContainer}>
+    <Text style={styles.headerTitle}>Study Materials</Text>
+    <Text style={styles.headerSubtitle}>{materials.length} files</Text>
+  </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowUploadModal(true)}>
-          <Ionicons name="add" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+  <TouchableOpacity style={styles.addButton} onPress={() => setShowUploadModal(true)}>
+    <Ionicons name="add" size={24} color="#FFFFFF" />
+  </TouchableOpacity>
+</View>
 
       <ScrollView style={styles.container}>
         <View style={styles.searchContainer}>
@@ -430,6 +430,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+
+  headerTitleContainer: {
+  flex: 1,
+  marginLeft: 16,        // ← Gap after back button
+},
+
 
   backButton: { padding: 4 },
 
