@@ -226,7 +226,7 @@ export default function AdminCoursesScreen() {
       status: backendStatus,
       syllabusTopics: formSyllabusTopics,
       whatYouWillLearn: formWhatYouWillLearn,
-      googleMeetLink: googleMeetChecked ? formGoogleMeetLink : null,
+      googleMeetLink: formGoogleMeetLink || null,
     };
 
     try {
@@ -693,23 +693,22 @@ export default function AdminCoursesScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={styles.meetCheckboxRow}
-                onPress={() => setGoogleMeetChecked(!googleMeetChecked)}
-              >
-                <Ionicons
-                  name={googleMeetChecked ? "checkbox" : "square-outline"}
-                  size={20}
-                  color="#7B2CBF"
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.checkboxTextLabel}>Google Meet Link</Text>
-                  <Text style={styles.checkboxSubtext}>
-                    The platform will auto-generate Google Meet links to add and manage. 
-                    This link will be visible to students once created and once after it's created.
-                  </Text>
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Google Meet Link</Text>
+                <View style={styles.meetInputRow}>
+                  <Ionicons name="videocam-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={[styles.modalInput, { flex: 1, height: 42 }]}
+                    value={formGoogleMeetLink}
+                    onChangeText={setFormGoogleMeetLink}
+                    placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                    placeholderTextColor="#9CA3AF"
+                    autoCapitalize="none"
+                    keyboardType="url"
+                  />
                 </View>
-              </TouchableOpacity>
+                <Text style={styles.checkboxSubtext}>Paste your Google Meet link here. It will be visible to the assigned teacher.</Text>
+              </View>
 
               <View style={styles.modalActionRow}>
                 <TouchableOpacity
@@ -1122,6 +1121,16 @@ const styles = StyleSheet.create({
     height: 80,
     paddingTop: 10,
     textAlignVertical: 'top',
+  },
+  meetInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 4,
   },
   meetCheckboxRow: {
     flexDirection: 'row',
