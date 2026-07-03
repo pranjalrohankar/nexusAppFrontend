@@ -1,9 +1,27 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const BASE_URL = Platform.OS === 'android'
-  ? 'http://10.0.2.2:8080/api'
-  : 'http://localhost:8080/api';
+export function getApiBaseUrl() {
+  const configuredUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest?.debuggerHost;
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    return `http://${host}:8080/api`;
+  }
+
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8080/api';
+  }
+
+  return 'http://localhost:8080/api';
+}
+
+const BASE_URL = getApiBaseUrl();
 
 let _token: string | null = null;
 
@@ -52,9 +70,12 @@ export function clearToken() {
   } catch {}
 }
 
-function buildHeaders() {
+function buildHeaders(contentType?: string) {
   const token = getToken();
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  const h: Record<string, string> = {};
+  if (contentType) {
+    h['Content-Type'] = contentType;
+  }
   if (token) {
     h['Authorization'] = `Bearer ${token}`;
     const safeToken = token.substring(0, 20).replace(/[\r\n]/g, '');
@@ -83,11 +104,20 @@ async function handleResponse(res: Response) {
   return { success: true, message: 'Operation successful' };
 }
 
-async function post(path: string, body: object) {
+async function post(path: string, body: object, contentType = 'application/json') {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: buildHeaders(contentType),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+async function postFormData(path: string, body: FormData) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: buildHeaders(),
-    body: JSON.stringify(body),
+    body,
   });
   return handleResponse(res);
 }
@@ -159,4 +189,9 @@ export const api = {
 
   getTeacherProfile: () => get('/teachers/profile'),
   updateTeacherProfile: (data: object) => put('/teachers/profile', data),
+
+  getStudyMaterials: () => get('/materials'),
+  getStudyMaterialsByCourse: (course: string) => get(`/materials/by-course?course=${encodeURIComponent(course)}`),
+  uploadStudyMaterial: (data: FormData) => postFormData('/materials/upload', data),
+  deleteStudyMaterial: (id: number | string) => del(`/materials/${id}`),
 };

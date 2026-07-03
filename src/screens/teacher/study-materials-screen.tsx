@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api, getApiBaseUrl } from '@/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -35,13 +35,14 @@ interface Material {
   downloads: number;
 }
 
-const STORAGE_KEY = 'study_materials';
+const API_BASE_URL = getApiBaseUrl().replace('/api', '');
 
 export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [title, setTitle] = useState('');
@@ -58,17 +59,26 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
   const loadMaterials = async () => {
     try {
-      const savedData = await AsyncStorage.getItem(STORAGE_KEY);
-      if (savedData) {
-        setMaterials(JSON.parse(savedData));
-      }
+      setIsLoading(true);
+      const data = await api.getStudyMaterials();
+      const mappedMaterials = (data || []).map((item: any) => ({
+        id: item.id,
+        title: item.title || 'Untitled',
+        description: item.description || 'No description provided.',
+        type: item.fileType || item.type || 'PDF',
+        course: item.course || '',
+        batch: item.batch || '',
+        fileName: item.fileName || 'file',
+        fileUri: item.id ? `${API_BASE_URL}/api/materials/download/${item.id}` : '',
+        downloads: item.downloads || 0,
+      }));
+      setMaterials(mappedMaterials);
     } catch (error) {
-      console.error('Failed to load materials');
+      console.error('Failed to load materials', error);
+      Alert.alert('Error', 'Failed to load materials from server');
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const saveMaterials = async (data: Material[]) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   };
 
   const getFilters = () => {
@@ -87,9 +97,11 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         copyToCacheDirectory: true,
       });
 
-      if (result.canceled) return;
+      if (result.canceled) {
+        return;
+      }
 
-      if (result.assets && result.assets.length > 0) {
+      if (result.assets?.length > 0) {
         setSelectedFile(result.assets[0]);
       }
     } catch (error) {
@@ -115,23 +127,37 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
       return;
     }
 
-    const newMaterial: Material = {
-      id: Date.now(),
-      title: title.trim(),
-      description: description.trim() || 'No description provided.',
-      type: fileType,
-      course: course.trim(),
-      batch: batch.trim(),
-      fileName: selectedFile.name,
-      fileUri: selectedFile.uri,
-      downloads: 0,
-    };
-
-    const updatedMaterials = [newMaterial, ...materials];
-
     try {
-      setMaterials(updatedMaterials);
-      await saveMaterials(updatedMaterials);
+      const fileResponse = await fetch(selectedFile.uri);
+      const fileBlob = await fileResponse.blob();
+
+      const formData = new FormData();
+      formData.append('file', fileBlob, selectedFile.name || 'material');
+      formData.append('title', title.trim());
+      formData.append('description', description.trim() || 'No description provided.');
+      formData.append('course', course.trim());
+      formData.append('batch', batch.trim());
+      formData.append('fileType', fileType);
+
+      const uploadResponse = await api.uploadStudyMaterial(formData);
+      const uploadedMaterial: Material = {
+        id: uploadResponse?.id || Date.now(),
+        title: uploadResponse?.title || title.trim(),
+        description: uploadResponse?.description || description.trim() || 'No description provided.',
+        type: uploadResponse?.fileType || fileType,
+        course: uploadResponse?.course || course.trim(),
+        batch: uploadResponse?.batch || batch.trim(),
+        fileName: uploadResponse?.fileName || selectedFile.name || 'material',
+        fileUri: uploadResponse?.id ? `${API_BASE_URL}/api/materials/download/${uploadResponse.id}` : '',
+        downloads: 0,
+      };
+
+      setMaterials(prev => [uploadedMaterial, ...prev]);
+      try {
+        await loadMaterials();
+      } catch {
+        // keep the newly uploaded item visible even if the refresh call fails
+      }
 
       Alert.alert('Success', 'Material uploaded successfully');
 
@@ -142,8 +168,12 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
       setCourse('');
       setBatch('');
       setFileType('PDF');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload material');
+    } catch (error: any) {
+      console.error('Failed to upload material', error);
+      const message = error?.message || 'Unknown error';
+      Alert.alert('Upload failed', message.includes('HTTP')
+        ? message
+        : 'The file could not be saved. Please make sure the backend is running and the app can reach it.');
     }
   };
 
@@ -157,10 +187,14 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const updatedMaterials = materials.filter(item => item.id !== id);
-            setMaterials(updatedMaterials);
-            await saveMaterials(updatedMaterials);
-            Alert.alert('Success', 'Material deleted successfully');
+            try {
+              await api.deleteStudyMaterial(id);
+              await loadMaterials();
+              Alert.alert('Success', 'Material deleted successfully');
+            } catch (error) {
+              console.error('Failed to delete material', error);
+              Alert.alert('Error', 'Failed to delete material');
+            }
           },
         },
       ]
@@ -254,7 +288,9 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         </ScrollView>
 
         <View style={styles.materialsList}>
-          {filteredMaterials.length === 0 ? (
+          {isLoading ? (
+            <Text style={styles.noResults}>Loading materials...</Text>
+          ) : filteredMaterials.length === 0 ? (
             <Text style={styles.noResults}>
               {searchQuery ? 'No materials found matching your search' : 'No materials available'}
             </Text>
