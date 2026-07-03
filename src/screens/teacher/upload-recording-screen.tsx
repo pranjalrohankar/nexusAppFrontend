@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,11 +14,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { api } from '@/services/api';
 
 const { width } = Dimensions.get('window');
 
 interface UploadRecordingScreenProps {
   onClose: () => void;
+}
+
+interface ClassRecording {
+  id: number;
+  title: string;
+  description?: string;
+  classDate?: string;
+  duration?: string;
+  course: string;
+  batch: string;
+  fileName?: string;
+  fileUrl?: string;
+  fileSize?: number;
+  fileType?: string;
+  uploadedAt?: string;
 }
 
 export default function UploadRecordingScreen({ onClose }: UploadRecordingScreenProps) {
@@ -30,6 +46,8 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const [course, setCourse] = useState('Full Stack Developing');
   const [batch, setBatch] = useState('Gen A');
   const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [recentUploads, setRecentUploads] = useState<ClassRecording[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const handleFileSelect = async () => {
     try {
@@ -38,27 +56,83 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
         copyToCacheDirectory: true,
       });
 
-      if (result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        setSelectedFile(file);
-        const fileSizeInMB = ((file.size ?? 0) / (1024 * 1024)).toFixed(2);
-        Alert.alert('Success', `Selected: ${file.name}\nSize: ${fileSizeInMB} MB`);
+      if ('canceled' in result && result.canceled) {
+        return;
       }
+
+      const asset = result.assets && result.assets.length > 0 ? result.assets[0] : null;
+      if (!asset) {
+        return;
+      }
+
+      setSelectedFile(asset);
+      const fileSizeInMB = ((asset.size ?? 0) / (1024 * 1024)).toFixed(2);
+      Alert.alert('Success', `Selected: ${asset.name ?? 'Video file'}\nSize: ${fileSizeInMB} MB`);
     } catch (error) {
       Alert.alert('Error', 'Failed to pick video');
     }
   };
 
-  const handleUpload = () => {
+  const fetchRecentUploads = async () => {
+    try {
+      const recordings = await api.getClassRecordings();
+      if (Array.isArray(recordings)) {
+        setRecentUploads(recordings.sort((a, b) => {
+          if (!a.uploadedAt || !b.uploadedAt) return 0;
+          return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
+        }));
+      }
+    } catch (error) {
+      console.warn('Failed to load recordings', error);
+    }
+  };
+
+  const handleUpload = async () => {
     if (!selectedFile) {
       Alert.alert('Error', 'Please select a video file before uploading.');
       return;
     }
-    Alert.alert(
-      'Success', 
-      `Recording "${title || 'Untitled'}" uploaded successfully!`,
-      [{ text: 'OK', onPress: onClose }]
-    );
+
+    const fileType = selectedFile.mimeType || selectedFile.type || 'video/mp4';
+    const fileName = selectedFile.name || `recording-${Date.now()}.mp4`;
+
+    let fileBlob: Blob | null = null;
+    try {
+      const response = await fetch(selectedFile.uri);
+      fileBlob = await response.blob();
+    } catch (error) {
+      console.error('Failed to read selected file blob', error);
+      Alert.alert('Error', 'Unable to read selected video file. Please try again.');
+      return;
+    }
+
+    const formData = new FormData();
+    if (fileBlob) {
+      formData.append('file', fileBlob, fileName);
+    }
+
+    formData.append('title', title.trim() || 'Untitled Recording');
+    formData.append('description', description.trim());
+    formData.append('classDate', classDate.toISOString().slice(0, 10));
+    formData.append('duration', duration.trim() || '00:00:00');
+    formData.append('course', course.trim() || 'Unknown Course');
+    formData.append('batch', batch.trim() || 'Unknown Batch');
+
+    try {
+      setLoading(true);
+      await api.uploadClassRecording(formData);
+      await fetchRecentUploads();
+      setSelectedFile(null);
+      setTitle('');
+      setDescription('');
+      setDuration('');
+      Alert.alert('Success', `Recording uploaded successfully!`, [{ text: 'OK', onPress: onClose }]);
+    } catch (err: any) {
+      console.error('Upload failed', err);
+      Alert.alert('Upload failed', err?.message || 'Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
@@ -79,6 +153,10 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     if (formatted.length > 8) formatted = formatted.slice(0, 8);
     setDuration(formatted);
   };
+
+  useEffect(() => {
+    fetchRecentUploads();
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -184,21 +262,25 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
         {/* Recent Uploads */}
         <View style={styles.recentSection}>
           <Text style={styles.sectionTitle}>RECENT UPLOADS</Text>
-          {recentUploads.map((item, index) => (
-            <View key={index} style={styles.recentCard}>
-              <View style={styles.recentIcon}>
-                <Ionicons name="play-circle" size={28} color="#7B2CBF" />
+          {recentUploads.length > 0 ? (
+            recentUploads.map((item) => (
+              <View key={item.id} style={styles.recentCard}>
+                <View style={styles.recentIcon}>
+                  <Ionicons name="play-circle" size={28} color="#7B2CBF" />
+                </View>
+                <View style={styles.recentInfo}>
+                  <Text style={styles.recentTitle}>{item.title || 'Untitled Recording'}</Text>
+                  <Text style={styles.recentMeta}>{item.course} • {item.batch}</Text>
+                  <Text style={styles.recentMetaSmall}>
+                    {item.duration || '00:00:00'} • {item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString('en-GB') : ''}
+                  </Text>
+                </View>
+                <Ionicons name="eye-outline" size={22} color="#10B981" />
               </View>
-              <View style={styles.recentInfo}>
-                <Text style={styles.recentTitle}>{item.title}</Text>
-                <Text style={styles.recentMeta}>{item.course} • {item.batch}</Text>
-                <Text style={styles.recentMetaSmall}>
-                  {item.duration} • {item.views} views • {item.date}
-                </Text>
-              </View>
-              <Ionicons name="eye-outline" size={22} color="#10B981" />
-            </View>
-          ))}
+            ))
+          ) : (
+            <Text style={styles.emptyText}>No recordings found yet.</Text>
+          )}
         </View>
       </ScrollView>
 
@@ -214,12 +296,6 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     </SafeAreaView>
   );
 }
-
-const recentUploads = [
-  { title: 'Introduction to NumPy', course: 'Data Science & ML', batch: 'Batch A', duration: '1h 42m', views: 34, date: 'Jun 10, 2026' },
-  { title: 'Pandas DataFrame Operations', course: 'Data Science & ML', batch: 'Batch A', duration: '1h 28m', views: 31, date: 'Jun 8, 2026' },
-  { title: 'React Hooks Deep Dive', course: 'Full Stack Development', batch: 'Batch A', duration: '2h 05m', views: 28, date: 'Jun 7, 2026' },
-];
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
@@ -326,4 +402,5 @@ const styles = StyleSheet.create({
   recentTitle: { fontSize: 16, fontWeight: '600', color: '#1E2937' },
   recentMeta: { fontSize: 13, color: '#64748B', marginTop: 2 },
   recentMetaSmall: { fontSize: 12, color: '#94A3B8', marginTop: 4 },
+  emptyText: { fontSize: 14, color: '#64748B', marginTop: 12, textAlign: 'center' },
 });

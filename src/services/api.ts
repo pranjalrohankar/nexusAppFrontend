@@ -194,4 +194,7 @@ export const api = {
   getStudyMaterialsByCourse: (course: string) => get(`/materials/by-course?course=${encodeURIComponent(course)}`),
   uploadStudyMaterial: (data: FormData) => postFormData('/materials/upload', data),
   deleteStudyMaterial: (id: number | string) => del(`/materials/${id}`),
+
+  getClassRecordings: () => get('/recordings'),
+  uploadClassRecording: (data: FormData) => postFormData('/recordings/upload', data),
 };
