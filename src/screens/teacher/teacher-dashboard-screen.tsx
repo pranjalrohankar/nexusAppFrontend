@@ -203,8 +203,8 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   headerAccentLine: { height: 4, marginBottom: 10 },
-  welcomeText: { fontSize: 28, fontWeight: '700', color: '#FFF' },
-  headerSubtitle: { fontSize: 15, color: '#E9D5FF', marginTop: 4 },
+  welcomeText: { fontSize: 25, fontWeight: '700', color: '#FFF' },
+  headerSubtitle: { fontSize: 14, color: '#E9D5FF', marginTop: 4 },
 
   scrollView: { flex: 1, backgroundColor: '#FFF' },
   scrollContent: { padding: 20 },

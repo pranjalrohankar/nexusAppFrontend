@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
+import { adminDataCache } from '../../components/layout/app-tabs';
 
 const AVATAR_COLORS = ['#7B2CBF', '#2563EB', '#EA580C', '#16A34A', '#DB2777', '#0891B2'];
 const PILL_STYLES: Record<number, { bg: string; color: string }> = {
@@ -297,8 +298,8 @@ const eq = StyleSheet.create({
 });
 
 export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewAllEnrollments?: () => void }) {
-  const [dashData, setDashData] = useState<any>(null);
-  const [enquiries, setEnquiries] = useState<any[]>([]);
+  const [dashData, setDashData] = useState<any>(adminDataCache.dashboard);
+  const [enquiries, setEnquiries] = useState<any[]>(adminDataCache.enquiries);
   const [showEnquiries, setShowEnquiries] = useState(false);
   const [showNewEnquiryPopup, setShowNewEnquiryPopup] = useState(false);   // ← NEW
 
@@ -306,16 +307,24 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     api.getEnquiries()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        adminDataCache.enquiries = list;
         setEnquiries(list);
       })
       .catch(() => { });
   };
 
   useEffect(() => {
-    api.getDashboard()
-      .then((res: any) => setDashData(res?.data ?? null))
-      .catch(() => { });
-    fetchEnquiries();
+    Promise.all([
+      api.getDashboard().catch(() => null),
+      api.getEnquiries().catch(() => null),
+    ]).then(([dashRes, enqRes]) => {
+      const d = dashRes?.data ?? null;
+      const list = Array.isArray(enqRes) ? enqRes : Array.isArray(enqRes?.data) ? enqRes.data : [];
+      adminDataCache.dashboard = d;
+      adminDataCache.enquiries = list;
+      setDashData(d);
+      setEnquiries(list);
+    });
   }, []);
 
 

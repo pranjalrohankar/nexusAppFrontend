@@ -100,28 +100,25 @@ export default function AdminCoursesScreen() {
       
       setTeachers(teacherList.map((t: any) => ({ id: t.teacherId || t.id, name: t.name })));
       
-      const mapped = await Promise.all(list.map(async (c: any) => {
-        const enrollmentCount = await getEnrollmentCount(c.title);
-        return {
-          id: String(c.id),
-          title: c.title,
-          category: c.category ?? '',
-          instructor: c.instructor ?? 'TBD',
-          duration: c.duration ?? '',
-          studentsCount: enrollmentCount,
-          maxCapacity: c.maxCapacity ?? 50,
-          startDate: c.startDate ?? '',
-          endDate: c.endDate ?? '',
-          classTimings: c.classTimings ?? '',
-          classDays: c.classDays ?? '',
-          price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
-          status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
-          description: c.description ?? '',
-          syllabusTopics: c.syllabusTopics ?? '',
-          whatYouWillLearn: c.whatYouWillLearn ?? '',
-          googleMeetLink: c.googleMeetLink ?? '',
-          totalSessions: c.totalSessions ?? 0,
-        };
+      const mapped = list.map((c: any) => ({
+        id: String(c.id),
+        title: c.title,
+        category: c.category ?? '',
+        instructor: c.instructor ?? 'TBD',
+        duration: c.duration ?? '',
+        studentsCount: c.studentsCount ?? c.enrollmentCount ?? 0,
+        maxCapacity: c.maxCapacity ?? 50,
+        startDate: c.startDate ?? '',
+        endDate: c.endDate ?? '',
+        classTimings: c.classTimings ?? '',
+        classDays: c.classDays ?? '',
+        price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
+        status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
+        description: c.description ?? '',
+        syllabusTopics: c.syllabusTopics ?? '',
+        whatYouWillLearn: c.whatYouWillLearn ?? '',
+        googleMeetLink: c.googleMeetLink ?? '',
+        totalSessions: c.totalSessions ?? 0,
       }));
       setCourses(mapped.slice().reverse());
     } catch (err) {

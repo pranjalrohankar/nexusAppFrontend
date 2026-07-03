@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
+import { adminDataCache } from '../../components/layout/app-tabs';
 
 interface Enrollment {
   courseTitle: string;
@@ -72,9 +73,12 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<Student[]>(() => {
+    const cached = adminDataCache.students;
+    return cached.length > 0 ? cached.slice().reverse() : [];
+  });
+  const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
+  const [loading, setLoading] = useState(adminDataCache.students.length === 0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 5;
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
@@ -93,6 +97,9 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   };
 
   useEffect(() => {
+    if (adminDataCache.students.length > 0 && onCountChange) {
+      onCountChange(adminDataCache.students.length);
+    }
     loadStudents();
     loadCourses();
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
@@ -104,6 +111,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
       const res = await api.getStudents();
       if (res.success) {
         const list = res.data.slice().reverse();
+        adminDataCache.students = res.data;
         setStudents(list);
         if (onCountChange) onCountChange(list.length);
       } else {
@@ -117,16 +125,15 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   };
 
   const loadCourses = async () => {
+    if (adminDataCache.courses.length > 0) {
+      setCourses(adminDataCache.courses as Course[]);
+      return;
+    }
     try {
       const res = await api.getActiveCourses();
-      console.log('Courses API Response:', res);
       if (res.success) {
-        // amazonq-ignore-next-line
-        // amazonq-ignore-next-line
-        console.log('Courses loaded:', res.data);
+        adminDataCache.courses = res.data;
         setCourses(res.data);
-      } else {
-        console.log('Failed to load courses:', res.message);
       }
     } catch (err) {
       console.error('Failed to load courses', err);

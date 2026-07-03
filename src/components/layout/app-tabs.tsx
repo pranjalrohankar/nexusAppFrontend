@@ -14,7 +14,8 @@ import TeacherScheduleScreen from '@/screens/teacher/teacher-schedule-screen';
 import UploadRecordingScreen from '@/screens/teacher/upload-recording-screen';
 import TestsScreen from '@/screens/tests/tests-screen';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '@/services/api';
 import {
   Dimensions,
   Platform,
@@ -23,6 +24,23 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+// Module-level cache so data survives tab switches
+export const adminDataCache: {
+  dashboard: any;
+  students: any[];
+  teachers: any[];
+  courses: any[];
+  batches: any[];
+  enquiries: any[];
+} = {
+  dashboard: null,
+  students: [],
+  teachers: [],
+  courses: [],
+  batches: [],
+  enquiries: [],
+};
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -49,6 +67,28 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
     3: 0,
     4: 0,
   });
+
+  // Pre-fetch all admin data immediately on login so screens load instantly
+  useEffect(() => {
+    if (userRole === 'admin') {
+      Promise.all([
+        api.getDashboard().catch(() => null),
+        api.getStudents().catch(() => null),
+        api.getTeachers().catch(() => null),
+        api.getAllCourses().catch(() => null),
+        api.getBatches().catch(() => null),
+        api.getEnquiries().catch(() => null),
+      ]).then(([dash, students, teachers, courses, batches, enquiries]) => {
+        if (dash?.data) adminDataCache.dashboard = dash.data;
+        if (students?.data) adminDataCache.students = students.data;
+        if (teachers?.data) adminDataCache.teachers = teachers.data;
+        if (courses?.data) adminDataCache.courses = courses.data;
+        if (Array.isArray(batches)) adminDataCache.batches = batches;
+        const enqList = Array.isArray(enquiries) ? enquiries : Array.isArray(enquiries?.data) ? enquiries.data : [];
+        adminDataCache.enquiries = enqList;
+      });
+    }
+  }, [userRole]);
 
   // Tab details definition based on user role
   const getTabsConfig = () => {
