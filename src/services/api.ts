@@ -135,7 +135,7 @@ async function getPublic(path: string) {
 async function put(path: string, body: object) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'PUT',
-    headers: buildHeaders(),
+    headers: buildHeaders('application/json'),
     body: JSON.stringify(body),
   });
   return handleResponse(res);
@@ -189,6 +189,7 @@ export const api = {
 
   getTeacherProfile: () => get('/teachers/profile'),
   updateTeacherProfile: (data: object) => put('/teachers/profile', data),
+  getMyBatches: () => get('/teachers/my-batches'),
 
   getStudyMaterials: () => get('/materials'),
   getStudyMaterialsByCourse: (course: string) => get(`/materials/by-course?course=${encodeURIComponent(course)}`),

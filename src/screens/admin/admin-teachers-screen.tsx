@@ -173,6 +173,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setFormSpecialization('');
     setFormJoinDate(teacher.joinedDate);
     setFormEmploymentType('');
+    setFormPassword('');
     setSelectedCourseIds(teacher.assignedCourseIds || []);
     if (courses.length === 0) await fetchCourses();
     setIsModalVisible(true);

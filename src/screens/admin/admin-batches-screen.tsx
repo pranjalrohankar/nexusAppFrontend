@@ -173,7 +173,6 @@ export default function AdminBatchesScreen() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this batch?')) return;
     try {
       await api.deleteBatch(id);
       showToast('Batch deleted successfully', 'success');
@@ -526,7 +525,7 @@ export default function AdminBatchesScreen() {
               </View>
 
               <TouchableOpacity style={styles.createBtn} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.createBtnText}>Create Batch</Text>}
+                {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.createBtnText}>{selectedBatch ? 'Save Changes' : 'Create Batch'}</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
