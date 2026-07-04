@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
+import { adminDataCache } from '../../components/layout/app-tabs';
 import BatchStudentsScreen from './batch-students-screen';
 
 type FilterTab = 'All' | 'Active' | 'Upcoming' | 'Completed';
@@ -83,18 +84,7 @@ export default function AdminBatchesScreen() {
       const rawBatches: Batch[] = batchRes || [];
       setCourses(courseRes.success ? courseRes.data : []);
       setTeachers(teacherRes.success ? teacherRes.data.map((t: any) => ({ id: t.teacherId || t.id, name: t.name })) : []);
-
-      const batchesWithCounts = await Promise.all(
-        rawBatches.map(async (b) => {
-          try {
-            const res = await api.getEnrollmentCount(b.selectCourse);
-            return { ...b, studentsCount: res?.count ?? 0 };
-          } catch {
-            return { ...b, studentsCount: 0 };
-          }
-        })
-      );
-      setBatches(batchesWithCounts);
+      setBatches(rawBatches);
     } catch (err) {
       showToast('Failed to load data', 'error');
     } finally {

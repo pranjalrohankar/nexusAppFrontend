@@ -487,11 +487,11 @@ const styles = StyleSheet.create({
 
   // Schedule box
   scheduleBox: {
-    backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12,
+    backgroundColor: '#FAF5FF', borderRadius: 12, padding: 10,
     borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 14,
   },
-  scheduleLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginBottom: 4 },
-  scheduleValue: { fontSize: 14, fontWeight: 'bold', color: '#1F2937' },
+  scheduleLabel: { fontSize: 8, color: '#9CA3AF', fontWeight: '600', marginBottom: 3 },
+  scheduleValue: { fontSize: 11, fontWeight: '600', color: '#1F2937' },
 
   // Progress bar
   progressRow: { marginBottom: 14 },
