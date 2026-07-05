@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,9 +9,11 @@ import {
   Alert,
   Platform,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '@/services/api';
@@ -46,6 +48,10 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const [course, setCourse] = useState('Full Stack Developing');
   const [batch, setBatch] = useState('Gen A');
   const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [previewVideoUri, setPreviewVideoUri] = useState<string | null>(null);
+  const [previewVideoTitle, setPreviewVideoTitle] = useState('Preview Recording');
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const videoRef = useRef<Video | null>(null);
   const [recentUploads, setRecentUploads] = useState<ClassRecording[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -85,6 +91,12 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     } catch (error) {
       console.warn('Failed to load recordings', error);
     }
+  };
+
+  const handlePreviewVideo = (uri: string, title: string) => {
+    setPreviewVideoUri(uri);
+    setPreviewVideoTitle(title);
+    setPreviewVisible(true);
   };
 
   const handleUpload = async () => {
@@ -183,7 +195,56 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
               Selected: {selectedFile.name}
             </Text>
           )}
+
+          {selectedFile && (
+            <TouchableOpacity
+              style={styles.previewButton}
+              onPress={() => selectedFile?.uri && handlePreviewVideo(selectedFile.uri, 'Preview Selected Video')}
+            >
+              <Ionicons name="play-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.previewButtonText}>Preview Selected Video</Text>
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
+
+        {/* Video Preview Modal */}
+        {previewVisible && previewVideoUri && (
+          <Modal
+            visible={previewVisible}
+            animationType="slide"
+            onRequestClose={() => {
+              setPreviewVisible(false);
+              setPreviewVideoUri(null);
+            }}
+            transparent={false}
+          >
+            <SafeAreaView style={styles.videoModalContainer}>
+              <View style={styles.videoModalHeader}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setPreviewVisible(false);
+                    setPreviewVideoUri(null);
+                  }}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="#1E2937" />
+                </TouchableOpacity>
+                <Text style={styles.videoModalTitle}>{previewVideoTitle}</Text>
+              </View>
+
+              <View style={styles.videoPlayerWrapper}>
+                <Video
+                  ref={videoRef}
+                  source={{ uri: previewVideoUri }}
+                  style={styles.videoPlayer}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay
+                />
+              </View>
+            </SafeAreaView>
+          </Modal>
+        )}
 
         {/* Recording Details */}
         <View style={styles.section}>
@@ -275,7 +336,17 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                     {item.duration || '00:00:00'} • {item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString('en-GB') : ''}
                   </Text>
                 </View>
-                <Ionicons name="eye-outline" size={22} color="#10B981" />
+                <TouchableOpacity
+                  style={styles.recentPlayButton}
+                  onPress={() =>
+                    item.fileUrl
+                      ? handlePreviewVideo(item.fileUrl, item.title || 'Recording Preview')
+                      : Alert.alert('Unavailable', 'This recording file is not available for preview.')
+                  }
+                >
+                  <Ionicons name="eye-outline" size={22} color="#10B981" />
+                  <Text style={styles.recentPlayText}>Watch</Text>
+                </TouchableOpacity>
               </View>
             ))
           ) : (
@@ -377,6 +448,62 @@ const styles = StyleSheet.create({
   },
   uploadButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
+  previewButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#7B2CBF',
+    borderRadius: 14,
+  },
+  previewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  videoModalContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  videoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  modalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    marginRight: 12,
+  },
+  videoModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E2937',
+  },
+  videoPlayerWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#000000',
+  },
+  videoPlayer: {
+    width: width - 40,
+    height: (width - 40) * (9 / 16),
+    borderRadius: 16,
+    backgroundColor: '#000',
+  },
+
   cancelButton: {
     height: 56,
     borderRadius: 16,
@@ -399,6 +526,16 @@ const styles = StyleSheet.create({
   },
   recentIcon: { marginRight: 14 },
   recentInfo: { flex: 1 },
+  recentPlayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recentPlayText: {
+    color: '#10B981',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   recentTitle: { fontSize: 16, fontWeight: '600', color: '#1E2937' },
   recentMeta: { fontSize: 13, color: '#64748B', marginTop: 2 },
   recentMetaSmall: { fontSize: 12, color: '#94A3B8', marginTop: 4 },

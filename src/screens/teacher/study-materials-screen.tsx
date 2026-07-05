@@ -207,8 +207,28 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         Alert.alert('Error', 'No file available to open.');
         return;
       }
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(item.fileUri);
+        if (!response.ok) {
+          throw new Error('File download failed');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = item.fileName || 'document';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      }
+
       await Linking.openURL(item.fileUri);
     } catch (error) {
+      console.error('Failed to open material:', error);
       Alert.alert('Error', 'Failed to open file');
     }
   };
