@@ -23,6 +23,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const PROFILE_PHOTO_KEY = 'user_profile_photo';
 
+let _adminProfileCache: any = null;
+let _teacherProfileCache: any = null;
+
 interface ProfileScreenProps {
   onLogout: () => void;
   currentSubView: 'profile' | 'notifications' | 'privacy' | 'help' | 'account';
@@ -54,14 +57,22 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
   useEffect(() => {
     loadPhoto();
     if (userRole === 'admin') {
-      api.getAdminProfile()
-        .then((res: any) => setAdminProfile(res?.data ?? null))
-        .catch(() => { });
+      if (_adminProfileCache) {
+        setAdminProfile(_adminProfileCache);
+      } else {
+        api.getAdminProfile()
+          .then((res: any) => { _adminProfileCache = res?.data ?? null; setAdminProfile(_adminProfileCache); })
+          .catch(() => { });
+      }
     }
     if (userRole === 'teacher') {
-      api.getTeacherProfile()
-        .then((res: any) => setTeacherProfile(res?.data ?? null))
-        .catch(() => { });
+      if (_teacherProfileCache) {
+        setTeacherProfile(_teacherProfileCache);
+      } else {
+        api.getTeacherProfile()
+          .then((res: any) => { _teacherProfileCache = res?.data ?? null; setTeacherProfile(_teacherProfileCache); })
+          .catch(() => { });
+      }
     }
   }, [userRole]);
 
@@ -103,7 +114,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
     }
     return (
       <AccountSettingsScreen
-        onBack={() => { loadPhoto(); refreshTeacherProfile(); onChangeSubView('profile'); }}
+        onBack={() => { _teacherProfileCache = null; loadPhoto(); refreshTeacherProfile(); onChangeSubView('profile'); }}
         userRole={userRole}
         teacherProfile={userRole === 'teacher' ? teacherProfile : null}
       />
@@ -613,7 +624,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B2CBF',
     height: Platform.OS === 'ios' ? 80 : 100,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 40 : 80,
+    paddingTop: Platform.OS === 'ios' ? 40 : (Platform.OS as string) === 'web' ? 50 : 80,
   },
   headerTitle: {
     color: '#FFFFFF',
