@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -133,6 +134,7 @@ export default function BatchesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* 1. HEADER */}
       <View style={styles.header}>
         <View style={{ width: '100%', maxWidth: Platform.OS === 'web' ? 800 : undefined, alignSelf: 'center' }}>

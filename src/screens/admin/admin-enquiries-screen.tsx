@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Platform, Linking,
+  TextInput, Platform, Linking, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,7 +67,8 @@ function EnquiryDetail({
 
   return (
     <SafeAreaView style={det.safeArea} edges={['top']}>
-      {/* Header */}
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
+      {/* Header */}}
       <View style={det.header}>
         <LinearGradient colors={GRADIENT_COLORS} locations={GRADIENT_LOCS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={det.accentLine} />
         <View style={det.headerRow}>
@@ -259,6 +260,7 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
 
   return (
     <SafeAreaView style={eq.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* Header */}
       <View style={eq.header}>
         <LinearGradient colors={GRADIENT_COLORS} locations={GRADIENT_LOCS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={eq.accentLine} />

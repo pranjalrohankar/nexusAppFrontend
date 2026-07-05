@@ -33,9 +33,10 @@ interface ProfileScreenProps {
   userRole?: 'student' | 'teacher' | 'admin';
   userName?: string;
   userEmail?: string;
+  lastLogin?: string;
 }
 
-export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '' }: ProfileScreenProps) {
+export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '', lastLogin = '' }: ProfileScreenProps) {
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -57,13 +58,16 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
   useEffect(() => {
     loadPhoto();
     if (userRole === 'admin') {
-      if (_adminProfileCache) {
-        setAdminProfile(_adminProfileCache);
-      } else {
-        api.getAdminProfile()
-          .then((res: any) => { _adminProfileCache = res?.data ?? null; setAdminProfile(_adminProfileCache); })
-          .catch(() => { });
-      }
+      // Always fetch fresh so lastLogin reflects the current session
+      _adminProfileCache = null;
+      api.getAdminProfile()
+        .then((res: any) => {
+          const data = res?.data ?? null;
+          if (data && lastLogin) data.lastLogin = lastLogin;
+          _adminProfileCache = data;
+          setAdminProfile(data);
+        })
+        .catch(() => { });
     }
     if (userRole === 'teacher') {
       if (_teacherProfileCache) {
@@ -96,7 +100,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
   if (currentSubView === 'privacy') {
     if (userRole === 'admin') {
-      return <AdminSecuritySettingsScreen onBack={() => onChangeSubView('profile')} />;
+      return <AdminSecuritySettingsScreen onBack={() => onChangeSubView('profile')} userId={adminProfile?.id} />;
     }
     return <PrivacySecurityScreen onBack={() => onChangeSubView('profile')} />;
   }

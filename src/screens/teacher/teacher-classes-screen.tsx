@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
-  TextInput, Platform, ActivityIndicator, Linking, Share,
+  TextInput, Platform, ActivityIndicator, Linking, Share, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -126,6 +126,7 @@ export default function TeacherClassesScreen() {
 
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
         {/* Purple header: accent line + back + course title + batch + search bar */}
         <View style={styles.drillHeader}>
           <LinearGradient
@@ -267,6 +268,7 @@ export default function TeacherClassesScreen() {
   // ── MAIN CLASSES LIST ───────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       <View style={styles.header}>
         <LinearGradient
           colors={[
@@ -426,20 +428,20 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 24,
     paddingTop: Platform.OS === 'android' ? 16 : 10,
   },
-  headerAccentLine: { height: 4, marginBottom: 8 },
+  headerAccentLine: { height: 4, marginBottom: 10 },
   backBtn: { alignItems: 'center', justifyContent: 'center', padding: 4 },
   backBtnText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
   headerTitle: {
-    fontSize: 24, fontWeight: 'bold', color: '#FFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontSize: 25, fontWeight: '700', color: '#FFF',
   },
-  headerSubtitle: { fontSize: 13, color: '#E9D5FF', marginTop: 6 },
+  headerSubtitle: { fontSize: 14, color: '#E9D5FF', marginTop: 4 },
   subTabContainer: {
     flexDirection: 'row', backgroundColor: '#FFF',
     paddingHorizontal: 16, paddingVertical: 10,
+    paddingTop: 16,
     borderBottomWidth: 1, borderBottomColor: '#E5E7EB', gap: 8,
   },
   subTabBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#F3F4F6' },
@@ -536,7 +538,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 16 : 10,
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
   drillCourseTitle: {
     flex: 1,
