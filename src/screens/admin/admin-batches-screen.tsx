@@ -92,11 +92,22 @@ export default function AdminBatchesScreen() {
     }
   };
 
-  const filteredBatches = batches.filter(b => {
-    const matchesSearch = b.batchName.toLowerCase().includes(searchQuery.toLowerCase()) || b.selectCourse.toLowerCase().includes(searchQuery.toLowerCase());
-    if (filterTab === 'All') return matchesSearch;
-    return matchesSearch && b.status === filterTab.toUpperCase();
-  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 5;
+
+  const filteredBatches = [...batches]
+    .sort((a, b) => new Date(b.startDate ?? 0).getTime() - new Date(a.startDate ?? 0).getTime())
+    .filter(b => {
+      const matchesSearch = b.batchName.toLowerCase().includes(searchQuery.toLowerCase()) || b.selectCourse.toLowerCase().includes(searchQuery.toLowerCase());
+      if (filterTab === 'All') return matchesSearch;
+      return matchesSearch && b.status === filterTab.toUpperCase();
+    });
+
+  const totalPages = Math.ceil(filteredBatches.length / PAGE_SIZE);
+  const pagedBatches = filteredBatches.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Reset to page 1 when filter/search changes
+  React.useEffect(() => { setCurrentPage(1); }, [filterTab, searchQuery]);
 
   const activeCount = batches.filter(b => b.status === 'ACTIVE').length;
   const upcomingCount = batches.filter(b => b.status === 'UPCOMING').length;
@@ -246,7 +257,7 @@ export default function AdminBatchesScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Filter Tabs */}
         <View style={styles.filterTabs}>
           <TouchableOpacity
@@ -308,7 +319,8 @@ export default function AdminBatchesScreen() {
             <Text style={styles.emptyText}>No batches found</Text>
           </View>
         ) : (
-          filteredBatches.map((batch) => {
+          <>
+          {pagedBatches.map((batch) => {
             const selectedCourse = courses.find(c => c.title === batch.selectCourse);
             return (
               <View key={batch.id} style={styles.batchCard}>
@@ -349,9 +361,11 @@ export default function AdminBatchesScreen() {
                     </View>
                     {batch.classDays && batch.classDays.length > 0 && (
                       <View style={styles.daysChipRow}>
-                        <View style={styles.daysChip}>
-                          <Text style={styles.daysChipText}>{formatClassDays(batch.classDays)}</Text>
-                        </View>
+                        {batch.classDays.map(day => (
+                          <View key={day} style={styles.daysChip}>
+                            <Text style={styles.daysChipText}>{day.substring(0, 3)}</Text>
+                          </View>
+                        ))}
                       </View>
                     )}
                   </View>
@@ -397,7 +411,39 @@ export default function AdminBatchesScreen() {
                 </View>
               </View>
             );
-          })
+          })}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <View style={styles.pagination}>
+              <TouchableOpacity
+                style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+                onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <Ionicons name="chevron-back" size={16} color={currentPage === 1 ? '#D1D5DB' : '#7B2CBF'} />
+              </TouchableOpacity>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <TouchableOpacity
+                  key={page}
+                  style={[styles.pageNum, currentPage === page && styles.pageNumActive]}
+                  onPress={() => setCurrentPage(page)}
+                >
+                  <Text style={[styles.pageNumText, currentPage === page && styles.pageNumTextActive]}>{page}</Text>
+                </TouchableOpacity>
+              ))}
+
+              <TouchableOpacity
+                style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+                onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                <Ionicons name="chevron-forward" size={16} color={currentPage === totalPages ? '#D1D5DB' : '#7B2CBF'} />
+              </TouchableOpacity>
+            </View>
+          )}
+          </>
         )}
       </ScrollView>
 
@@ -640,9 +686,9 @@ const styles = StyleSheet.create({
   infoColumn: { flex: 1, gap: 6 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   infoText: { fontSize: 12, color: '#4B5563', flex: 1 },
-  daysChipRow: { flexDirection: 'row', marginTop: 2 },
-  daysChip: { backgroundColor: '#F3E8FF', borderRadius: 20, paddingVertical: 4, paddingHorizontal: 12, alignSelf: 'flex-start' },
-  daysChipText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
+  daysChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 },
+  daysChip: { backgroundColor: '#F3E8FF', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 7 },
+  daysChipText: { fontSize: 11, color: '#7B2CBF', fontWeight: '600' },
   batchDays: { backgroundColor: '#F9FAFB', borderRadius: 8, padding: 8, marginBottom: 12 },
   batchDaysText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
   batchActions: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12, alignItems: 'center' },
@@ -678,4 +724,11 @@ const styles = StyleSheet.create({
   statusChipTextActive: { color: '#FFF' },
   createBtn: { backgroundColor: '#7B2CBF', height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24, marginBottom: 40 },
   createBtnText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' },
+  pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, marginBottom: 20 },
+  pageBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center' },
+  pageBtnDisabled: { backgroundColor: '#F3F4F6' },
+  pageNum: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center' },
+  pageNumActive: { backgroundColor: '#7B2CBF' },
+  pageNumText: { fontSize: 13, fontWeight: '700', color: '#7B2CBF' },
+  pageNumTextActive: { color: '#FFF' },
 });
