@@ -14,7 +14,7 @@ import TeacherScheduleScreen from '@/screens/teacher/teacher-schedule-screen';
 import UploadRecordingScreen from '@/screens/teacher/upload-recording-screen';
 import TestsScreen from '@/screens/tests/tests-screen';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/services/api';
 import {
   Dimensions,
@@ -69,6 +69,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
   });
 
   // Pre-fetch all admin data immediately on login so screens load instantly
+  // Also poll enquiries every 30s so badge count stays live
   useEffect(() => {
     if (userRole === 'admin') {
       Promise.all([
@@ -87,6 +88,17 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
         const enqList = Array.isArray(enquiries) ? enquiries : Array.isArray(enquiries?.data) ? enquiries.data : [];
         adminDataCache.enquiries = enqList;
       });
+
+      // Poll enquiries every 30s to keep badge count live
+      const interval = setInterval(() => {
+        api.getEnquiries().catch(() => null).then((enquiries: any) => {
+          if (!enquiries) return;
+          const enqList = Array.isArray(enquiries) ? enquiries : Array.isArray(enquiries?.data) ? enquiries.data : [];
+          if (enqList.length > 0) adminDataCache.enquiries = enqList;
+        });
+      }, 30000);
+
+      return () => clearInterval(interval);
     }
   }, [userRole]);
 
