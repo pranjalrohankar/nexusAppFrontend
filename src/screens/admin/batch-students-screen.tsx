@@ -357,9 +357,8 @@ const styles = StyleSheet.create({
   },
   batchTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   statusBadge: {
     paddingHorizontal: 12,
