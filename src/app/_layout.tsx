@@ -1,11 +1,14 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useState, useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { AppState, AppStateStatus, useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/common/animated-icon';
 import AppTabs from '@/components/layout/app-tabs';
 import AuthFlow from '@/screens/auth/auth-flow';
-import { loadToken } from '@/services/api';
+import { api, clearToken, loadToken } from '@/services/api';
+
+// ── Change back to 30 * 60 * 1000 for production ──
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -13,8 +16,92 @@ export default function TabLayout() {
   const [userRole, setUserRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [userId, setUserId] = useState<number | null>(null);
+  const [lastLogin, setLastLogin] = useState('');
+
+  // Session timeout refs
+  const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActiveRef = useRef<number>(Date.now());
+  const sessionEnabledRef = useRef(false);
 
   useEffect(() => { loadToken(); }, []);
+
+  const doLogout = useCallback(() => {
+    clearToken();
+    if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+    setIsAuthenticated(false);
+  }, []);
+
+  const resetSessionTimer = useCallback(() => {
+    if (!sessionEnabledRef.current) return;
+    lastActiveRef.current = Date.now();
+    if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+    sessionTimerRef.current = setTimeout(doLogout, SESSION_TIMEOUT_MS);
+  }, [doLogout]);
+
+  // Poll security settings every time user is authenticated + is admin
+  useEffect(() => {
+    if (!isAuthenticated || userRole !== 'admin' || !userId) return;
+
+    let cancelled = false;
+
+    const checkSettings = () => {
+      api.getSecuritySettings(userId)
+        .then((res: any) => {
+          if (cancelled) return;
+          const enabled = res?.data?.sessionTimeout === true;
+          const wasEnabled = sessionEnabledRef.current;
+          sessionEnabledRef.current = enabled;
+
+          if (enabled && !wasEnabled) {
+            // Just turned on — start timer
+            resetSessionTimer();
+          } else if (!enabled && wasEnabled) {
+            // Just turned off — clear timer
+            if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkSettings();
+    // Re-check every 30s so toggle changes take effect quickly
+    const interval = setInterval(checkSettings, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [isAuthenticated, userRole, userId, resetSessionTimer]);
+
+  // AppState listener — handles app going to background/foreground
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleAppState = (state: AppStateStatus) => {
+      if (state === 'active') {
+        if (sessionEnabledRef.current) {
+          const elapsed = Date.now() - lastActiveRef.current;
+          if (elapsed >= SESSION_TIMEOUT_MS) {
+            doLogout();
+          } else {
+            resetSessionTimer();
+          }
+        }
+      } else {
+        // App went to background — record time, clear JS timer (it won't fire in background)
+        lastActiveRef.current = Date.now();
+        if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppState);
+    return () => sub.remove();
+  }, [isAuthenticated, doLogout, resetSessionTimer]);
+
+  // Clean up timer on logout
+  useEffect(() => {
+    if (!isAuthenticated) {
+      sessionEnabledRef.current = false;
+      if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+    }
+  }, [isAuthenticated]);
 
   console.log("ThemeProvider is:", ThemeProvider);
   console.log("AuthFlow is:", AuthFlow);
@@ -26,13 +113,21 @@ export default function TabLayout() {
       {isAuthenticated ? (
         <>
           <AnimatedSplashOverlay />
-          <AppTabs userRole={userRole} userName={userName} userEmail={userEmail} onLogout={() => setIsAuthenticated(false)} />
+          <AppTabs
+            userRole={userRole}
+            userName={userName}
+            userEmail={userEmail}
+            onLogout={doLogout}
+            lastLogin={lastLogin}
+          />
         </>
       ) : (
-        <AuthFlow onSignIn={(role, name, email) => {
+        <AuthFlow onSignIn={(role, name, email, id, loginTime) => {
           setUserRole(role);
           setUserName(name);
           setUserEmail(email);
+          setUserId(id ?? null);
+          setLastLogin(loginTime ?? '');
           setIsAuthenticated(true);
         }} />
       )}

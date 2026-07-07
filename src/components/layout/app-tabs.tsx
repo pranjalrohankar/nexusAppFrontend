@@ -44,6 +44,21 @@ export const adminDataCache: {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Detect if running on web in a narrow (phone-sized) viewport
+function useIsNarrowWeb() {
+  const getIsNarrow = () =>
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth < 768;
+  const [isNarrow, setIsNarrow] = useState(getIsNarrow);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handler = () => setIsNarrow(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    handler(); // sync on mount
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isNarrow;
+}
+
 type ProfileSubView = 'profile' | 'notifications' | 'privacy' | 'help' | 'account';
 
 interface AppTabsProps {
@@ -51,9 +66,11 @@ interface AppTabsProps {
   userName: string;
   userEmail: string;
   onLogout: () => void;
+  lastLogin?: string;
 }
 
-export default function AppTabs({ userRole, userName, userEmail, onLogout }: AppTabsProps) {
+export default function AppTabs({ userRole, userName, userEmail, onLogout, lastLogin }: AppTabsProps) {
+  const isNarrowWeb = useIsNarrowWeb();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showUploadRecording, setShowUploadRecording] = useState(false);
@@ -162,6 +179,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
               userRole={userRole}
               userName={userName}
               userEmail={userEmail}
+              lastLogin={lastLogin}
             />
           );
         default: return <TeacherDashboardScreen userName={userName} />;
@@ -181,6 +199,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
               userRole={userRole}
               userName={userName}
               userEmail={userEmail}
+              lastLogin={lastLogin}
             />
           );
         default: return <AdminDashboardScreen />;
@@ -227,6 +246,46 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
   };
 
   if (Platform.OS === 'web') {
+    // Narrow web (phone-sized) → same floating bottom tab bar as native
+    if (isNarrowWeb) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.screenContainer}>{renderScreen()}</View>
+          {profileSubView === 'profile' && (
+            <View style={styles.tabBar}>
+              {tabs.map((tab, idx) => {
+                const isActive = idx === activeIndex;
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                    onPress={() => {
+                      if (idx === activeIndex) {
+                        setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
+                      } else {
+                        setActiveIndex(idx);
+                        if (tab.name === 'Profile') setProfileSubView('profile');
+                      }
+                    }}
+                  >
+                    <Ionicons
+                      name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
+                      size={20}
+                      color={isActive ? '#FFFFFF' : '#9CA3AF'}
+                    />
+                    <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
+                      {tab.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // Wide web → sidebar layout
     return (
       <View style={styles.webContainer}>
         {/* Left Sidebar */}
@@ -251,15 +310,13 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
                   style={[styles.webNavLink, isActive && styles.webNavLinkActive]}
                   onPress={() => {
                     setActiveIndex(idx);
-                    if (tab.name === 'Profile') {
-                      setProfileSubView('profile');
-                    }
+                    if (tab.name === 'Profile') setProfileSubView('profile');
                   }}
                 >
                   <Ionicons
                     name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
                     size={20}
-                    color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                    color={isActive ? '#FFFFFF' : '#9CA3AF'}
                   />
                   <Text style={[styles.webNavLinkLabel, isActive && styles.webNavLinkLabelActive]}>
                     {tab.name}
@@ -345,11 +402,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 24 : 16,
-    left: Platform.OS === 'web' ? '50%' : 20,
-    right: Platform.OS === 'web' ? undefined : 20,
-    width: Platform.OS === 'web' ? 760 : undefined,
-    marginLeft: Platform.OS === 'web' ? -380 : undefined,
+    bottom: 16,
+    left: 20,
+    right: 20,
     elevation: 12,
     shadowColor: '#7B2CBF',
     shadowOffset: { width: 0, height: 6 },
