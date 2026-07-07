@@ -19,7 +19,7 @@ import { api, setToken } from '../../services/api';
 type ScreenType = 'LOGO' | 'SPLASH' | 'SIGN_IN' | 'SIGN_UP';
 
 interface AuthFlowProps {
-onSignIn: (role: 'student' | 'teacher' | 'admin', name: string, email: string) => void;
+onSignIn: (role: 'student' | 'teacher' | 'admin', name: string, email: string, userId?: number, lastLogin?: string) => void;
 }
 
 export default function AuthFlow({ onSignIn }: AuthFlowProps) {
@@ -130,10 +130,24 @@ return;
 }
 setLoading(true);
 try {
-const res = await api.login(signInEmail, signInPassword, selectedRole);
+// Get or create a persistent device fingerprint
+let deviceFingerprint: string | null = null;
+try {
+  const DEVICE_ID_KEY = 'nexus_device_id';
+  let stored = Platform.OS === 'web'
+    ? localStorage.getItem(DEVICE_ID_KEY)
+    : await AsyncStorage.getItem(DEVICE_ID_KEY);
+  if (!stored) {
+    stored = 'dev-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
+    if (Platform.OS === 'web') localStorage.setItem(DEVICE_ID_KEY, stored);
+    else await AsyncStorage.setItem(DEVICE_ID_KEY, stored);
+  }
+  deviceFingerprint = stored;
+} catch {}
+const res = await api.login(signInEmail, signInPassword, selectedRole, deviceFingerprint ?? undefined);
 if (res.success) {
 setToken(res.data.token);
-onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '');
+onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
 } else {
 Alert.alert('Login Failed', res.message || 'Invalid credentials');
 }

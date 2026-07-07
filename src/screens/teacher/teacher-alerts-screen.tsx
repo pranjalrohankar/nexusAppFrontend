@@ -8,6 +8,7 @@ import {
   Switch,
   Platform,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +43,7 @@ export default function TeacherAlertsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* HEADER */}
       <View style={styles.header}>
         <LinearGradient
@@ -153,26 +155,24 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    paddingTop: Platform.OS === 'android' ? 16 : 10,
+    paddingBottom: 24,
+    paddingTop: 8,
   },
   headerAccentLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   headerSubtitle: {
     fontSize: 13,
+    fontWeight: '600',
     color: '#E9D5FF',
-    marginTop: 6,
+    marginTop: 3,
   },
   scrollView: {
     flex: 1,

@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../services/api';
 
 const PROFILE_PHOTO_KEY = 'user_profile_photo';
@@ -38,10 +39,7 @@ export default function AccountSettingsScreen({
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [pinCode, setPinCode] = useState('');
-  const [street, setStreet] = useState('');
+  const [location, setLocation] = useState('');
 
   // Load saved photo
   useEffect(() => {
@@ -66,10 +64,7 @@ export default function AccountSettingsScreen({
     if (data) {
       setName(data.name ?? '');
       setPhone(data.phone ?? '');
-      setStreet(data.street ?? '');
-      setCity(data.city ?? '');
-      setState(data.state ?? '');
-      setPinCode(data.pinCode ?? '');
+      setLocation([data.street, data.city, data.state, data.pinCode].filter(Boolean).join(', '));
     }
   }, [profile, initialProfile]);
 
@@ -83,7 +78,6 @@ export default function AccountSettingsScreen({
 
   const email = profile?.email ?? (initialProfile?.email ?? '');
   const joinDate = profile?.joinDate ?? (initialProfile?.joinDate ?? '');
-  const location = [city, state, pinCode].filter(Boolean).join(', ');
 
   // If the stored photo URI is broken/invalid, clear it so the
   // initials-avatar fallback can render instead of a blank box.
@@ -178,7 +172,7 @@ export default function AccountSettingsScreen({
     setSaving(true);
     try {
       if (userRole === 'teacher') {
-        await (api as any).updateTeacherProfile({ name, phone, street, city, state, pinCode });
+        await (api as any).updateTeacherProfile({ name, phone, location });
       }
       setSuccessMsg('Changes saved successfully!');
       setTimeout(() => {
@@ -196,14 +190,26 @@ export default function AccountSettingsScreen({
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-              <Ionicons name="arrow-back" size={24} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Account Settings</Text>
-          </View>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
+          ]}
+          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Account Settings</Text>
         </View>
-        <View style={styles.loadingBox}>
+      </View>
+      <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color="#7B2CBF" />
         </View>
       </SafeAreaView>
@@ -222,6 +228,18 @@ export default function AccountSettingsScreen({
 
       {/* Purple header */}
       <View style={styles.header}>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
+          ]}
+          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backBtn} onPress={onBack}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
@@ -239,10 +257,10 @@ export default function AccountSettingsScreen({
         <View style={styles.avatarCard}>
           <TouchableOpacity
             style={styles.avatarWrapper}
-            onPress={handleChangePhoto}
-            activeOpacity={0.85}
+            onPress={userRole === 'teacher' ? handleChangePhoto : undefined}
+            activeOpacity={userRole === 'teacher' ? 0.85 : 1}
           >
-            {photoUri ? (
+            {photoUri && userRole === 'teacher' ? (
               <Image
                 source={{ uri: photoUri }}
                 style={styles.avatarImage}
@@ -253,9 +271,11 @@ export default function AccountSettingsScreen({
                 <Text style={styles.avatarInitials}>{initials}</Text>
               </View>
             )}
-            <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={15} color="#FFF" />
-            </View>
+            {userRole === 'teacher' && (
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={15} color="#FFF" />
+              </View>
+            )}
           </TouchableOpacity>
           <Text style={styles.avatarName}>{name || '—'}</Text>
           <Text style={styles.avatarRole}>{roleLabel}</Text>
@@ -326,9 +346,9 @@ export default function AccountSettingsScreen({
               <Text style={styles.rowLabel}>Location</Text>
               <TextInput
                 style={styles.rowInput}
-                value={city}
-                onChangeText={setCity}
-                placeholder="City"
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Enter location"
                 placeholderTextColor="#C4C4C4"
               />
             </View>
@@ -396,14 +416,14 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    paddingTop: 4,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
-  backBtn: { padding: 4, marginRight: 12 },
+  headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  backBtn: { padding: 4 },
   headerTitle: {
-    color: '#FFF', fontSize: 22, fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    color: '#FFF', fontSize: 24, fontWeight: '700',
   },
 
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },

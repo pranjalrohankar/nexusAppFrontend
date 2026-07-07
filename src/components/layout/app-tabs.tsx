@@ -44,6 +44,21 @@ export const adminDataCache: {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Detect if running on web in a narrow (phone-sized) viewport
+function useIsNarrowWeb() {
+  const getIsNarrow = () =>
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth < 768;
+  const [isNarrow, setIsNarrow] = useState(getIsNarrow);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handler = () => setIsNarrow(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    handler(); // sync on mount
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isNarrow;
+}
+
 type ProfileSubView = 'profile' | 'notifications' | 'privacy' | 'help' | 'account';
 
 interface AppTabsProps {
@@ -51,9 +66,11 @@ interface AppTabsProps {
   userName: string;
   userEmail: string;
   onLogout: () => void;
+  lastLogin?: string;
 }
 
-export default function AppTabs({ userRole, userName, userEmail, onLogout }: AppTabsProps) {
+export default function AppTabs({ userRole, userName, userEmail, onLogout, lastLogin }: AppTabsProps) {
+  const isNarrowWeb = useIsNarrowWeb();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showUploadRecording, setShowUploadRecording] = useState(false);
@@ -162,6 +179,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
               userRole={userRole}
               userName={userName}
               userEmail={userEmail}
+              lastLogin={lastLogin}
             />
           );
         default: return <TeacherDashboardScreen userName={userName} />;
@@ -181,6 +199,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
               userRole={userRole}
               userName={userName}
               userEmail={userEmail}
+              lastLogin={lastLogin}
             />
           );
         default: return <AdminDashboardScreen />;
@@ -227,6 +246,46 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
   };
 
   if (Platform.OS === 'web') {
+    // Narrow web (phone-sized) → same floating bottom tab bar as native
+    if (isNarrowWeb) {
+      return (
+        <View style={styles.container}>
+          <View style={[styles.screenContainer, profileSubView === 'profile' && styles.screenWithTabBar]}>{renderScreen()}</View>
+          {profileSubView === 'profile' && (
+            <View style={styles.tabBar}>
+              {tabs.map((tab, idx) => {
+                const isActive = idx === activeIndex;
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                    onPress={() => {
+                      if (idx === activeIndex) {
+                        setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
+                      } else {
+                        setActiveIndex(idx);
+                        if (tab.name === 'Profile') setProfileSubView('profile');
+                      }
+                    }}
+                  >
+                    <Ionicons
+                      name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
+                      size={20}
+                      color={isActive ? '#FFFFFF' : '#374151'}
+                    />
+                    <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
+                      {tab.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // Wide web → sidebar layout
     return (
       <View style={styles.webContainer}>
         {/* Left Sidebar */}
@@ -251,15 +310,13 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
                   style={[styles.webNavLink, isActive && styles.webNavLinkActive]}
                   onPress={() => {
                     setActiveIndex(idx);
-                    if (tab.name === 'Profile') {
-                      setProfileSubView('profile');
-                    }
+                    if (tab.name === 'Profile') setProfileSubView('profile');
                   }}
                 >
                   <Ionicons
                     name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
                     size={20}
-                    color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                    color={isActive ? '#FFFFFF' : '#9CA3AF'}
                   />
                   <Text style={[styles.webNavLinkLabel, isActive && styles.webNavLinkLabelActive]}>
                     {tab.name}
@@ -289,7 +346,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
   return (
     <View style={styles.container}>
       {/* SCREEN CONTAINER */}
-      <View style={styles.screenContainer}>{renderScreen()}</View>
+      <View style={[styles.screenContainer, profileSubView === 'profile' && styles.screenWithTabBar]}>{renderScreen()}</View>
 
       {/* BOTTOM TAB BAR — hidden when a profile sub-view is open */}
       {profileSubView === 'profile' && (
@@ -314,7 +371,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout }: App
                 <Ionicons
                   name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
                   size={20}
-                  color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                  color={isActive ? "#FFFFFF" : "#374151"}
                 />
                 <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
                   {tab.name}
@@ -336,52 +393,51 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
   },
-  // Modern Floating Capsule Tab Bar
+  screenWithTabBar: {
+    paddingBottom: Platform.OS === 'ios' ? 76 : 64,
+  },
+  // Tab Bar — flat bottom bar matching UI screenshot
   tabBar: {
     flexDirection: 'row',
-    height: 72,
+    height: 64,
     backgroundColor: '#FFFFFF',
-    borderRadius: 36,
+    borderRadius: 0,
     justifyContent: 'space-around',
     alignItems: 'center',
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 24 : 16,
-    left: Platform.OS === 'web' ? '50%' : 20,
-    right: Platform.OS === 'web' ? undefined : 20,
-    width: Platform.OS === 'web' ? 760 : undefined,
-    marginLeft: Platform.OS === 'web' ? -380 : undefined,
+    bottom: 0,
+    left: 0,
+    right: 0,
     elevation: 12,
-    shadowColor: '#7B2CBF',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    paddingHorizontal: 10,
-    borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
     zIndex: 100,
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 56,
-    borderRadius: 28,
     flex: 1,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginHorizontal: 4,
+    marginVertical: 6,
   },
   tabButtonActive: {
     backgroundColor: '#7B2CBF',
-    shadowColor: '#7B2CBF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
   },
   tabLabel: {
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 3,
   },
   tabLabelInactive: {
-    color: '#9CA3AF',
+    color: '#374151',
   },
   tabLabelActive: {
     color: '#FFFFFF',

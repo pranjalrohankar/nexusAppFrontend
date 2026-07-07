@@ -33,9 +33,10 @@ interface ProfileScreenProps {
   userRole?: 'student' | 'teacher' | 'admin';
   userName?: string;
   userEmail?: string;
+  lastLogin?: string;
 }
 
-export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '' }: ProfileScreenProps) {
+export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '', lastLogin = '' }: ProfileScreenProps) {
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -57,13 +58,16 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
   useEffect(() => {
     loadPhoto();
     if (userRole === 'admin') {
-      if (_adminProfileCache) {
-        setAdminProfile(_adminProfileCache);
-      } else {
-        api.getAdminProfile()
-          .then((res: any) => { _adminProfileCache = res?.data ?? null; setAdminProfile(_adminProfileCache); })
-          .catch(() => { });
-      }
+      // Always fetch fresh so lastLogin reflects the current session
+      _adminProfileCache = null;
+      api.getAdminProfile()
+        .then((res: any) => {
+          const data = res?.data ?? null;
+          if (data && lastLogin) data.lastLogin = lastLogin;
+          _adminProfileCache = data;
+          setAdminProfile(data);
+        })
+        .catch(() => { });
     }
     if (userRole === 'teacher') {
       if (_teacherProfileCache) {
@@ -96,7 +100,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
   if (currentSubView === 'privacy') {
     if (userRole === 'admin') {
-      return <AdminSecuritySettingsScreen onBack={() => onChangeSubView('profile')} />;
+      return <AdminSecuritySettingsScreen onBack={() => onChangeSubView('profile')} userId={adminProfile?.id} />;
     }
     return <PrivacySecurityScreen onBack={() => onChangeSubView('profile')} />;
   }
@@ -128,19 +132,21 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
       
       <View style={styles.headerBanner}>
         <LinearGradient
-        colors={[
-          'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
-          'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
-          'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
-          'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
-          'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
-        ]}
-        locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.headerAccentLine}
-      />
-        <Text style={styles.headerTitle}>{userRole === 'teacher' ? 'Profile' : 'My Profile'}</Text>
+          colors={[
+            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
+        <Text style={styles.headerTitle}>
+          {userRole === 'admin' ? 'Admin Profile' : userRole === 'teacher' ? 'Profile' : 'My Profile'}
+        </Text>
       </View>
       
       {/* Scrollable Content */}
@@ -156,7 +162,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
           {/* AVATAR floats above card */}
           <View style={styles.avatarFloatContainer}>
             <View style={styles.avatarWrapper}>
-              {photoUri ? (
+              {photoUri && userRole !== 'admin' ? (
                 <Image
                   source={{ uri: photoUri }}
                   style={styles.avatarImage}
@@ -168,7 +174,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                     {userRole === 'teacher'
                       ? ((teacherProfile?.name ?? '').charAt(0).toUpperCase() || 'T')
                       : userRole === 'admin'
-                        ? ((adminProfile?.name ?? '').charAt(0).toUpperCase() || 'A')
+                        ? 'A'
                         : ((userName ?? '').charAt(0).toUpperCase() || 'S')}
                   </Text>
                 </View>
@@ -190,7 +196,9 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
             <Text style={styles.userRole}>
               {userRole === 'teacher'
                 ? 'Senior Instructor'
-                : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+                : userRole === 'admin'
+                  ? 'System Administrator'
+                  : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
             </Text>
 
             <View style={styles.joinedRow}>
@@ -613,24 +621,20 @@ const styles = StyleSheet.create({
   },
 
   headerAccentLine: {
-    position: 'absolute',
-    top: 15,
-    left: 0,
-    right: 0,
     height: 4,
+    marginBottom: 10,
   },
   // Curved purple banner header
   headerBanner: {
     backgroundColor: '#7B2CBF',
-    height: Platform.OS === 'ios' ? 80 : 100,
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 40 : (Platform.OS as string) === 'web' ? 50 : 80,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontWeight: '700',
   },
   // Avatar floats between header and card
   avatarFloatContainer: {

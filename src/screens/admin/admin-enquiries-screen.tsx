@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Platform, Linking,
+  TextInput, Platform, Linking, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,7 +67,8 @@ function EnquiryDetail({
 
   return (
     <SafeAreaView style={det.safeArea} edges={['top']}>
-      {/* Header */}
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
+      {/* Header */}}
       <View style={det.header}>
         <LinearGradient colors={GRADIENT_COLORS} locations={GRADIENT_LOCS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={det.accentLine} />
         <View style={det.headerRow}>
@@ -188,7 +189,7 @@ const det = StyleSheet.create({
   accentLine: { height: 3, borderRadius: 2, marginBottom: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#FFF', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' },
+  headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#FFF' },
   newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
   newBadgeText: { fontSize: 11, color: '#FFF', fontWeight: '600' },
   scroll: { flex: 1, backgroundColor: '#F3F4F6' },
@@ -259,6 +260,7 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
 
   return (
     <SafeAreaView style={eq.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* Header */}
       <View style={eq.header}>
         <LinearGradient colors={GRADIENT_COLORS} locations={GRADIENT_LOCS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={eq.accentLine} />
@@ -349,7 +351,7 @@ const eq = StyleSheet.create({
   accentLine: { height: 3, borderRadius: 2, marginBottom: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   backBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, fontSize: 26, fontWeight: 'bold', color: '#FFF', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' },
+  headerTitle: { flex: 1, fontSize: 26, fontWeight: '700', color: '#FFF' },
   filterBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, paddingHorizontal: 14, height: 46, gap: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#1F2937' },

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -214,6 +215,7 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

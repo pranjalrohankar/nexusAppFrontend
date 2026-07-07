@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
-  Platform, Linking, ActivityIndicator,
+  Platform, Linking, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -111,6 +111,7 @@ export default function TeacherScheduleScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* HEADER */}
       <View style={styles.header}>
         <LinearGradient
@@ -239,15 +240,14 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 16 : 10,
-    paddingBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  headerAccentLine: { height: 4, marginBottom: 10 },
+  headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
   headerTitle: {
-    fontSize: 24, fontWeight: 'bold', color: '#FFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontSize: 24, fontWeight: '700', color: '#FFF',
   },
-  headerSubtitle: { fontSize: 13, color: '#E9D5FF', marginTop: 4 },
+  headerSubtitle: { fontSize: 13, fontWeight: '600', color: '#E9D5FF', marginTop: 3 },
 
   scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
   scrollContent: { padding: 16 },

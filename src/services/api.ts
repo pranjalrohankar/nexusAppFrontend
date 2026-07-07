@@ -158,8 +158,8 @@ async function patch(path: string) {
 }
 
 export const api = {
-  login: (email: string, password: string, role: string) =>
-    post('/auth/login', { email, password, role }),
+  login: (email: string, password: string, role: string, deviceFingerprint?: string) =>
+    post('/auth/login', { email, password, role, deviceFingerprint }),
 
   createUser: (data: object) => post('/admin/users', data),
 
@@ -207,4 +207,8 @@ export const api = {
 
   getClassRecordings: () => get('/recordings'),
   uploadClassRecording: (data: FormData) => postFormData('/recordings/upload', data),
+
+  getLoginHistory: (userId: number | string) => get(`/auth/login-history?userId=${userId}`),
+  getSecuritySettings: (userId: number | string) => get(`/auth/security-settings?userId=${userId}`),
+  updateSecuritySettings: (data: object) => put('/auth/security-settings', data),
 };
