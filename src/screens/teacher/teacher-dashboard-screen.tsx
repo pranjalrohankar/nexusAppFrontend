@@ -199,12 +199,12 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 16 : 10,
+    paddingTop: 8,
     paddingBottom: 24,
   },
-  headerAccentLine: { height: 4, marginBottom: 10 },
-  welcomeText: { fontSize: 25, fontWeight: '700', color: '#FFF' },
-  headerSubtitle: { fontSize: 14, color: '#E9D5FF', marginTop: 4 },
+  headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
+  welcomeText: { fontSize: 24, fontWeight: '700', color: '#FFF' },
+  headerSubtitle: { fontSize: 13, fontWeight: '600', color: '#E9D5FF', marginTop: 3 },
 
   scrollView: { flex: 1, backgroundColor: '#FFF' },
   scrollContent: { padding: 20 },

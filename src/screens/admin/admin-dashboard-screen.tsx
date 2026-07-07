@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  StyleSheet, Text, View, ScrollView, Platform, TouchableOpacity, StatusBar,
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -60,9 +60,6 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     { label: 'Revenue', val: dashData ? formatRevenue(dashData.revenue) : '-', change: dashData?.revenuePct ?? '+0%', icon: 'cash-outline', color: '#16A34A', bg: '#DCFCE7' },
   ];
 
-  const tagColors = ['#EA580C', '#7B2CBF', '#2563EB', '#16A34A'];
-  const tagBgs = ['#FFF7ED', '#F3E8FF', '#DBEAFE', '#DCFCE7'];
-
   const recentEnrollments = (dashData?.recentEnrollments ?? []).map((e: any) => ({
     id: String(e.id),
     name: e.studentName,
@@ -71,14 +68,15 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     dotColor: '#10B981',
   }));
 
-  const classesToday = (dashData?.classesToday ?? []).map((c: any, idx: number) => ({
+  const classesToday = (dashData?.classesToday ?? []).map((c: any) => ({
     id: String(c.id),
     course: c.course,
-    teacher: '',
+    instructor: c.instructor || '',
     time: c.time,
-    tagColor: tagColors[idx % tagColors.length],
-    tagBg: tagBgs[idx % tagBgs.length],
+    studentsCount: c.studentsCount ?? 0,
   }));
+
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
   if (showEnquiries) {
     return (
@@ -157,37 +155,69 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
           </TouchableOpacity>
         </View>
         <View style={styles.enrollmentsCard}>
-          {recentEnrollments.map((item: any) => (
-            <View key={item.id} style={styles.enrollmentItem}>
-              <View style={styles.enrollHeaderRow}>
-                <View style={styles.titleWithDot}>
-                  <View style={[styles.statusDot, { backgroundColor: item.dotColor }]} />
-                  <Text style={styles.enrollName}>{item.name}</Text>
+          {recentEnrollments.map((item: any) => {
+            const initials = (item.name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+            const avatarBg = '#7B2CBF';
+            const isToday = item.time && (item.time === new Date().toISOString().split('T')[0] || item.time === 'Today');
+            const displayDate = isToday ? 'Today' : item.time;
+            return (
+              <View key={item.id} style={styles.enrollmentItem}>
+                <View style={[styles.enrollAvatar, { backgroundColor: avatarBg }]}>
+                  <Text style={styles.enrollAvatarText}>{initials}</Text>
                 </View>
-                <Text style={styles.enrollTime}>{item.time}</Text>
+                <View style={styles.enrollInfo}>
+                  <Text style={styles.enrollName}>{item.name}</Text>
+                  <Text style={styles.enrollCourse}>{item.course}</Text>
+                </View>
+                <View style={styles.enrollRight}>
+                  <View style={styles.enrollActiveBadge}>
+                    <Text style={styles.enrollActiveBadgeText}>Active</Text>
+                  </View>
+                  <Text style={styles.enrollTime}>{displayDate}</Text>
+                </View>
               </View>
-              <Text style={styles.enrollCourse}>{item.course}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* CLASSES TODAY */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Classes Today</Text>
-        </View>
-        <View style={styles.classesContainer}>
-          {classesToday.map((item: any) => (
-            <View key={item.id} style={styles.classCard}>
-              <View style={styles.classHeaderCol}>
-                <Text style={styles.classCourse}>{item.course}</Text>
-                <Text style={styles.classTeacher}>{item.teacher ? `Instructor: ${item.teacher}` : ''}</Text>
-              </View>
-              <View style={[styles.classTag, { backgroundColor: item.tagBg }]}>
-                <Text style={[styles.classTagText, { color: item.tagColor }]}>{item.time}</Text>
-              </View>
+        <LinearGradient
+          colors={['#F9FAFB', 'rgba(250,245,255,0.6)', 'rgba(255,247,237,0.6)']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.classesTodayCard}
+        >
+          <View style={styles.classesTodayHeader}>
+            <View style={styles.classesTodayIconBox}>
+              <Ionicons name="calendar" size={20} color="#7B2CBF" />
             </View>
-          ))}
-        </View>
+            <View>
+              <Text style={styles.classesTodayTitle}>Classes Today</Text>
+              <Text style={styles.classesTodayDate}>{todayLabel}</Text>
+            </View>
+          </View>
+          {classesToday.length === 0 ? (
+            <View style={styles.noClassesBox}>
+              <Text style={styles.noClassesText}>No classes scheduled for today</Text>
+            </View>
+          ) : (
+            classesToday.map((item: any) => (
+              <View key={item.id} style={styles.classRow}>
+                <View style={styles.classRowAccent} />
+                <View style={styles.classRowContent}>
+                  <Text style={styles.classCourse}>{item.course}</Text>
+                  <Text style={styles.classTeacher}>
+                    {item.instructor}{item.studentsCount > 0 ? ` • ${item.studentsCount} students` : ''}
+                  </Text>
+                </View>
+                {!!item.time && (
+                  <View style={styles.classTimePill}>
+                    <Text style={styles.classTimeText}>{item.time}</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+        </LinearGradient>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -201,7 +231,7 @@ const styles = StyleSheet.create({
   headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
   headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerTextCol: { flex: 1 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 13, color: '#E9D5FF', fontWeight: '600', marginTop: 3 },
   alertBtn: { width: 46, height: 46, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
   iconContainer: { position: 'relative', width: 46, height: 46, justifyContent: 'center', alignItems: 'center' },
@@ -220,19 +250,47 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, marginTop: 8 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
   viewAllLink: { fontSize: 12, color: '#7B2CBF', fontWeight: 'bold' },
-  enrollmentsCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 24, gap: 14 },
-  enrollmentItem: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 12 },
-  enrollHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  titleWithDot: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  enrollName: { fontSize: 13, fontWeight: 'bold', color: '#1F2937' },
+  enrollmentsCard: { backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 24 },
+  enrollmentItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  enrollAvatar: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  enrollAvatarText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  enrollInfo: { flex: 1 },
+  enrollName: { fontSize: 13, fontWeight: '700', color: '#1F2937' },
+  enrollCourse: { fontSize: 11, color: '#6B7280', marginTop: 2 },
+  enrollRight: { alignItems: 'flex-end', gap: 3 },
+  enrollActiveBadge: { backgroundColor: '#DCFCE7', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 2 },
+  enrollActiveBadgeText: { fontSize: 10, fontWeight: '700', color: '#16A34A' },
   enrollTime: { fontSize: 10, color: '#9CA3AF', fontWeight: '500' },
-  enrollCourse: { fontSize: 11, color: '#6B7280', marginTop: 4, paddingLeft: 16 },
-  classesContainer: { gap: 12 },
-  classCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  classHeaderCol: { flex: 1 },
-  classCourse: { fontSize: 13, fontWeight: 'bold', color: '#1F2937' },
-  classTeacher: { fontSize: 11, color: '#6B7280', marginTop: 4 },
-  classTag: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 8 },
-  classTagText: { fontSize: 11, fontWeight: 'bold' },
+  classesTodayCard: {
+    borderRadius: 20, padding: 18, marginBottom: 8,
+    borderWidth: 1, borderColor: '#E9D5FF',
+    shadowColor: '#7B2CBF', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
+  },
+  classesTodayHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  classesTodayIconBox: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  classesTodayTitle: { fontSize: 16, fontWeight: '700', color: '#1F2937' },
+  classesTodayDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  noClassesBox: { paddingVertical: 20, alignItems: 'center' },
+  noClassesText: { fontSize: 13, color: '#9CA3AF' },
+  classRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FFFFFF', borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  classRowAccent: { width: 4, height: '100%', borderRadius: 2, backgroundColor: '#7B2CBF', marginRight: 12 },
+  classRowContent: { flex: 1 },
+  classCourse: { fontSize: 13, fontWeight: '700', color: '#1F2937' },
+  classTeacher: { fontSize: 11, color: '#6B7280', marginTop: 3 },
+  classTimePill: {
+    backgroundColor: '#FFF7ED', borderRadius: 8,
+    paddingVertical: 5, paddingHorizontal: 10,
+  },
+  classTimeText: { fontSize: 12, fontWeight: '700', color: '#EA580C' },
 });
