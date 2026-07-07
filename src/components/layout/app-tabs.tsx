@@ -163,7 +163,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
         return <StudyMaterialsScreen onClose={() => setShowStudyMaterials(false)} />;
       }
       switch (activeIndex) {
-        case 0: return <TeacherDashboardScreen onViewSchedule={() => setActiveIndex(2)} userName={userName}
+        case 0: return <TeacherDashboardScreen userName={userName}
           onUploadRecording={() => setShowUploadRecording(true)}
           onUploadStudyMaterial={() => setShowStudyMaterials(true)}
         />;

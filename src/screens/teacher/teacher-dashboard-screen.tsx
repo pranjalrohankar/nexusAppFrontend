@@ -28,12 +28,12 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 
 function todayLabel() {
   const d = new Date();
-  return `${DAY_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  return `${DAY_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
 }
 
 // Returns full day names for this week e.g. ['Sunday','Monday',...]
 function getThisWeekDayNames(): string[] {
-  return [...DAY_NAMES]; // Sun–Sat, all 7 — used to match batch classDays against current week
+  return [...DAY_NAMES];
 }
 
 // Normalize 'MON'/'Mon'/'Monday' -> 'Monday'
@@ -45,6 +45,8 @@ function normDay(d: string): string {
 export default function TeacherDashboardScreen({ onUploadRecording, onUploadStudyMaterial, userName = '' }: Props) {
   const [displayName, setDisplayName] = useState(userName || 'Teacher');
   const [batches, setBatches] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [courseEnrollments, setCourseEnrollments] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -55,15 +57,32 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
         api.getMyBatches().catch(() => null),
       ]);
 
-      if (profileRes?.data?.name || profileRes?.name) {
-        setDisplayName((profileRes?.data?.name || profileRes?.name).split(' ')[0]);
+      const profileData = profileRes?.data ?? profileRes;
+      if (profileData?.name) {
+        setDisplayName(profileData.name.split(' ')[0]);
       } else if (userName) {
         setDisplayName(userName.split(' ')[0]);
       }
+      setProfile(profileData);
 
       const raw = Array.isArray(batchRes?.data) ? batchRes.data
         : Array.isArray(batchRes) ? batchRes : [];
       setBatches(raw);
+
+      // Fetch enrollment count per assigned course directly from enrollment API
+      const courses: any[] = profileData?.assignedCourses ?? [];
+      if (courses.length > 0) {
+        const counts = await Promise.all(
+          courses.map((c: any) =>
+            api.getEnrollmentCount(c.title).catch(() => ({ count: 0 }))
+          )
+        );
+        const map: Record<string, number> = {};
+        courses.forEach((c: any, i: number) => {
+          map[c.title.toLowerCase()] = counts[i]?.count ?? 0;
+        });
+        setCourseEnrollments(map);
+      }
     } catch {
     } finally {
       setLoading(false);
@@ -75,8 +94,10 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
   // ── Derived stats ──────────────────────────────────────────────────────────
   const activeBatches = batches.filter(b => b.status === 'ACTIVE');
 
-  const totalStudents = batches.reduce((sum, b) => sum + (b.studentsCount ?? 0), 0);
-  const activeCourses = [...new Set(activeBatches.map(b => b.selectCourse))].length;
+  // Use profile.studentsCount — counts unique enrollments across all assigned courses (no double-counting)
+  const totalStudents = profile?.studentsCount ?? 0;
+  // Use profile.assignedCourses for active course count (courses explicitly assigned to this teacher)
+  const activeCourses = profile?.coursesCount ?? profile?.assignedCourses?.length ?? 0;
 
   const weekDayNames = getThisWeekDayNames();
   const classesThisWeek = activeBatches.filter(b =>
@@ -132,6 +153,33 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
               </View>
             ))}
           </View>
+        )}
+
+        {/* MY COURSES */}
+        {!loading && profile?.assignedCourses?.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>My Courses</Text>
+            <View style={{ marginBottom: 28 }}>
+              {profile.assignedCourses.map((c: any, i: number) => {
+                const enrolled = courseEnrollments[c.title?.toLowerCase()] ?? 0;
+                return (
+                  <View key={c.courseId ?? i} style={styles.courseRow}>
+                    <View style={styles.courseIconWrap}>
+                      <Ionicons name="book" size={18} color="#7B2CBF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.courseTitle}>{c.title}</Text>
+                      {c.category ? <Text style={styles.courseCategory}>{c.category}</Text> : null}
+                    </View>
+                    <View style={styles.enrollBadge}>
+                      <Ionicons name="people" size={13} color="#7B2CBF" />
+                      <Text style={styles.enrollBadgeText}>{enrolled} students</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </>
         )}
 
         {/* QUICK ACTIONS */}
@@ -199,14 +247,13 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingTop: 8,
+       paddingTop: Platform.OS === 'android' ? 16 : 10,
     paddingBottom: 24,
   },
-  headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
-  welcomeText: { fontSize: 24, fontWeight: '700', color: '#FFF' },
-  headerSubtitle: { fontSize: 13, fontWeight: '600', color: '#E9D5FF', marginTop: 3 },
-
-  scrollView: { flex: 1, backgroundColor: '#FFF' },
+  headerAccentLine: { height: 4, marginBottom: 10 },
+  welcomeText: { fontSize: 25, fontWeight: '700', color: '#FFF' },
+  headerSubtitle: { fontSize: 14, color: '#E9D5FF', marginTop: 4 },
+ scrollView: { flex: 1, backgroundColor: '#FFF' },
   scrollContent: { padding: 20 },
 
   // Stats
@@ -273,4 +320,26 @@ const styles = StyleSheet.create({
 
   noClassRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 },
   noClassText: { fontSize: 13, color: '#9CA3AF' },
+
+  // My Courses
+  courseRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFF', borderRadius: 14, padding: 14,
+    marginBottom: 10, borderWidth: 1, borderColor: '#F1F5F9',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 3,
+  },
+  courseIconWrap: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  courseTitle: { fontSize: 14, fontWeight: '700', color: '#1E2937' },
+  courseCategory: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  enrollBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#F3E8FF', paddingVertical: 5,
+    paddingHorizontal: 10, borderRadius: 20,
+  },
+  enrollBadgeText: { fontSize: 12, fontWeight: '700', color: '#7B2CBF' },
 });
