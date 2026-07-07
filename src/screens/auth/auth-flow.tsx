@@ -12,7 +12,6 @@ Animated,
 StatusBar,
 Alert,
 ActivityIndicator,
-Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, setToken } from '../../services/api';
@@ -39,9 +38,26 @@ const [signUpEmail, setSignUpEmail] = useState('');
 const [signUpPhone, setSignUpPhone] = useState('');
 const [signUpMessage, setSignUpMessage] = useState('');
 const [signUpCourse, setSignUpCourse] = useState('');
+const [signUpSource, setSignUpSource] = useState('');
+const [showSourceModal, setShowSourceModal] = useState(false);
 const [showCourseModal, setShowCourseModal] = useState(false);
 const [courses, setCourses] = useState<string[]>([]);
 const [agreeTerms, setAgreeTerms] = useState(false);
+const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
+const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
+const [showSourceDrop, setShowSourceDrop] = useState(false);
+const [showCourseDrop, setShowCourseDrop] = useState(false);
+const toastAnim = useRef(new Animated.Value(0)).current;
+
+const showToast = (msg: string, type: 'error' | 'success') => {
+  setToast({ msg, type });
+  toastAnim.setValue(0);
+  Animated.sequence([
+    Animated.timing(toastAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+    Animated.delay(2500),
+    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+  ]).start(() => setToast(null));
+};
 
 useEffect(() => {
   api.getAllCourses()
@@ -130,23 +146,46 @@ setLoading(false);
 
 // Handle SignUp action (enquiry only, no login)
 const handleSignUpSubmit = async () => {
-  if (!signUpName || !signUpEmail || !signUpPhone) {
-    Alert.alert('Error', 'Please fill in name, email and phone.');
-    return;
-  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phoneRegex = /^[0-9]{10}$/;
+  const errors: Record<string, boolean> = {};
+
+  if (!signUpName.trim()) errors.name = true;
+  if (!signUpEmail.trim()) errors.email = true;
+  else if (!emailRegex.test(signUpEmail.trim())) errors.emailInvalid = true;
+  if (!signUpPhone.trim()) errors.phone = true;
+  else if (signUpPhone.length !== 10) errors.phoneInvalid = true;
+  if (!signUpMessage.trim()) errors.message = true;
+  if (!signUpSource) errors.source = true;
+  if (!signUpCourse) errors.course = true;
+  if (!agreeTerms) errors.terms = true;
+
+  setFieldErrors(errors);
+
+  if (errors.name) { showToast('Full name is required', 'error'); return; }
+  if (errors.email) { showToast('Email address is required', 'error'); return; }
+  if (errors.emailInvalid) { showToast('Please enter a valid email address', 'error'); return; }
+  if (errors.phone) { showToast('Phone number is required', 'error'); return; }
+  if (errors.phoneInvalid) { showToast('Please enter a valid 10-digit phone number', 'error'); return; }
+  if (errors.message) { showToast('Please write a message', 'error'); return; }
+  if (errors.source) { showToast('Please select how you heard about us', 'error'); return; }
+  if (errors.course) { showToast('Please select a course', 'error'); return; }
+  if (errors.terms) { showToast('Please accept Terms & Conditions', 'error'); return; }
+
   try {
     await api.submitEnquiry({
-      fullName: signUpName,
-      email: signUpEmail,
-      phoneNumber: signUpPhone,
-      message: signUpMessage,
+      fullName: signUpName.trim(),
+      email: signUpEmail.trim(),
+      phoneNumber: signUpPhone.trim(),
+      message: signUpMessage.trim(),
       course: signUpCourse,
+      source: signUpSource,
       termsAccepted: agreeTerms,
     });
-    Alert.alert('Enquiry Submitted', 'Thank you! We will contact you soon.');
-    transitionTo('SIGN_IN');
+    showToast('Enquiry submitted! We will contact you soon.', 'success');
+    setTimeout(() => transitionTo('SIGN_IN'), 2000);
   } catch {
-    Alert.alert('Error', 'Could not submit enquiry. Please try again.');
+    showToast('Could not submit enquiry. Please try again.', 'error');
   }
 };
 
@@ -379,191 +418,124 @@ keyboardShouldPersistTaps="handled"
 showsVerticalScrollIndicator={false}
 >
 <View style={styles.headerSpacer} />
-
 <Logo size="small" />
 
-<Animated.View
-style={[
-styles.card,
-{ transform: [{ translateY: contentTranslateY }] }
-]}
->
-{/* Header inside card */}
+<Animated.View style={[styles.card, { transform: [{ translateY: contentTranslateY }] }]}>
+
+{/* TOAST — inside card, above title */}
+{toast && (
+  <Animated.View style={[styles.toastBox, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastAnim }]}>
+    <Ionicons name={toast.type === 'success' ? 'checkmark-circle-outline' : 'alert-circle-outline'} size={16} color="#FFF" />
+    <Text style={styles.toastText}>{toast.msg}</Text>
+  </Animated.View>
+)}
+
 <View style={styles.cardHeader}>
-<Text style={styles.cardTitle}>Enquiry form</Text>
+<Text style={styles.cardTitle}>Enquiry Form</Text>
 <Text style={styles.cardSubtitle}>Start your learning journey today</Text>
 </View>
 
-{/* Form Container */}
 <View style={styles.formContainer}>
 
-{/* Full Name Input */}
+{/* Full Name */}
 <View style={styles.inputGroup}>
-<Text style={styles.inputLabel}>Full Name</Text>
-<View style={styles.inputWrapper}>
-<Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-<TextInput
-style={styles.input}
-placeholder="John Doe"
-placeholderTextColor="#9CA3AF"
-value={signUpName}
-onChangeText={setSignUpName}
-/>
+<Text style={styles.inputLabel}>Full Name <Text style={styles.required}>*</Text></Text>
+<View style={[styles.inputWrapper, fieldErrors.name && styles.inputError]}>
+<Ionicons name="person-outline" size={20} color={fieldErrors.name ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+<TextInput style={styles.input} placeholder="John Doe" placeholderTextColor="#9CA3AF" value={signUpName} onChangeText={v => { setSignUpName(v); setFieldErrors(p => ({ ...p, name: false })); }} />
 </View>
 </View>
 
-{/* Email Input */}
+{/* Email */}
 <View style={styles.inputGroup}>
-<Text style={styles.inputLabel}>Email Address</Text>
-<View style={styles.inputWrapper}>
-<Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-<TextInput
-style={styles.input}
-placeholder="your@email.com"
-placeholderTextColor="#9CA3AF"
-keyboardType="email-address"
-autoCapitalize="none"
-value={signUpEmail}
-onChangeText={setSignUpEmail}
-/>
+<Text style={styles.inputLabel}>Email Address <Text style={styles.required}>*</Text></Text>
+<View style={[styles.inputWrapper, (fieldErrors.email || fieldErrors.emailInvalid) && styles.inputError]}>
+<Ionicons name="mail-outline" size={20} color={(fieldErrors.email || fieldErrors.emailInvalid) ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+<TextInput style={styles.input} placeholder="your@email.com" placeholderTextColor="#9CA3AF" keyboardType="email-address" autoCapitalize="none" value={signUpEmail} onChangeText={v => { setSignUpEmail(v); setFieldErrors(p => ({ ...p, email: false, emailInvalid: false })); }} />
 </View>
 </View>
 
-{/* Phone Number Input */}
+{/* Phone */}
 <View style={styles.inputGroup}>
-<Text style={styles.inputLabel}>Phone Number</Text>
-<View style={styles.inputWrapper}>
-<Ionicons name="call-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-<TextInput
-style={styles.input}
-placeholder="+91 9876543210"
-placeholderTextColor="#9CA3AF"
-keyboardType="phone-pad"
-value={signUpPhone}
-onChangeText={setSignUpPhone}
-/>
+<Text style={styles.inputLabel}>Phone Number <Text style={styles.required}>*</Text></Text>
+<View style={[styles.inputWrapper, (fieldErrors.phone || fieldErrors.phoneInvalid) && styles.inputError]}>
+<Ionicons name="call-outline" size={20} color={(fieldErrors.phone || fieldErrors.phoneInvalid) ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+<TextInput style={styles.input} placeholder="9876543210" placeholderTextColor="#9CA3AF" keyboardType="number-pad" maxLength={10} value={signUpPhone} onChangeText={v => { setSignUpPhone(v.replace(/\D/g, '')); setFieldErrors(p => ({ ...p, phone: false, phoneInvalid: false })); }} />
 </View>
 </View>
 
-{/* Message Input */}
+{/* Message */}
 <View style={styles.inputGroup}>
-<Text style={styles.inputLabel}>Message</Text>
-<View style={styles.inputWrapper}>
-<TextInput
-style={styles.input}
-placeholder="Write a message"
-placeholderTextColor="#9CA3AF"
-value={signUpMessage}
-onChangeText={setSignUpMessage}
-/>
+<Text style={styles.inputLabel}>Message <Text style={styles.required}>*</Text></Text>
+<View style={[styles.inputWrapper, { height: 80, alignItems: 'flex-start', paddingVertical: 12 }, fieldErrors.message && styles.inputError]}>
+<TextInput style={[styles.input, { height: 56, textAlignVertical: 'top' }]} placeholder="Write your message..." placeholderTextColor="#9CA3AF" multiline value={signUpMessage} onChangeText={v => { setSignUpMessage(v); setFieldErrors(p => ({ ...p, message: false })); }} />
 </View>
 </View>
 
-{/* Course Input */}
+{/* Source inline dropdown */}
 <View style={styles.inputGroup}>
-<Text style={styles.inputLabel}>Course</Text>
-
-<TouchableOpacity
-style={styles.inputWrapper}
-activeOpacity={0.8}
-onPress={() => setShowCourseModal(true)}
->
-<Text
-style={[
-styles.courseText,
-!signUpCourse && styles.placeholderText,
-]}
->
-{signUpCourse || 'Select Course'}
-</Text>
-
-<Ionicons
-name="chevron-down-outline"
-size={20}
-color="#9CA3AF"
-/>
+<Text style={styles.inputLabel}>How did you know about us? <Text style={styles.required}>*</Text></Text>
+<TouchableOpacity style={[styles.inputWrapper, fieldErrors.source && styles.inputError]} activeOpacity={0.8} onPress={() => { setShowSourceDrop(p => !p); setShowCourseDrop(false); }}>
+<Ionicons name={signUpSource === 'whatsapp' ? 'logo-whatsapp' : signUpSource === 'referral' ? 'people-outline' : 'globe-outline'} size={20} color={fieldErrors.source ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+<Text style={[styles.courseText, !signUpSource && styles.placeholderText]}>{signUpSource ? signUpSource.charAt(0).toUpperCase() + signUpSource.slice(1) : 'Select Source'}</Text>
+<Ionicons name={showSourceDrop ? 'chevron-up-outline' : 'chevron-down-outline'} size={20} color="#9CA3AF" />
 </TouchableOpacity>
+{showSourceDrop && (
+  <View style={styles.inlineDrop}>
+    {['website', 'whatsapp', 'referral'].map(src => (
+      <TouchableOpacity key={src} style={[styles.dropItem, signUpSource === src && styles.dropItemActive]} onPress={() => { setSignUpSource(src); setShowSourceDrop(false); setFieldErrors(p => ({ ...p, source: false })); }}>
+        <Ionicons name={src === 'whatsapp' ? 'logo-whatsapp' : src === 'referral' ? 'people-outline' : 'globe-outline'} size={16} color={signUpSource === src ? '#7B2CBF' : '#6B7280'} />
+        <Text style={[styles.dropItemText, signUpSource === src && styles.dropItemTextActive]}>{src.charAt(0).toUpperCase() + src.slice(1)}</Text>
+        {signUpSource === src && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+      </TouchableOpacity>
+    ))}
+  </View>
+)}
 </View>
 
-{/* Agreement checkbox */}
-<TouchableOpacity
-style={[styles.checkboxRow, styles.alignItemsStart]}
-onPress={() => setAgreeTerms(!agreeTerms)}
->
-<View style={[styles.checkbox, styles.checkboxMarginTop, agreeTerms && styles.checkboxChecked]}>
+{/* Course inline dropdown */}
+<View style={styles.inputGroup}>
+<Text style={styles.inputLabel}>Course <Text style={styles.required}>*</Text></Text>
+<TouchableOpacity style={[styles.inputWrapper, fieldErrors.course && styles.inputError]} activeOpacity={0.8} onPress={() => { setShowCourseDrop(p => !p); setShowSourceDrop(false); }}>
+<Ionicons name="book-outline" size={20} color={fieldErrors.course ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+<Text style={[styles.courseText, !signUpCourse && styles.placeholderText]} numberOfLines={1}>{signUpCourse || 'Select Course'}</Text>
+<Ionicons name={showCourseDrop ? 'chevron-up-outline' : 'chevron-down-outline'} size={20} color="#9CA3AF" />
+</TouchableOpacity>
+{showCourseDrop && (
+  <View style={[styles.inlineDrop, { maxHeight: 180 }]}>
+    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+      {courses.map(course => (
+        <TouchableOpacity key={course} style={[styles.dropItem, signUpCourse === course && styles.dropItemActive]} onPress={() => { setSignUpCourse(course); setShowCourseDrop(false); setFieldErrors(p => ({ ...p, course: false })); }}>
+          <Text style={[styles.dropItemText, signUpCourse === course && styles.dropItemTextActive]} numberOfLines={1}>{course}</Text>
+          {signUpCourse === course && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </View>
+)}
+</View>
+
+{/* Terms */}
+<TouchableOpacity style={[styles.checkboxRow, styles.alignItemsStart, { marginBottom: 4 }]} onPress={() => { setAgreeTerms(!agreeTerms); setFieldErrors(p => ({ ...p, terms: false })); }}>
+<View style={[styles.checkbox, styles.checkboxMarginTop, agreeTerms && styles.checkboxChecked, fieldErrors.terms && styles.checkboxError]}>
 {agreeTerms && <Ionicons name="checkmark" size={12} color="#FFF" />}
 </View>
-<Text style={styles.termsLabel}>
-I agree to the <Text style={styles.termsLink}>Terms & Conditions</Text> and <Text style={styles.termsLink}>Privacy Policy</Text>
-</Text>
+<Text style={styles.termsLabel}>I agree to the <Text style={styles.termsLink}>Terms & Conditions</Text> and <Text style={styles.termsLink}>Privacy Policy</Text></Text>
 </TouchableOpacity>
 
-{/* Create Account Button */}
-<TouchableOpacity
-style={styles.primaryButton}
-onPress={handleSignUpSubmit}
->
+{/* Submit */}
+<TouchableOpacity style={styles.primaryButton} onPress={handleSignUpSubmit}>
 <Text style={styles.primaryButtonText}>Send Enquiry</Text>
 </TouchableOpacity>
 
-{/* Social signup section removed */}
-
-{/* Footer */}
 <View style={styles.footerRow}>
-<Text style={styles.footerText}>
-Already have an account?{' '}
-<Text
-style={styles.footerLinkText}
-onPress={() => transitionTo('SIGN_IN')}
->
-Sign In
-</Text>
+<Text style={styles.footerText}>Already have an account?{' '}
+<Text style={styles.footerLinkText} onPress={() => transitionTo('SIGN_IN')}>Sign In</Text>
 </Text>
 </View>
 
 </View>
 </Animated.View>
-
-<Modal
-visible={showCourseModal}
-transparent
-animationType="fade"
->
-<TouchableOpacity
-style={styles.modalOverlay}
-activeOpacity={1}
-onPress={() => setShowCourseModal(false)}
->
-<View style={styles.modalContainer}>
-
-<Text style={styles.modalTitle}>
-Select Course
-</Text>
-
-<ScrollView>
-
-{courses.map((course) => (
-
-<TouchableOpacity
-key={course}
-style={styles.courseItem}
-onPress={() => {
-setSignUpCourse(course);
-setShowCourseModal(false);
-}}
->
-<Text style={styles.courseItemText}>
-{course}
-</Text>
-</TouchableOpacity>
-
-))}
-
-</ScrollView>
-
-</View>
-</TouchableOpacity>
-</Modal>
 <View style={styles.footerSpacer} />
 </ScrollView>
 </Animated.View>
@@ -891,50 +863,89 @@ fontSize: 12,
 fontWeight: '500',
 },
 
-// MOdal
+// MOdal / Dropdown
 courseText: {
 flex: 1,
 fontSize: 14,
 color: '#1F2937',
 },
-
 placeholderText: {
 color: '#9CA3AF',
 },
-
-modalOverlay: {
-flex: 1,
-backgroundColor: 'rgba(0,0,0,0.35)',
-justifyContent: 'center',
-alignItems: 'center',
+required: {
+color: '#EF4444',
 },
-
-modalContainer: {
-width: '90%',
-maxHeight: '60%',
+inputError: {
+borderColor: '#EF4444',
+borderWidth: 1.5,
+backgroundColor: '#FFF5F5',
+},
+checkboxError: {
+borderColor: '#EF4444',
+},
+inlineDrop: {
 backgroundColor: '#FFF',
-borderRadius: 18,
+borderWidth: 1,
+borderColor: '#E5E7EB',
+borderRadius: 12,
+marginTop: 4,
 overflow: 'hidden',
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 2 },
+shadowOpacity: 0.08,
+shadowRadius: 6,
+elevation: 4,
 },
-
-modalTitle: {
-fontSize: 18,
-fontWeight: '700',
-color: '#1F2937',
-padding: 20,
+dropItem: {
+flexDirection: 'row',
+alignItems: 'center',
+gap: 10,
+paddingVertical: 13,
+paddingHorizontal: 16,
 borderBottomWidth: 1,
 borderBottomColor: '#F3F4F6',
 },
-
-courseItem: {
-paddingVertical: 16,
-paddingHorizontal: 20,
-borderBottomWidth: 1,
-borderBottomColor: '#F3F4F6',
+dropItemActive: {
+backgroundColor: '#F3E8FF',
 },
-
-courseItemText: {
-fontSize: 16,
+dropItemText: {
+flex: 1,
+fontSize: 14,
 color: '#374151',
+},
+dropItemTextActive: {
+color: '#7B2CBF',
+fontWeight: '600',
+},
+toastBox: {
+flexDirection: 'row',
+alignItems: 'center',
+gap: 8,
+borderRadius: 12,
+paddingVertical: 12,
+paddingHorizontal: 16,
+marginBottom: 16,
+},
+toast: {
+flexDirection: 'row',
+alignItems: 'center',
+gap: 8,
+width: '100%',
+borderRadius: 12,
+paddingVertical: 12,
+paddingHorizontal: 16,
+marginBottom: 12,
+},
+toastSuccess: {
+backgroundColor: '#10B981',
+},
+toastError: {
+backgroundColor: '#EF4444',
+},
+toastText: {
+flex: 1,
+color: '#FFF',
+fontSize: 13,
+fontWeight: '600',
 },
 });

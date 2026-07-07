@@ -149,6 +149,14 @@ async function del(path: string) {
   return handleResponse(res);
 }
 
+async function patch(path: string) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+  });
+  return handleResponse(res);
+}
+
 export const api = {
   login: (email: string, password: string, role: string) =>
     post('/auth/login', { email, password, role }),
@@ -185,6 +193,7 @@ export const api = {
   getEnrollmentCount: (courseTitle: string) => get(`/enrollments/count/course?courseTitle=${encodeURIComponent(courseTitle.trim())}`),
 
   getEnquiries: () => get('/enquiries'),
+  markEnquiryRead: (id: number | string) => patch(`/enquiries/${id}/read`),
   submitEnquiry: (data: object) => post('/enquiries', data),
 
   getTeacherProfile: () => get('/teachers/profile'),
