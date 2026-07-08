@@ -50,8 +50,28 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   const [course, setCourse] = useState('');
   const [batch, setBatch] = useState('');
   const [fileType, setFileType] = useState('PDF');
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
+  const [showBatchDropdown, setShowBatchDropdown] = useState(false);
 
   const fileTypes = ['PDF', 'DOC', 'PPT', 'VIDEO', 'IMAGE', 'ZIP'];
+  const courseOptions = Array.from(
+    new Set([
+      ...(materials.map(item => item.course).filter(Boolean) as string[]),
+      'Course A',
+      'Course B',
+      'Course C',
+      course,
+    ].filter(Boolean))
+  );
+  const batchOptions = Array.from(
+    new Set([
+      ...(materials.map(item => item.batch).filter(Boolean) as string[]),
+      'Batch 1',
+      'Batch 2',
+      'Batch 3',
+      batch,
+    ].filter(Boolean))
+  );
 
   useEffect(() => {
     loadMaterials();
@@ -413,24 +433,68 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                   <Text style={styles.label}>
                     Course <Text style={styles.required}>*</Text>
                   </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter Course"
-                    value={course}
-                    onChangeText={setCourse}
-                  />
+                  <TouchableOpacity
+                    style={styles.dropdownButton}
+                    onPress={() => {
+                      setShowCourseDropdown(prev => !prev);
+                      setShowBatchDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownText, !course && styles.dropdownPlaceholder]}>
+                      {course || 'Select Course'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#64748B" />
+                  </TouchableOpacity>
+                  {showCourseDropdown && (
+                    <View style={styles.inlineDropdownList}>
+                      {courseOptions.map(option => (
+                        <TouchableOpacity
+                          key={option}
+                          style={styles.dropdownOption}
+                          onPress={() => {
+                            setCourse(option);
+                            setShowCourseDropdown(false);
+                          }}
+                        >
+                          <Text style={styles.dropdownOptionText}>{option}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.half}>
                   <Text style={styles.label}>
                     Batch <Text style={styles.required}>*</Text>
                   </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter Batch"
-                    value={batch}
-                    onChangeText={setBatch}
-                  />
+                  <TouchableOpacity
+                    style={styles.dropdownButton}
+                    onPress={() => {
+                      setShowBatchDropdown(prev => !prev);
+                      setShowCourseDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownText, !batch && styles.dropdownPlaceholder]}>
+                      {batch || 'Select Batch'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color="#64748B" />
+                  </TouchableOpacity>
+                  {showBatchDropdown && (
+                    <View style={styles.inlineDropdownList}>
+                      {batchOptions.map(option => (
+                        <TouchableOpacity
+                          key={option}
+                          style={styles.dropdownOption}
+                          onPress={() => {
+                            setBatch(option);
+                            setShowBatchDropdown(false);
+                          }}
+                        >
+                          <Text style={styles.dropdownOptionText}>{option}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
 
@@ -469,6 +533,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -744,6 +809,56 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
+  dropdownButton: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 0,
+  },
+
+  dropdownText: {
+    fontSize: 15,
+    color: '#1E2937',
+    flex: 1,
+  },
+
+  dropdownPlaceholder: {
+    color: '#94A3B8',
+  },
+
+  inlineDropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    maxHeight: 180,
+  },
+
+  dropdownOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+
+  dropdownOptionText: {
+    fontSize: 14,
+    color: '#334155',
+  },
+
   textArea: {
     height: 80,
     textAlignVertical: 'top',
@@ -756,6 +871,7 @@ const styles = StyleSheet.create({
 
   half: {
     flex: 1,
+    position: 'relative',
   },
 
   fileTypeContainer: {
