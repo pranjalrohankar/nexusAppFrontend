@@ -211,4 +211,8 @@ export const api = {
   getLoginHistory: (userId: number | string) => get(`/auth/login-history?userId=${userId}`),
   getSecuritySettings: (userId: number | string) => get(`/auth/security-settings?userId=${userId}`),
   updateSecuritySettings: (data: object) => put('/auth/security-settings', data),
+
+  // Student-specific endpoints
+  getStudentEnrollments: () => get('/student/enrollments'),
+  getStudentMaterials: () => get('/student/materials'),
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,12 +8,38 @@ import {
   Platform,
   TextInput,
   Alert,
+  ActivityIndicator,
+  Image,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ActiveTestScreen from './active-test-screen';
+import { api, getApiBaseUrl, loadToken } from '@/services/api';
 
 type SubTabType = 'MCQ' | 'StudyMaterial';
+
+interface Enrollment {
+  id: number;
+  courseTitle: string;
+  enrollmentDate: string;
+  paymentStatus: string;
+}
+
+interface RealMaterial {
+  id: number;
+  title: string;
+  description: string;
+  course: string;
+  batch: string;
+  fileType: string;
+  fileName: string;
+  fileUrl: string;
+  uploadedByEmail: string;
+  uploadedAt: string;
+}
+
+const API_BASE = getApiBaseUrl().replace('/api', '');
 
 export default function TestsScreen() {
   const [activeTab, setActiveTab] = useState<SubTabType>('MCQ');
@@ -26,31 +52,74 @@ export default function TestsScreen() {
     passScore: string;
   } | null>(null);
 
+  // Real data
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [allMaterials, setAllMaterials] = useState<RealMaterial[]>([]);
+  const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    await loadToken();
+    setEnrollmentsLoading(true);
+    setMaterialsLoading(true);
+    try {
+      const enrData = await api.getStudentEnrollments();
+      setEnrollments(Array.isArray(enrData) ? enrData : []);
+    } catch (e) {
+      console.warn('Enrollments fetch failed', e);
+    } finally {
+      setEnrollmentsLoading(false);
+    }
+    try {
+      const matData = await api.getStudentMaterials();
+      setAllMaterials(Array.isArray(matData) ? matData : []);
+    } catch (e) {
+      console.warn('Materials fetch failed', e);
+    } finally {
+      setMaterialsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
   if (activeTest !== null) {
     return <ActiveTestScreen testInfo={activeTest} onClose={() => setActiveTest(null)} />;
   }
 
-  // Course List data
-  const coursesList = [
-    {
-      id: 'c1',
-      title: 'Full Stack Web Development',
-      schedule: 'Mon, Wed, Fri - 7:00 PM',
-      instructor: 'Rajesh Kumar',
-    },
-    {
-      id: 'c2',
-      title: 'UI/UX Design Mastery',
-      schedule: 'Mon, Wed, Fri - 7:00 PM',
-      instructor: 'Amit Patel',
-    },
-    {
-      id: 'c3',
-      title: 'Data Science & Machine Learning',
-      schedule: 'Mon, Wed, Fri - 8:00 PM',
-      instructor: 'Priya Sharma',
+  // Helper: icon config per file type
+  const getFileIcon = (fileType: string) => {
+    switch ((fileType || '').toUpperCase()) {
+      case 'PDF':    return { icon: 'document-text-outline', bg: '#FEE2E2', color: '#EF4444' };
+      case 'PPT':    return { icon: 'easel-outline',          bg: '#FFF7ED', color: '#F97316' };
+      case 'DOC':    return { icon: 'document-outline',       bg: '#E0F2FE', color: '#0284C7' };
+      case 'VIDEO':  return { icon: 'videocam-outline',       bg: '#FAF0FD', color: '#7B2CBF' };
+      case 'IMAGE':  return { icon: 'image-outline',          bg: '#F0FDF4', color: '#16A34A' };
+      case 'ZIP':    return { icon: 'archive-outline',        bg: '#FEF3C7', color: '#D97706' };
+      default:       return { icon: 'document-outline',       bg: '#F3F4F6', color: '#6B7280' };
     }
-  ];
+  };
+
+  const isImage = (fileType: string, fileName: string) => {
+    if ((fileType || '').toUpperCase() === 'IMAGE') return true;
+    const ext = (fileName || '').split('.').pop()?.toLowerCase() ?? '';
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
+  };
+
+  const handleOpenMaterial = async (item: RealMaterial) => {
+    try {
+      const url = item.fileUrl
+        ? item.fileUrl.startsWith('http') ? item.fileUrl : `${API_BASE}${item.fileUrl}`
+        : null;
+      if (!url) { Alert.alert('Unavailable', 'No file available.'); return; }
+      if (Platform.OS === 'web') {
+        const a = document.createElement('a');
+        a.href = url; a.download = item.fileName || 'file';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch { Alert.alert('Error', 'Could not open file.'); }
+  };
 
   // MCQ Tests data
   const mcqTests = [
@@ -126,161 +195,24 @@ export default function TestsScreen() {
     }
   ];
 
-  interface StudyMaterialItem {
-    id: string;
-    title: string;
-    author: string;
-    category: string;
-    date: string;
-    type: string;
-    downloads: string;
-    size: string;
-    icon: string;
-    iconBg: string;
-    iconColor: string;
-  }
-
-  // Study Materials Data
-  const studyMaterialsData: Record<string, StudyMaterialItem[]> = {
-    'Full Stack Web Development': [
-      {
-        id: 'm1',
-        title: 'React Hooks Complete Guide',
-        author: 'Prof. Sarah Johnson',
-        category: 'Advanced Web Technologies',
-        date: 'Nov 20, 2024',
-        type: 'PDF',
-        downloads: '156',
-        size: '4.2 MB',
-        icon: 'document-text-outline',
-        iconBg: '#FEE2E2',
-        iconColor: '#EF4444',
-      },
-      {
-        id: 'm2',
-        title: 'Redux State Management Slides',
-        author: 'Prof. Sarah Johnson',
-        category: 'Advanced Web Technologies',
-        date: 'Nov 18, 2024',
-        type: 'PPT',
-        downloads: '142',
-        size: '8.5 MB',
-        icon: 'easel-outline',
-        iconBg: '#FFF7ED',
-        iconColor: '#F97316',
-      },
-      {
-        id: 'm3',
-        title: 'API Design Best Practices',
-        author: 'Dr. James Wilson',
-        category: 'Node.js Backend Development',
-        date: 'Nov 15, 2024',
-        type: 'DOC',
-        downloads: '173',
-        size: '2.1 MB',
-        icon: 'document-outline',
-        iconBg: '#E0F2FE',
-        iconColor: '#0284C7',
-      },
-      {
-        id: 'm4',
-        title: 'CSS Animation Examples',
-        author: 'Prof. Emily Davis',
-        category: 'React & Modern Frontend',
-        date: 'Nov 12, 2024',
-        type: 'ZIP',
-        downloads: '167',
-        size: '15.3 MB',
-        icon: 'archive-outline',
-        iconBg: '#FEF3C7',
-        iconColor: '#D97706',
-      },
-    ],
-    'UI/UX Design Mastery': [
-      {
-        id: 'm5',
-        title: 'Figma Design Systems Guide',
-        author: 'Amit Patel',
-        category: 'UI/UX Design Mastery',
-        date: 'Nov 22, 2024',
-        type: 'PDF',
-        downloads: '210',
-        size: '12.4 MB',
-        icon: 'color-palette-outline',
-        iconBg: '#FAF0FD',
-        iconColor: '#7B2CBF',
-      },
-      {
-        id: 'm6',
-        title: 'User Persona Templates',
-        author: 'Amit Patel',
-        category: 'UX Research & Design',
-        date: 'Nov 19, 2024',
-        type: 'ZIP',
-        downloads: '95',
-        size: '6.2 MB',
-        icon: 'archive-outline',
-        iconBg: '#FEF3C7',
-        iconColor: '#D97706',
-      }
-    ],
-    'Data Science & Machine Learning': [
-      {
-        id: 'm7',
-        title: 'Neural Networks Workbook',
-        author: 'Dr. Michael Chen',
-        category: 'Machine Learning Basics',
-        date: 'Nov 17, 2024',
-        type: 'PDF',
-        downloads: '198',
-        size: '6.8 MB',
-        icon: 'analytics-outline',
-        iconBg: '#FEE2E2',
-        iconColor: '#EF4444',
-      },
-      {
-        id: 'm8',
-        title: 'Docker Setup Tutorial Video',
-        author: 'Prof. Lisa Anderson',
-        category: 'DevOps & CI/CD',
-        date: 'Nov 13, 2024',
-        type: 'VIDEO',
-        downloads: '89',
-        size: '125 MB',
-        icon: 'videocam-outline',
-        iconBg: '#FAF0FD',
-        iconColor: '#7B2CBF',
-      },
-      {
-        id: 'm9',
-        title: 'GraphQL Schema Design',
-        author: 'Dr. Robert Taylor',
-        category: 'API Design & Development',
-        date: 'Nov 10, 2024',
-        type: 'PDF',
-        downloads: '124',
-        size: '5.0 MB',
-        icon: 'document-text-outline',
-        iconBg: '#FEE2E2',
-        iconColor: '#EF4444',
-      }
-    ]
-  };
-
-  const handleDownload = (title: string, size: string) => {
-    Alert.alert(
-      'Download Started',
-      `Downloading "${title}" (${size})...`,
-      [{ text: 'OK' }]
-    );
-  };
-
+  // Materials for the selected course, filtered by search.
+  // Uses partial matching so "Java" matches "Java Full Stack Development" and vice versa.
   const currentMaterialsList = selectedCourseForMaterials
-    ? (studyMaterialsData[selectedCourseForMaterials] || []).filter(m => 
-        m.title.toLowerCase().includes(materialSearchQuery.toLowerCase()) ||
-        m.author.toLowerCase().includes(materialSearchQuery.toLowerCase()) ||
-        m.category.toLowerCase().includes(materialSearchQuery.toLowerCase())
-      )
+    ? allMaterials.filter(m => {
+        const matCourse = (m.course ?? '').toLowerCase().trim();
+        const selCourse = selectedCourseForMaterials.toLowerCase().trim();
+        // match if either string contains the other
+        const courseMatch = matCourse === selCourse
+          || matCourse.includes(selCourse)
+          || selCourse.includes(matCourse);
+        const q = materialSearchQuery.toLowerCase();
+        if (!q) return courseMatch;
+        return courseMatch && (
+          m.title?.toLowerCase().includes(q) ||
+          m.description?.toLowerCase().includes(q) ||
+          m.batch?.toLowerCase().includes(q)
+        );
+      })
     : [];
 
   const handleBackAction = () => {
@@ -439,35 +371,45 @@ export default function TestsScreen() {
         ) : (
           // STUDY MATERIAL FLOW
           selectedCourseForMaterials === null ? (
-            // Course List under Study Materials
+            // Course List — from real enrollments
             <View style={styles.listContainer}>
-              {coursesList.map((course) => (
-                <TouchableOpacity 
-                  key={course.id} 
-                  style={styles.courseCard}
-                  onPress={() => setSelectedCourseForMaterials(course.title)}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.courseInfo}>
-                    <Text style={styles.courseTitle}>{course.title}</Text>
-                    <View style={styles.courseScheduleRow}>
-                      <Ionicons name="time-outline" size={14} color="#E9D5FF" />
-                      <Text style={styles.courseScheduleText}>{course.schedule}</Text>
+              {enrollmentsLoading ? (
+                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                  <ActivityIndicator size="large" color="#7B2CBF" />
+                  <Text style={styles.noDataText}>Loading your courses...</Text>
+                </View>
+              ) : enrollments.length === 0 ? (
+                <Text style={styles.noDataText}>You are not enrolled in any courses yet.</Text>
+              ) : (
+                enrollments.map((enr) => (
+                  <TouchableOpacity
+                    key={enr.id}
+                    style={styles.courseCard}
+                    onPress={() => setSelectedCourseForMaterials(enr.courseTitle)}
+                    activeOpacity={0.9}
+                  >
+                    <View style={styles.courseInfo}>
+                      <Text style={styles.courseTitle}>{enr.courseTitle}</Text>
+                      {enr.enrollmentDate ? (
+                        <View style={styles.courseScheduleRow}>
+                          <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
+                          <Text style={styles.courseScheduleText}>Enrolled: {enr.enrollmentDate}</Text>
+                        </View>
+                      ) : null}
+                      {/* <Text style={styles.courseInstructorLabel}>
+                        Status: <Text style={{ fontWeight: 'bold', color: '#FFF' }}>{enr.paymentStatus || '—'}</Text>
+                      </Text> */}
                     </View>
-                    <Text style={styles.courseInstructorLabel}>
-                      Instructor: <Text style={{ fontWeight: 'bold', color: '#FFF' }}>{course.instructor}</Text>
-                    </Text>
-                  </View>
-                  <View style={styles.courseArrowBtn}>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                  </View>
-                </TouchableOpacity>
-              ))}
+                    <View style={styles.courseArrowBtn}>
+                      <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
           ) : (
-            // Material Details List for selected course
+            // Material list for selected course
             <View style={styles.listContainer}>
-              {/* Search Wrapper */}
               <View style={styles.searchWrapper}>
                 <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
                 <TextInput
@@ -479,48 +421,82 @@ export default function TestsScreen() {
                 />
               </View>
 
-              {currentMaterialsList.length > 0 ? (
-                currentMaterialsList.map((material) => (
-                  <View key={material.id} style={styles.materialCard}>
-                    {/* Header Row */}
-                    <View style={styles.materialHeader}>
-                      <View style={[styles.materialIconContainer, { backgroundColor: material.iconBg }]}>
-                        <Ionicons name={material.icon as any} size={24} color={material.iconColor} />
-                      </View>
-                      <View style={styles.materialTitleWrapper}>
-                        <Text style={styles.materialTitle}>{material.title}</Text>
-                        <Text style={styles.materialAuthor}>{material.author}</Text>
-                        <View style={styles.materialTagRow}>
-                          <Ionicons name="book-outline" size={12} color="#7B2CBF" />
-                          <Text style={styles.materialTagText}>{material.category}</Text>
+              {materialsLoading ? (
+                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                  <ActivityIndicator size="large" color="#7B2CBF" />
+                  <Text style={styles.noDataText}>Loading materials...</Text>
+                </View>
+              ) : currentMaterialsList.length === 0 ? (
+                <Text style={styles.noDataText}>
+                  {materialSearchQuery ? 'No materials match your search.' : 'No study materials uploaded for this course yet.'}
+                </Text>
+              ) : (
+                currentMaterialsList.map((material) => {
+                  const fi = getFileIcon(material.fileType);
+                  const img = isImage(material.fileType, material.fileName);
+                  const imgUrl = material.fileUrl
+                    ? material.fileUrl.startsWith('http') ? material.fileUrl : `${API_BASE}${material.fileUrl}`
+                    : null;
+                  return (
+                    <View key={material.id} style={styles.materialCard}>
+                      {/* Image preview for IMAGE files */}
+                      {img && imgUrl ? (
+                        <Image
+                          source={{ uri: imgUrl }}
+                          style={{ width: '100%', height: 160, borderRadius: 12, marginBottom: 14 }}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+
+                      {/* Header Row */}
+                      <View style={styles.materialHeader}>
+                        <View style={[styles.materialIconContainer, { backgroundColor: fi.bg }]}>
+                          <Ionicons name={fi.icon as any} size={24} color={fi.color} />
+                        </View>
+                        <View style={styles.materialTitleWrapper}>
+                          <Text style={styles.materialTitle}>{material.title}</Text>
+                          {material.description ? (
+                            <Text style={styles.materialAuthor} numberOfLines={2}>{material.description}</Text>
+                          ) : null}
+                          <View style={styles.materialTagRow}>
+                            <Ionicons name="folder-outline" size={12} color="#7B2CBF" />
+                            <Text style={styles.materialTagText}>{material.batch || material.course}</Text>
+                          </View>
                         </View>
                       </View>
-                    </View>
 
-                    {/* Metadata Row */}
-                    <View style={styles.materialMetaRow}>
-                      <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
-                      <Text style={styles.materialMetaText}>{material.date}</Text>
-                      <Text style={styles.materialMetaText}>|</Text>
-                      <Ionicons name="document-outline" size={12} color="#9CA3AF" />
-                      <Text style={styles.materialMetaText}>{material.type}</Text>
-                      <Text style={styles.materialMetaText}>|</Text>
-                      <Ionicons name="download-outline" size={12} color="#9CA3AF" />
-                      <Text style={styles.materialMetaText}>{material.downloads} downloads</Text>
-                    </View>
+                      {/* Metadata Row */}
+                      <View style={styles.materialMetaRow}>
+                        {material.uploadedByEmail ? (
+                          <Text style={styles.materialMetaText}>{material.uploadedByEmail}</Text>
+                        ) : null}
+                        {material.uploadedByEmail && material.uploadedAt ? (
+                          <Text style={styles.materialMetaText}>|</Text>
+                        ) : null}
+                        {material.uploadedAt ? (
+                          <>
+                            <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
+                            <Text style={styles.materialMetaText}>
+                              {new Date(material.uploadedAt).toLocaleDateString()}
+                            </Text>
+                          </>
+                        ) : null}
+                        <Text style={styles.materialMetaText}>|</Text>
+                        <Ionicons name="document-outline" size={12} color="#9CA3AF" />
+                        <Text style={styles.materialMetaText}>{material.fileType?.toUpperCase() || 'FILE'}</Text>
+                      </View>
 
-                    {/* Download Button */}
-                    <TouchableOpacity 
-                      style={styles.downloadButton}
-                      onPress={() => handleDownload(material.title, material.size)}
-                    >
-                      <Ionicons name="cloud-download-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.downloadButtonText}>Download ({material.size})</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.noDataText}>No study materials found.</Text>
+                      {/* Open / Download Button */}
+                      <TouchableOpacity
+                        style={styles.downloadButton}
+                        onPress={() => handleOpenMaterial(material)}
+                      >
+                        <Ionicons name={img ? 'eye-outline' : 'cloud-download-outline'} size={18} color="#FFFFFF" />
+                        <Text style={styles.downloadButtonText}>{img ? 'View Image' : 'Open / Download'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })
               )}
             </View>
           )

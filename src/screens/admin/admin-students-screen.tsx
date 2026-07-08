@@ -68,6 +68,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [formGuardianName, setFormGuardianName] = useState('');
   const [formGuardianPhone, setFormGuardianPhone] = useState('');
   const [formCourse, setFormCourse] = useState('Data Science & Machine Learning');
+  const [formBatchName, setFormBatchName] = useState('');
   const [formEnrollmentDate, setFormEnrollmentDate] = useState('2026-06-02');
   const [formPaymentStatus, setFormPaymentStatus] = useState('Paid');
   const [formPassword, setFormPassword] = useState('');
@@ -78,10 +79,12 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     return cached.length > 0 ? cached.slice().reverse() : [];
   });
   const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
+  const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string }[]>([]);
   const [loading, setLoading] = useState(adminDataCache.students.length === 0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 5;
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
+  const [showBatchDropdown, setShowBatchDropdown] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -102,6 +105,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     }
     loadStudents();
     loadCourses();
+    loadBatches();
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
   }, []);
 
@@ -140,6 +144,20 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     }
   };
 
+  const loadBatches = async () => {
+    try {
+      const data = await api.getBatches();
+      const list = Array.isArray(data) ? data : [];
+      setBatches(list.map((b: any) => ({
+        id: b.id,
+        batchName: b.batchName,
+        selectCourse: b.selectCourse,
+      })));
+    } catch (err) {
+      console.error('Failed to load batches', err);
+    }
+  };
+
   const filteredStudents = students.filter(student => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
@@ -169,10 +187,12 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormGuardianName('');
     setFormGuardianPhone('');
     setFormCourse('');
+    setFormBatchName('');
     setFormEnrollmentDate(new Date().toISOString().split('T')[0]);
     setFormPaymentStatus('Pending');
     setFormPassword('');
     setShowCourseDropdown(false);
+    setShowBatchDropdown(false);
     setIsModalVisible(true);
   };
 
@@ -266,6 +286,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           course: formCourse,
           enrollmentDate: formEnrollmentDate,
           paymentStatus: formPaymentStatus,
+          batchName: formBatchName,
           role: 'STUDENT',
         });
         if (res.success) {
@@ -686,6 +707,50 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                             )}
                           </TouchableOpacity>
                         ))
+                      )}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+              {/* Batch dropdown — filtered to the selected course */}
+              <View style={[styles.formGroup, { zIndex: 900 }]}>
+                <Text style={styles.fieldLabel}>Batch</Text>
+                <TouchableOpacity
+                  style={styles.modalInputDropdown}
+                  onPress={() => setShowBatchDropdown(!showBatchDropdown)}
+                >
+                  <Text style={[styles.dropdownText, !formBatchName && styles.dropdownPlaceholder]}>
+                    {formBatchName || 'Select a batch (optional)'}
+                  </Text>
+                  <Ionicons name={showBatchDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+                {showBatchDropdown && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+                      {/* "None" option */}
+                      <TouchableOpacity
+                        style={styles.dropdownItem}
+                        onPress={() => { setFormBatchName(''); setShowBatchDropdown(false); }}
+                      >
+                        <Text style={styles.dropdownItemText}>— No batch —</Text>
+                        {!formBatchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                      </TouchableOpacity>
+                      {batches
+                        .filter(b => !formCourse || b.selectCourse?.toLowerCase().includes(formCourse.toLowerCase()) || formCourse.toLowerCase().includes(b.selectCourse?.toLowerCase() ?? ''))
+                        .map(b => (
+                          <TouchableOpacity
+                            key={b.id}
+                            style={styles.dropdownItem}
+                            onPress={() => { setFormBatchName(b.batchName); setShowBatchDropdown(false); }}
+                          >
+                            <Text style={styles.dropdownItemText}>{b.batchName}</Text>
+                            {formBatchName === b.batchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                          </TouchableOpacity>
+                        ))}
+                      {batches.filter(b => !formCourse || b.selectCourse?.toLowerCase().includes(formCourse.toLowerCase()) || formCourse.toLowerCase().includes(b.selectCourse?.toLowerCase() ?? '')).length === 0 && (
+                        <View style={styles.dropdownItem}>
+                          <Text style={[styles.dropdownItemText, { color: '#9CA3AF' }]}>No batches for this course</Text>
+                        </View>
                       )}
                     </ScrollView>
                   </View>
