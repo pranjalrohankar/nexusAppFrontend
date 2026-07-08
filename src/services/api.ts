@@ -146,7 +146,12 @@ async function del(path: string) {
     method: 'DELETE',
     headers: buildHeaders(),
   });
-  return handleResponse(res);
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('DELETE Error:', res.status, text);
+    throw new Error(`HTTP ${res.status}: ${text}`);
+  }
+  return { success: true };
 }
 
 async function patch(path: string) {
@@ -199,6 +204,8 @@ export const api = {
   getTeacherProfile: () => get('/teachers/profile'),
   updateTeacherProfile: (data: object) => put('/teachers/profile', data),
   getMyBatches: () => get('/teachers/my-batches'),
+  getMyCoursesBatches: (course?: string) =>
+    get(`/teachers/my-courses-batches${course ? `?course=${encodeURIComponent(course)}` : ''}`),
 
   getStudyMaterials: () => get('/materials'),
   getStudyMaterialsByCourse: (course: string) => get(`/materials/by-course?course=${encodeURIComponent(course)}`),
@@ -207,6 +214,8 @@ export const api = {
 
   getClassRecordings: () => get('/recordings'),
   uploadClassRecording: (data: FormData) => postFormData('/recordings/upload', data),
+  getRecordingStreamUrl: (id: number) => `${BASE_URL}/recordings/stream/${id}`,
+  deleteClassRecording: (id: number | string) => del(`/recordings/${id}`),
 
   getLoginHistory: (userId: number | string) => get(`/auth/login-history?userId=${userId}`),
   getSecuritySettings: (userId: number | string) => get(`/auth/security-settings?userId=${userId}`),
