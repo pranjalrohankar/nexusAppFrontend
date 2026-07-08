@@ -316,11 +316,11 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
             </Text>
           ) : (
             filteredMaterials.map(item => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.materialCard}
-                onPress={() => handleOpenMaterial(item)}
-              >
+              <View key={item.id} style={styles.materialCard}>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                  onPress={() => handleOpenMaterial(item)}
+                >
                 <View style={styles.materialIcon}>
                   <Ionicons
                     name={item.type === 'PDF' ? 'document-text' : 'reader'}
@@ -345,16 +345,15 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                   </View>
                 </View>
 
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.deleteBtn}
-                  onPress={event => {
-                    event.stopPropagation();
-                    handleDelete(item.id);
-                  }}
+                  onPress={() => handleDelete(item.id)}
                 >
                   <Ionicons name="trash-outline" size={20} color="#EF4444" />
                 </TouchableOpacity>
-              </TouchableOpacity>
+              </View>
             ))
           )}
         </View>
