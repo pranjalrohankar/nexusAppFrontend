@@ -13,9 +13,9 @@ import TeacherDashboardScreen from '@/screens/teacher/teacher-dashboard-screen';
 import TeacherScheduleScreen from '@/screens/teacher/teacher-schedule-screen';
 import UploadRecordingScreen from '@/screens/teacher/upload-recording-screen';
 import TestsScreen from '@/screens/tests/tests-screen';
-import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useEffect, useRef } from 'react';
 import { api } from '@/services/api';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
   Platform,
@@ -152,6 +152,24 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
 
   const tabs = getTabsConfig();
 
+  const handleTabPress = (idx: number, tabName: string) => {
+    if (showUploadRecording) {
+      setShowUploadRecording(false);
+    }
+    if (showStudyMaterials) {
+      setShowStudyMaterials(false);
+    }
+
+    if (idx === activeIndex) {
+      setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
+    } else {
+      setActiveIndex(idx);
+      if (tabName === 'Profile') {
+        setProfileSubView('profile');
+      }
+    }
+  };
+
   // Render correct screen component based on active tab
   const renderScreen = () => {
     if (userRole === 'teacher') {
@@ -259,14 +277,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
                   <TouchableOpacity
                     key={idx}
                     style={[styles.tabButton, isActive && styles.tabButtonActive]}
-                    onPress={() => {
-                      if (idx === activeIndex) {
-                        setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
-                      } else {
-                        setActiveIndex(idx);
-                        if (tab.name === 'Profile') setProfileSubView('profile');
-                      }
-                    }}
+                    onPress={() => handleTabPress(idx, tab.name)}
                   >
                     <Ionicons
                       name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
@@ -308,10 +319,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
                 <TouchableOpacity
                   key={idx}
                   style={[styles.webNavLink, isActive && styles.webNavLinkActive]}
-                  onPress={() => {
-                    setActiveIndex(idx);
-                    if (tab.name === 'Profile') setProfileSubView('profile');
-                  }}
+                  onPress={() => handleTabPress(idx, tab.name)}
                 >
                   <Ionicons
                     name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
@@ -357,16 +365,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
               <TouchableOpacity
                 key={idx}
                 style={[styles.tabButton, isActive && styles.tabButtonActive]}
-                onPress={() => {
-                  if (idx === activeIndex) {
-                    setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
-                  } else {
-                    setActiveIndex(idx);
-                    if (tab.name === 'Profile') {
-                      setProfileSubView('profile');
-                    }
-                  }
-                }}
+                onPress={() => handleTabPress(idx, tab.name)}
               >
                 <Ionicons
                   name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
