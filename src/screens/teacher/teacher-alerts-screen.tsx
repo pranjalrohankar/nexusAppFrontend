@@ -8,9 +8,11 @@ import {
   Switch,
   Platform,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface AlertItem {
   id: string;
@@ -41,8 +43,22 @@ export default function TeacherAlertsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* HEADER */}
       <View style={styles.header}>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <Text style={styles.headerTitle}>Alerts</Text>
         <Text style={styles.headerSubtitle}>Stay updated with your classes.</Text>
       </View>
@@ -55,7 +71,7 @@ export default function TeacherAlertsScreen() {
         {/* PREFERENCE TOGGLES */}
         <View style={styles.preferenceCard}>
           <Text style={styles.cardTitle}>Notification Preferences</Text>
-          
+
           {/* Toggle 1: Push */}
           <View style={styles.toggleRow}>
             <View style={styles.toggleTextCol}>
@@ -139,18 +155,24 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 24,
+    paddingTop: 8,
+  },
+  headerAccentLine: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   headerSubtitle: {
     fontSize: 13,
+    fontWeight: '600',
     color: '#E9D5FF',
-    marginTop: 6,
+    marginTop: 3,
   },
   scrollView: {
     flex: 1,

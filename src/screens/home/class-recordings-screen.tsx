@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,170 +7,184 @@ import {
   ScrollView,
   TextInput,
   Platform,
+  Modal,
+  Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Video, ResizeMode } from 'expo-av';
+import { api, getApiBaseUrl } from '@/services/api';
 
-export interface RecordingItem {
-  id: string;
-  title: string;
-  teacher: string;
-  category: string;
-  date: string;
-  duration: string;
-  views: string;
-  fileSize: string;
-  themeColor: string;
-}
+const API_BASE = getApiBaseUrl().replace('/api', '');
+const IS_WEB = Platform.OS === 'web';
 
 interface ClassRecordingsScreenProps {
   onBack: () => void;
 }
 
-const recordingsData: RecordingItem[] = [
-  {
-    id: '1',
-    title: 'Introduction to React Hooks',
-    teacher: 'Prof. Sarah Johnson',
-    category: 'Advanced Web Technologies',
-    date: 'Nov 20, 2024',
-    duration: '1:45:20',
-    views: '245 views',
-    fileSize: '850 MB',
-    themeColor: '#8B5CF6',
-  },
-  {
-    id: '2',
-    title: 'State Management with Redux',
-    teacher: 'Prof. Sarah Johnson',
-    category: 'Advanced Web Technologies',
-    date: 'Nov 18, 2024',
-    duration: '2:10:15',
-    views: '199 views',
-    fileSize: '1.2 GB',
-    themeColor: '#6366F1',
-  },
-  {
-    id: '3',
-    title: 'Neural Networks Fundamentals',
-    teacher: 'Dr. Michael Chen',
-    category: 'Machine Learning Basics',
-    date: 'Nov 17, 2024',
-    duration: '1:55:45',
-    views: '312 views',
-    fileSize: '950 MB',
-    themeColor: '#FFB703',
-  },
-  {
-    id: '4',
-    title: 'Building REST APIs',
-    teacher: 'Dr. James Wilson',
-    category: 'Node.js Backend Development',
-    date: 'Nov 15, 2024',
-    duration: '3:05:20',
-    views: '278 views',
-    fileSize: '1.1 GB',
-    themeColor: '#10B981',
-  },
-  {
-    id: '5',
-    title: 'Docker and Containerization',
-    teacher: 'Prof. Lisa Anderson',
-    category: 'DevOps & CI/CD',
-    date: 'Nov 13, 2024',
-    duration: '1:40:10',
-    views: '189 views',
-    fileSize: '780 MB',
-    themeColor: '#3B82F6',
-  },
-  {
-    id: '6',
-    title: 'Advanced CSS Animations',
-    teacher: 'Prof. Emily Davis',
-    category: 'React & Modern Frontend',
-    date: 'Nov 12, 2024',
-    duration: '1:33:25',
-    views: '234 views',
-    fileSize: '650 MB',
-    themeColor: '#EC4899',
-  },
-  {
-    id: '7',
-    title: 'GraphQL Query Optimization',
-    teacher: 'Dr. Robert Taylor',
-    category: 'API Design & Development',
-    date: 'Nov 10, 2024',
-    duration: '1:50:35',
-    views: '166 views',
-    fileSize: '890 MB',
-    themeColor: '#8B5CF6',
-  },
-  {
-    id: '8',
-    title: 'Data Visualization with D3.js',
-    teacher: 'Dr. Kevin Brown',
-    category: 'Data Science with Python',
-    date: 'Nov 8, 2024',
-    duration: '2:18:40',
-    views: '287 views',
-    fileSize: '1.3 GB',
-    themeColor: '#10B981',
-  },
-];
+interface RecordingItem {
+  id: number;
+  title: string;
+  course: string;
+  batch: string;
+  classDate?: string;
+  duration?: string;
+  uploadedAt?: string;
+}
 
-const filterCategories = [
-  'All',
-  'UI/UX',
-  'Advanced Web Technologies',
-  'Machine Learning Basics',
-  'Node.js Backend Development',
-  'DevOps & CI/CD',
-  'React & Modern Frontend',
-  'API Design & Development',
-  'Data Science with Python',
-];
+const THEME_COLORS = ['#8B5CF6', '#6366F1', '#F59E0B', '#10B981', '#3B82F6', '#EC4899'];
 
-export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+// Shared full-screen video modal
+function VideoModal({
+  visible,
+  uri,
+  title,
+  onClose,
+}: {
+  visible: boolean;
+  uri: string | null;
+  title: string;
+  onClose: () => void;
+}) {
+  const [playerSize, setPlayerSize] = useState({ w: 0, h: 0 });
 
-  // Filter recordings based on search query and category
-  const filteredRecordings = recordingsData.filter((rec) => {
-    const matchesCategory = selectedCategory === 'All' || rec.category === selectedCategory;
-    const matchesSearch =
-      rec.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rec.teacher.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rec.category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const handleClose = () => { setPlayerSize({ w: 0, h: 0 }); onClose(); };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={{ width: '100%', maxWidth: Platform.OS === 'web' ? 1200 : undefined, alignSelf: 'center' }}>
-          <View style={styles.headerTopRow}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
-              <Ionicons name="arrow-back" size={24} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.headerTitle}>Class Recordings</Text>
-          <Text style={styles.headerSubtitle}>Watch previous lectures anytime</Text>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={handleClose}
+      transparent={false}
+      statusBarTranslucent
+    >
+      <View style={vm.root}>
+        <View style={vm.header}>
+          <TouchableOpacity onPress={handleClose} style={vm.closeBtn}>
+            <Ionicons name="close" size={24} color="#1E2937" />
+          </TouchableOpacity>
+          <Text style={vm.titleText} numberOfLines={1}>{title}</Text>
         </View>
+
+        <View
+          style={vm.playerArea}
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
+          }}
+        >
+          {uri && playerSize.w > 0 ? (
+            <Video
+              source={{ uri }}
+              style={{
+                width: playerSize.w,
+                height: playerSize.h,
+                backgroundColor: '#000',
+              }}
+              videoStyle={{ width: '100%', height: '100%' } as any}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              onError={() => { Alert.alert('Playback Error', 'Unable to play this video.'); handleClose(); }}
+            />
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const vm = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingTop: Platform.OS === 'android' ? 44 : 14,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  closeBtn: {
+    width: 40, height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  titleText: { flex: 1, fontSize: 17, fontWeight: '700', color: '#1E2937' },
+  playerArea: { flex: 1, backgroundColor: '#000' },
+});
+
+export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenProps) {
+  const { width: winWidth } = useWindowDimensions();
+  const isDesktop = IS_WEB && winWidth >= 1024;
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [recordings, setRecordings] = useState<RecordingItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState('');
+
+  useEffect(() => { loadRecordings(); }, []);
+
+  const loadRecordings = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getClassRecordings();
+      if (Array.isArray(data)) {
+        setRecordings(
+          data.sort((a: any, b: any) =>
+            new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+          )
+        );
+      }
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  const getStreamUrl = (id: number) => `${API_BASE}/api/recordings/stream/${id}`;
+
+  const filterCategories = ['All', ...Array.from(new Set(recordings.map(r => r.course).filter(Boolean)))];
+
+  const filtered = recordings.filter(rec => {
+    const q = searchQuery.toLowerCase();
+    return (
+      (rec.title.toLowerCase().includes(q) || rec.course.toLowerCase().includes(q) || rec.batch.toLowerCase().includes(q)) &&
+      (selectedCategory === 'All' || rec.course === selectedCategory)
+    );
+  });
+
+  const formatDate = (iso?: string) =>
+    iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+
+  return (
+    <SafeAreaView style={s.safeArea} edges={['top']}>
+      <View style={s.header}>
+        <View style={s.headerTopRow}>
+          <TouchableOpacity style={s.backButton} onPress={onBack}>
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+        <Text style={s.headerTitle}>Class Recordings</Text>
+        <Text style={s.headerSubtitle}>Watch previous lectures anytime</Text>
       </View>
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        style={s.scrollView}
+        contentContainerStyle={[s.scrollContent, isDesktop && s.scrollDesktop]}
         showsVerticalScrollIndicator={false}
       >
-        {/* SEARCH & FILTERS BOX */}
-        <View style={styles.searchContainer}>
-          {/* Search bar */}
-          <View style={styles.searchWrapper}>
-            <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
+        {/* Search & Filters */}
+        <View style={s.searchContainer}>
+          <View style={s.searchWrapper}>
+            <Ionicons name="search-outline" size={20} color="#9CA3AF" style={{ marginRight: 8 }} />
             <TextInput
-              style={styles.searchInput}
+              style={s.searchInput}
               placeholder="Search recordings..."
               placeholderTextColor="#9CA3AF"
               value={searchQuery}
@@ -182,119 +196,102 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Chips categories */}
-          <View style={styles.chipsWrapper}>
-            <TouchableOpacity style={styles.filterIconButton}>
-              <Ionicons name="funnel-outline" size={18} color="#7B2CBF" />
-            </TouchableOpacity>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipsScrollContent}
-            >
-              {filterCategories.map((cat) => {
-                const isSelected = selectedCategory === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.chip, isSelected && styles.chipActive]}
-                    onPress={() => setSelectedCategory(cat)}
-                  >
-                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.chipsContent}
+            style={{ marginTop: 12 }}
+          >
+            {filterCategories.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[s.chip, selectedCategory === cat && s.chipActive]}
+                onPress={() => setSelectedCategory(cat)}
+              >
+                <Text style={[s.chipText, selectedCategory === cat && s.chipTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* LIST OF RECORDINGS */}
-        <View style={styles.listContainer}>
-          {filteredRecordings.length > 0 ? (
-            filteredRecordings.map((recording) => (
-              <View key={recording.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  {/* Left: Custom Video Player Thumbnail */}
-                  <View style={styles.thumbnailContainer}>
-                    {/* Dark rounded square thumbnail */}
-                    <View style={styles.thumbnail}>
-                      {/* Play circle */}
-                      <View style={styles.playCircle}>
-                        <Ionicons name="play" size={14} color="#1F2937" style={styles.playArrow} />
-                      </View>
-                      {/* Tiny color badge on bottom-left for visual premium detail */}
-                      <View style={[styles.thumbnailBadge, { backgroundColor: recording.themeColor }]} />
+        {/* Cards */}
+        <View style={[s.listContainer, isDesktop && s.listDesktop]}>
+          {loading ? (
+            <Text style={s.emptyText}>Loading recordings...</Text>
+          ) : filtered.length === 0 ? (
+            <View style={s.emptyContainer}>
+              <Ionicons name="videocam-off-outline" size={48} color="#9CA3AF" />
+              <Text style={s.emptyText}>No recordings found</Text>
+              <Text style={s.emptySubtext}>Try adjusting your search or filters.</Text>
+            </View>
+          ) : (
+            filtered.map((rec, idx) => (
+              <View key={rec.id} style={[s.card, isDesktop && s.cardDesktop]}>
+                <View style={s.cardHeader}>
+                  <View style={s.thumbnail}>
+                    <View style={s.playCircle}>
+                      <Ionicons name="play" size={14} color="#1F2937" style={{ marginLeft: 2 }} />
                     </View>
+                    <View style={[s.thumbnailBadge, { backgroundColor: THEME_COLORS[idx % THEME_COLORS.length] }]} />
                   </View>
 
-                  {/* Right: Info */}
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle} numberOfLines={2}>
-                      {recording.title}
-                    </Text>
-                    <Text style={styles.cardTeacher}>{recording.teacher}</Text>
-                    
-                    {/* Category Label */}
-                    <View style={styles.categoryLabelRow}>
+                  <View style={s.cardInfo}>
+                    <Text style={s.cardTitle} numberOfLines={2}>{rec.title}</Text>
+                    <View style={s.catRow}>
                       <Ionicons name="book-outline" size={12} color="#7B2CBF" />
-                      <Text style={styles.categoryLabelText}>{recording.category}</Text>
+                      <Text style={s.catText}>{rec.course}</Text>
                     </View>
-
-                    {/* Stats Row */}
-                    <View style={styles.statsRow}>
-                      <View style={styles.statItem}>
-                        <Ionicons name="calendar-outline" size={12} color="#6B7280" />
-                        <Text style={styles.statText}>{recording.date}</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                        <Ionicons name="time-outline" size={12} color="#6B7280" />
-                        <Text style={styles.statText}>{recording.duration}</Text>
-                      </View>
-                      <View style={styles.statItem}>
-                        <Ionicons name="play-circle-outline" size={12} color="#6B7280" />
-                        <Text style={styles.statText}>{recording.views}</Text>
+                    <View style={s.statsRow}>
+                      {(rec.classDate || rec.uploadedAt) && (
+                        <View style={s.statItem}>
+                          <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                          <Text style={s.statText}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
+                        </View>
+                      )}
+                      {rec.duration && (
+                        <View style={s.statItem}>
+                          <Ionicons name="time-outline" size={12} color="#6B7280" />
+                          <Text style={s.statText}>{rec.duration}</Text>
+                        </View>
+                      )}
+                      <View style={s.statItem}>
+                        <Ionicons name="people-outline" size={12} color="#6B7280" />
+                        <Text style={s.statText}>{rec.batch}</Text>
                       </View>
                     </View>
                   </View>
                 </View>
 
-                {/* Bottom action button */}
-                <View style={styles.cardFooter}>
-                  <TouchableOpacity style={styles.watchNowButton} activeOpacity={0.8}>
-                    <Ionicons name="play" size={14} color="#FFF" style={styles.buttonIcon} />
-                    <Text style={styles.watchNowText}>Watch Now</Text>
+                <View style={s.cardFooter}>
+                  <TouchableOpacity
+                    style={s.watchNowBtn}
+                    activeOpacity={0.8}
+                    onPress={() => { setPreviewTitle(rec.title); setPreviewUri(getStreamUrl(rec.id)); }}
+                  >
+                    <Ionicons name="play" size={14} color="#FFF" />
+                    <Text style={s.watchNowText}>Watch Now</Text>
                   </TouchableOpacity>
-                  <Text style={styles.fileSizeText}>File size: {recording.fileSize}</Text>
                 </View>
               </View>
             ))
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="videocam-off-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyText}>No recordings found</Text>
-              <Text style={styles.emptySubtext}>Try adjusting your search query or filters.</Text>
-            </View>
           )}
         </View>
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      <VideoModal
+        visible={!!previewUri}
+        uri={previewUri}
+        title={previewTitle}
+        onClose={() => setPreviewUri(null)}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#7B2CBF',
-  },
-  header: {
-    backgroundColor: '#7B2CBF',
-    paddingHorizontal: 16,
-    paddingBottom: 36,
-  },
+const s = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
+  header: { backgroundColor: '#7B2CBF', paddingHorizontal: 16, paddingBottom: 36 },
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -302,40 +299,21 @@ const styles = StyleSheet.create({
     marginTop: Platform.OS === 'android' ? 12 : 0,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 40, height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#E9D5FF',
-    marginTop: 4,
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  scrollContent: {
-    padding: 16,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 1200 : undefined,
-    alignSelf: 'center',
-  },
-  bottomSpacer: {
-    height: 100,
-  },
-  // Search & Filter container
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  headerSubtitle: { fontSize: 14, color: '#E9D5FF', marginTop: 4 },
+
+  scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
+  scrollContent: { padding: 16 },
+  scrollDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', paddingHorizontal: 32 },
+
   searchContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 16,
     marginTop: -24,
@@ -358,205 +336,74 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#1F2937',
-  },
-  chipsWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 8,
-  },
-  filterIconButton: {
-    width: 36,
-    height: 36,
-    backgroundColor: '#FAF5FF',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
-  },
-  chipsScrollContent: {
-    gap: 8,
-    alignItems: 'center',
-  },
+  searchInput: { flex: 1, fontSize: 14, color: '#1F2937' },
+  chipsContent: { gap: 8, alignItems: 'center', paddingRight: 4 },
   chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingVertical: 8, paddingHorizontal: 14,
+    borderRadius: 18, backgroundColor: '#F3F4F6',
+    borderWidth: 1, borderColor: '#E5E7EB',
   },
-  chipActive: {
-    backgroundColor: '#7B2CBF',
-    borderColor: '#7B2CBF',
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  chipTextActive: {
-    color: '#FFFFFF',
-  },
-  // List items
-  listContainer: {
-    gap: 16,
-    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
-    flexWrap: Platform.OS === 'web' ? 'wrap' : 'nowrap',
-  },
+  chipActive: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
+  chipText: { fontSize: 12, fontWeight: '600', color: '#4B5563' },
+  chipTextActive: { color: '#fff' },
+
+  listContainer: { gap: 16 },
+  listDesktop: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
+
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#fff',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     padding: 16,
-    width: Platform.OS === 'web' ? '48.5%' : '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
     shadowRadius: 6,
     elevation: 2,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  thumbnailContainer: {
-    justifyContent: 'flex-start',
-  },
+  cardDesktop: { width: 'calc(50% - 10px)' as any, minWidth: 320 },
+
+  cardHeader: { flexDirection: 'row', gap: 16 },
   thumbnail: {
-    width: 64,
-    height: 64,
+    width: 64, height: 64,
     borderRadius: 16,
     backgroundColor: '#8B939E',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
     overflow: 'hidden',
+    flexShrink: 0,
   },
   playCircle: {
-    width: 28,
-    height: 28,
+    width: 28, height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 1,
   },
-  playArrow: {
-    marginLeft: 2,
-  },
-  thumbnailBadge: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 6,
-  },
-  cardInfo: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    lineHeight: 20,
-  },
-  cardTeacher: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  categoryLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
-  },
-  categoryLabelText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#7B2CBF',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 11,
-    color: '#6B7280',
-  },
-  // Card Footer Action
-  cardFooter: {
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    marginTop: 14,
-    paddingTop: 12,
-    alignItems: 'center',
-  },
-  watchNowButton: {
+  thumbnailBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 6 },
+  cardInfo: { flex: 1 },
+  cardTitle: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', lineHeight: 20 },
+  catRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  catText: { fontSize: 11, fontWeight: '600', color: '#7B2CBF' },
+  statsRow: { flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statText: { fontSize: 11, color: '#6B7280' },
+
+  cardFooter: { borderTopWidth: 1, borderTopColor: '#F3F4F6', marginTop: 14, paddingTop: 12 },
+  watchNowBtn: {
     flexDirection: 'row',
     backgroundColor: '#7B2CBF',
     height: 40,
-    width: '100%',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    shadowColor: '#7B2CBF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3,
   },
-  buttonIcon: {
-    marginTop: 0,
-  },
-  watchNowText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  fileSizeText: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 8,
-  },
-  // Empty state
-  emptyContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#4B5563',
-    marginTop: 12,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginTop: 4,
-    textAlign: 'center',
-  },
+  watchNowText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+
+  emptyContainer: { paddingVertical: 60, alignItems: 'center' },
+  emptyText: { fontSize: 16, fontWeight: 'bold', color: '#4B5563', marginTop: 12, textAlign: 'center' },
+  emptySubtext: { fontSize: 13, color: '#9CA3AF', marginTop: 4, textAlign: 'center' },
 });

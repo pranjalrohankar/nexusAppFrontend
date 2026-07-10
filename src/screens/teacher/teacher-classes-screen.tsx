@@ -1,318 +1,422 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Platform,
-  Alert,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView,
+  TextInput, Platform, ActivityIndicator, Linking, Share, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { api } from '../../services/api';
+
+interface BatchItem {
+  id: number;
+  batchName: string;
+  selectCourse: string;
+  instructor: string;
+  startDate: string;
+  endDate: string;
+  classDays: string[];
+  status: 'ACTIVE' | 'UPCOMING' | 'COMPLETED';
+  studentsCount: number;
+  classTimings?: string;
+  duration?: string;
+  googleMeetLink?: string;
+  totalSessions?: number;
+}
 
 interface Student {
   id: string;
   name: string;
   email: string;
   phone: string;
-  attendance: string;
-  progress: string;
-  progressPercent: number;
-}
-
-interface ClassItem {
-  id: string;
-  title: string;
-  status: 'ACTIVE' | 'UPCOMING' | 'COMPLETED';
-  batchName: string;
-  schedule: string;
-  progressText: string;
-  progressPercent: number;
-  meetLink: string;
-  studentsCount: number;
-  duration?: string;
-  studentsList: Student[];
+  enrollmentDate: string;
+  paymentStatus: string;
+  active: boolean;
 }
 
 export default function TeacherClassesScreen() {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'UPCOMING' | 'COMPLETED'>('ACTIVE');
-  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+  const [batches, setBatches] = useState<BatchItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedBatch, setSelectedBatch] = useState<BatchItem | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [copiedId, setCopiedId] = useState<number | null>(null);
 
-  const classesData: ClassItem[] = [
-    {
-      id: 'c1',
-      title: 'Data Science & Machine Learning',
-      status: 'ACTIVE',
-      batchName: 'Batch A - Evening',
-      schedule: 'Mon, Wed, Fri - 8:00 PM',
-      progressText: '18/48 Classes',
-      progressPercent: (18 / 48) * 100,
-      meetLink: 'https://meet.google.com/abc-defg-hij',
-      studentsCount: 6,
-      studentsList: [
-        { id: 's1', name: 'Rahul Singh', email: 'rahul.s@email.com', phone: '+91 9876543210', attendance: '88%', progress: 'Progress: 78%', progressPercent: 78 },
-        { id: 's2', name: 'Priya Patel', email: 'priya.p@email.com', phone: '+91 9812345678', attendance: '92%', progress: 'Progress: 85%', progressPercent: 85 },
-        { id: 's3', name: 'Arjun Singh', email: 'arjun.s@email.com', phone: '+91 9911223344', attendance: '86%', progress: 'Progress: 80%', progressPercent: 80 },
-        { id: 's4', name: 'Sneha Reddy', email: 'sneha.r@email.com', phone: '+91 9544332211', attendance: '94%', progress: 'Progress: 92%', progressPercent: 92 },
-        { id: 's5', name: 'Vikram Mehta', email: 'vikram.m@email.com', phone: '+91 9876501234', attendance: '80%', progress: 'Progress: 75%', progressPercent: 75 },
-        { id: 's6', name: 'Ananya Sharma', email: 'ananya.s@email.com', phone: '+91 9123456789', attendance: '84%', progress: 'Progress: 81%', progressPercent: 81 },
-      ],
-    },
-    {
-      id: 'c2',
-      title: 'Full Stack Web Development',
-      status: 'ACTIVE',
-      batchName: 'Batch B - Morning',
-      schedule: 'Tue, Thu, Sat - 10:00 AM',
-      progressText: '38/48 Classes',
-      progressPercent: (38 / 48) * 100,
-      meetLink: 'https://meet.google.com/xyz-pqrs-uvw',
-      studentsCount: 4,
-      studentsList: [
-        { id: 's1', name: 'Rahul Singh', email: 'rahul.s@email.com', phone: '+91 9876543210', attendance: '95%', progress: 'Progress: 90%', progressPercent: 90 },
-        { id: 's3', name: 'Arjun Singh', email: 'arjun.s@email.com', phone: '+91 9911223344', attendance: '90%', progress: 'Progress: 88%', progressPercent: 88 },
-      ],
-    },
-    {
-      id: 'c3',
-      title: 'UI/UX Design Mastery',
-      status: 'UPCOMING',
-      batchName: 'Batch C - Evening',
-      schedule: 'Mon, Thu - 6:00 PM',
-      progressText: '0/24 Classes',
-      progressPercent: 0,
-      meetLink: 'https://meet.google.com/ui-ux-design-sys',
-      studentsCount: 32,
-      duration: '2 Months',
-      studentsList: [],
-    },
-    {
-      id: 'c4',
-      title: 'Python Programming',
-      status: 'COMPLETED',
-      batchName: 'Batch D - Completed',
-      schedule: 'Mon, Wed, Fri - 7:00 PM',
-      progressText: '24/24 Classes',
-      progressPercent: 100,
-      meetLink: 'https://meet.google.com/python-batch-d',
-      studentsCount: 42,
-      duration: '2 Months',
-      studentsList: [],
-    },
-  ];
+  const loadBatches = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getMyBatches();
+      if (res.success && Array.isArray(res.data)) {
+        setBatches(res.data);
+      }
+    } catch (e) {
+      console.error('Failed to load batches', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const filteredClasses = classesData.filter((c) => c.status === activeTab);
+  useEffect(() => { loadBatches(); }, [loadBatches]);
 
-  const getFilteredStudents = (list: Student[]) => {
-    return list.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const loadStudents = async (batch: BatchItem) => {
+    setSelectedBatch(batch);
+    setStudentsLoading(true);
+    setStudents([]);
+    try {
+      const res = await api.getBatchStudents(batch.id);
+      const list = Array.isArray(res) ? res : (res?.data ?? []);
+      setStudents(list.map((s: any) => ({
+        id: String(s.id ?? s.enrollmentId ?? Math.random()),
+        name: s.name || s.studentName || '—',
+        email: s.email || s.studentEmail || '—',
+        phone: s.phone || s.studentPhone || '—',
+        enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
+        paymentStatus: s.paymentStatus || '',
+        active: s.active ?? (s.paymentStatus === 'Paid'),
+      })));
+    } catch (e) {
+      console.error('Failed to load students', e);
+    } finally {
+      setStudentsLoading(false);
+    }
   };
 
-  const handleCopyLink = (link: string) => {
-    Alert.alert('Link Copied', `Google Meet link copied to clipboard:\n${link}`);
+  const formatEnrolledDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return 'Enrolled: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch { return dateStr; }
   };
 
-  const handleStartClass = (title: string) => {
-    Alert.alert('Class Started', `Launching Google Meet room for: ${title}`);
+  const getInitials = (name: string) =>
+    name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+  const handleCopyLink = async (link: string, id: number) => {
+    if (Platform.OS === 'web') {
+      try { await navigator.clipboard.writeText(link); } catch {}
+    } else {
+      await Share.share({ message: link, title: 'Google Meet Link' });
+    }
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleSendMessage = (name: string) => {
-    Alert.alert('Message Sent', `Mock message successfully sent to ${name}`);
+  const handleStartClass = (link: string) => {
+    if (link) Linking.openURL(link);
   };
 
-  // DRILLDOWN VIEW FOR STUDENTS
-  if (selectedClass) {
+  const filteredBatches = batches.filter(b => b.status === activeTab);
+  const counts = {
+    ACTIVE: batches.filter(b => b.status === 'ACTIVE').length,
+    UPCOMING: batches.filter(b => b.status === 'UPCOMING').length,
+    COMPLETED: batches.filter(b => b.status === 'COMPLETED').length,
+  };
+
+  const formatDays = (days: string[]) => days.map(d => d.substring(0, 3)).join(', ');
+
+  // ── STUDENTS DRILLDOWN ──────────────────────────────────────────────────────
+  if (selectedBatch) {
+    const filtered = students.filter(s =>
+      s.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    const activeCount = students.filter(s => s.active).length;
+
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* DRILLDOWN HEADER */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => setSelectedClass(null)}>
-            <Ionicons name="arrow-back" size={20} color="#FFF" />
-            <Text style={styles.backBtnText}>Classes</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{selectedClass.title}</Text>
-          <Text style={styles.headerSubtitle}>{selectedClass.batchName}</Text>
-        </View>
-
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* METRICS ROW */}
-          <View style={styles.metricsRow}>
-            <View style={styles.metricItem}>
-              <Text style={styles.metricVal}>{selectedClass.studentsCount}</Text>
-              <Text style={styles.metricLabel}>Students</Text>
-            </View>
-            <View style={styles.metricItem}>
-              <Text style={styles.metricVal}>
-                {selectedClass.studentsList.length > 0 ? selectedClass.studentsList.length - 1 : 0}
-              </Text>
-              <Text style={styles.metricLabel}>Active</Text>
-            </View>
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricVal, { color: '#16A34A' }]}>83%</Text>
-              <Text style={styles.metricLabel}>Avg. Attendance</Text>
-            </View>
+        <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
+        {/* Purple header: accent line + back + course title + batch + search bar */}
+        <View style={styles.drillHeader}>
+          <LinearGradient
+            colors={[
+              'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+              'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+              'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+              'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+              'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+            ]}
+            locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={styles.headerAccentLine}
+          />
+          <View style={styles.drillHeaderRow}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => { setSelectedBatch(null); setSearchQuery(''); }}>
+              <Ionicons name="arrow-back" size={20} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.drillCourseTitle} numberOfLines={2}>{selectedBatch.selectCourse}</Text>
           </View>
-
-          {/* SEARCH BAR */}
-          <View style={styles.searchRow}>
-            <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+          <Text style={styles.drillBatchSubtitle}>{selectedBatch.batchName}</Text>
+          {/* Search bar inside purple header */}
+          <View style={styles.drillSearchBar}>
+            <Ionicons name="search" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
             <TextInput
-              style={styles.searchInput}
+              style={styles.drillSearchInput}
               placeholder="Search students..."
               placeholderTextColor="#9CA3AF"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Stats row */}
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricVal, { color: '#7B2CBF' }]}>{students.length}</Text>
+              <Text style={styles.metricLabel}>Total Students</Text>
+            </View>
+            <View style={styles.metricDivider} />
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricVal, { color: '#10B981' }]}>{activeCount}</Text>
+              <Text style={styles.metricLabel}>Active</Text>
+            </View>
+            <View style={styles.metricDivider} />
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricVal, { color: '#F97316' }]}>83%</Text>
+              <Text style={styles.metricLabel}>Avg. Attendance</Text>
+            </View>
           </View>
 
-          {/* STUDENTS LIST */}
-          <View style={styles.studentList}>
-            <Text style={styles.rosterTitle}>Students ({selectedClass.studentsList.length})</Text>
-            {getFilteredStudents(selectedClass.studentsList).map((s) => (
-              <View key={s.id} style={styles.studentCard}>
-                <View style={styles.studentHeader}>
-                  <View style={styles.studentAvatar}>
-                    <Text style={styles.studentAvatarText}>
-                      {s.name.split(' ').map((n) => n[0]).join('')}
-                    </Text>
-                  </View>
-                  <View style={styles.studentMeta}>
-                    <Text style={styles.studentName}>{s.name}</Text>
-                    <Text style={styles.studentEmail}>{s.email}</Text>
-                    <Text style={styles.studentPhone}>{s.phone}</Text>
-                  </View>
-                </View>
+          <Text style={styles.rosterTitle}>Students ({students.length})</Text>
 
-                {/* Progress Indicators */}
-                <View style={styles.studentStatsRow}>
-                  <View style={styles.studentStatPill}>
-                    <Text style={styles.studentStatLabel}>Attendance</Text>
-                    <Text style={[styles.studentStatVal, { color: '#16A34A' }]}>{s.attendance}</Text>
+          {studentsLoading ? (
+            <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 40 }} />
+          ) : filtered.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={32} color="#D1D5DB" />
+              <Text style={styles.emptyText}>
+                {students.length === 0 ? 'No students enrolled in this batch' : 'No students match your search'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.studentList}>
+              {filtered.map(s => (
+                <View key={s.id} style={styles.studentCard}>
+                  {/* Avatar + Name + Enrolled date + Active badge */}
+                  <View style={styles.studentHeader}>
+                    <View style={styles.studentAvatar}>
+                      <Text style={styles.studentAvatarText}>{getInitials(s.name)}</Text>
+                    </View>
+                    <View style={styles.studentMeta}>
+                      <Text style={styles.studentName}>{s.name}</Text>
+                      {s.enrollmentDate ? (
+                        <Text style={styles.enrolledDate}>{formatEnrolledDate(s.enrollmentDate)}</Text>
+                      ) : null}
+                    </View>
+                    {s.active && (
+                      <View style={styles.activeBadge}>
+                        <Ionicons name="person" size={11} color="#FFF" />
+                      </View>
+                    )}
                   </View>
-                  <View style={styles.studentStatPill}>
-                    <Text style={styles.studentStatLabel}>Progress</Text>
-                    <Text style={[styles.studentStatVal, { color: '#7B2CBF' }]}>{s.progressPercent}%</Text>
-                  </View>
-                </View>
 
-                {/* Message trigger */}
-                <TouchableOpacity style={styles.messageBtn} onPress={() => handleSendMessage(s.name)}>
-                  <Ionicons name="mail-outline" size={14} color="#7B2CBF" />
-                  <Text style={styles.messageBtnText}>Send Message</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
+                  {/* Email + Phone */}
+                  <View style={styles.contactRow}>
+                    <Ionicons name="mail-outline" size={13} color="#6B7280" />
+                    <Text style={styles.contactText} numberOfLines={1}>{s.email}</Text>
+                  </View>
+                  <View style={styles.contactRow}>
+                    <Ionicons name="call-outline" size={13} color="#6B7280" />
+                    <Text style={styles.contactText}>{s.phone}</Text>
+                  </View>
+
+                  {/* Attendance + Progress bars */}
+                  <View style={styles.barsRow}>
+                    <View style={styles.barBlock}>
+                      <View style={styles.barLabelRow}>
+                        <Text style={styles.barLabel}>Attendance</Text>
+                        <Text style={[styles.barPct, { color: '#7B2CBF' }]}>92%</Text>
+                      </View>
+                      <View style={styles.barBg}>
+                        <View style={[styles.barFill, { width: '92%', backgroundColor: '#7B2CBF' }]} />
+                      </View>
+                    </View>
+                    <View style={styles.barBlock}>
+                      <View style={styles.barLabelRow}>
+                        <Text style={styles.barLabel}>Progress</Text>
+                        <Text style={[styles.barPct, { color: '#F97316' }]}>78%</Text>
+                      </View>
+                      <View style={styles.barBg}>
+                        <View style={[styles.barFill, { width: '78%', backgroundColor: '#F97316' }]} />
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Send Message */}
+                  <TouchableOpacity style={styles.messageBtn}>
+                    <Ionicons name="chatbubble-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.messageBtnText}>Send Message</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </SafeAreaView>
     );
   }
 
+  // ── MAIN CLASSES LIST ───────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* MAIN CLASSES HEADER */}
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       <View style={styles.header}>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <Text style={styles.headerTitle}>My Classes</Text>
         <Text style={styles.headerSubtitle}>Manage your courses and Google Meet links.</Text>
       </View>
 
-      {/* SUB-TABS SELECTOR */}
+      {/* TABS */}
       <View style={styles.subTabContainer}>
-        {(['ACTIVE', 'UPCOMING', 'COMPLETED'] as const).map((tab) => {
-          const count = classesData.filter((c) => c.status === tab).length;
-          const label = tab === 'ACTIVE' ? `Active (${count})` : tab === 'UPCOMING' ? `Upcoming (${count})` : `Completed (${count})`;
-          const isActive = activeTab === tab;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.subTabBtn, isActive && styles.subTabBtnActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.subTabText, isActive && styles.subTabTextActive]}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {(['ACTIVE', 'UPCOMING', 'COMPLETED'] as const).map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.subTabBtn, activeTab === tab && styles.subTabBtnActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={[styles.subTabText, activeTab === tab && styles.subTabTextActive]}>
+              {tab === 'ACTIVE' ? 'Active' : tab === 'UPCOMING' ? 'Upcoming' : 'Completed'} ({counts[tab]})
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* CLASSES LIST */}
-        <View style={styles.classList}>
-          {filteredClasses.map((item) => (
-            <View key={item.id} style={styles.classCard}>
-              <View style={styles.cardHeaderRow}>
-                <View>
-                  <Text style={styles.classCardTitle}>{item.title}</Text>
-                  <Text style={styles.classCardBatch}>{item.batchName}</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 60 }} />
+        ) : filteredBatches.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="calendar-outline" size={40} color="#D1D5DB" />
+            <Text style={styles.emptyText}>No {activeTab.toLowerCase()} classes</Text>
+          </View>
+        ) : (
+          <View style={styles.classList}>
+            {filteredBatches.map(item => (
+              <View key={item.id} style={styles.classCard}>
+                {/* Title + Badge */}
+                <View style={styles.cardHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.classCardTitle}>{item.selectCourse}</Text>
+                    <Text style={styles.classCardBatch}>{item.batchName}</Text>
+                  </View>
+                  <View style={[
+                    styles.statusBadge,
+                    item.status === 'ACTIVE' ? styles.badgeActive :
+                    item.status === 'UPCOMING' ? styles.badgeUpcoming : styles.badgeCompleted
+                  ]}>
+                    <Text style={[
+                      styles.statusBadgeText,
+                      item.status === 'ACTIVE' ? styles.badgeTextActive :
+                      item.status === 'UPCOMING' ? styles.badgeTextUpcoming : styles.badgeTextCompleted
+                    ]}>{item.status}</Text>
+                  </View>
                 </View>
-                <View style={[styles.statusBadge, item.status === 'ACTIVE' ? styles.badgeActive : item.status === 'UPCOMING' ? styles.badgeUpcoming : styles.badgeCompleted]}>
-                  <Text style={[styles.statusBadgeText, item.status === 'ACTIVE' ? styles.badgeTextActive : item.status === 'UPCOMING' ? styles.badgeTextUpcoming : styles.badgeTextCompleted]}>
-                    {item.status}
+
+                {/* Students count + Duration chips */}
+                <View style={styles.chipsRow}>
+                  <View style={styles.chip}>
+                    <Ionicons name="people-outline" size={13} color="#7B2CBF" />
+                    <Text style={styles.chipText}>{item.studentsCount} students</Text>
+                  </View>
+                  {item.duration ? (
+                    <View style={styles.chip}>
+                      <Ionicons name="time-outline" size={13} color="#7B2CBF" />
+                      <Text style={styles.chipText}>{item.duration}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Schedule box */}
+                <View style={styles.scheduleBox}>
+                  <Text style={styles.scheduleLabel}>Schedule</Text>
+                  <Text style={styles.scheduleValue}>
+                    {item.classDays && item.classDays.length > 0 ? formatDays(item.classDays) : '—'}
+                    {item.classTimings ? ` · ${item.classTimings}` : ''}
                   </Text>
                 </View>
-              </View>
 
-              {/* Course Meta Info */}
-              <View style={styles.metaInfoRow}>
-                <View style={styles.metaInfoItem}>
-                  <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-                  <Text style={styles.metaInfoText}>{item.schedule}</Text>
-                </View>
-                {item.duration && (
-                  <View style={styles.metaInfoItem}>
-                    <Ionicons name="time-outline" size={14} color="#6B7280" />
-                    <Text style={styles.metaInfoText}>{item.duration}</Text>
+                {/* Progress bar */}
+                {item.totalSessions != null && item.totalSessions > 0 && (
+                  <View style={styles.progressRow}>
+                    <View style={styles.progressLabels}>
+                      <Text style={styles.progressLabel}>Progress</Text>
+                      <Text style={styles.progressVal}>0/{item.totalSessions} Classes</Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                      <View style={[styles.progressBarFill, { width: '0%' }]} />
+                    </View>
                   </View>
                 )}
-              </View>
 
-              {/* Progress details */}
-              <View style={styles.progressRow}>
-                <View style={styles.progressLabels}>
-                  <Text style={styles.progressLabel}>Progress</Text>
-                  <Text style={styles.progressVal}>{item.progressText}</Text>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: `${item.progressPercent}%` }]} />
-                </View>
-              </View>
-
-              {/* Google Meet Link block */}
-              {item.status !== 'COMPLETED' && (
-                <View style={styles.meetBox}>
-                  <Text style={styles.meetLabel}>Google Meet Link</Text>
-                  <View style={styles.meetLinkWrapper}>
-                    <Text style={styles.meetLink} numberOfLines={1}>{item.meetLink}</Text>
-                    <TouchableOpacity onPress={() => handleCopyLink(item.meetLink)}>
-                      <Ionicons name="copy-outline" size={14} color="#7B2CBF" />
-                    </TouchableOpacity>
+                {/* Google Meet Link */}
+                {item.status !== 'COMPLETED' && (
+                  <View style={styles.meetBox}>
+                    <View style={styles.meetLabelRow}>
+                      <Ionicons name="videocam-outline" size={13} color="#9CA3AF" />
+                      <Text style={styles.meetLabel}>Google Meet Link</Text>
+                    </View>
+                    {item.googleMeetLink ? (
+                      <View style={styles.meetLinkWrapper}>
+                        <Ionicons name="logo-google" size={14} color="#4285F4" />
+                        <Text style={styles.meetLinkText} numberOfLines={1}>{item.googleMeetLink}</Text>
+                        <TouchableOpacity onPress={() => handleCopyLink(item.googleMeetLink!, item.id)} style={styles.meetIconBtn}>
+                          <Ionicons
+                            name={copiedId === item.id ? 'checkmark' : 'copy-outline'}
+                            size={16}
+                            color={copiedId === item.id ? '#10B981' : '#7B2CBF'}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Text style={styles.noMeetText}>No meet link assigned to this course</Text>
+                    )}
                   </View>
-                </View>
-              )}
+                )}
 
-              {/* Buttons */}
-              <View style={styles.cardActionBtnRow}>
-                <TouchableOpacity
-                  style={styles.cardViewStudentsBtn}
-                  onPress={() => setSelectedClass(item)}
-                >
-                  <Text style={styles.cardViewStudentsText}>View Students</Text>
-                </TouchableOpacity>
-
-                {item.status === 'ACTIVE' && (
-                  <TouchableOpacity
-                    style={styles.cardStartBtn}
-                    onPress={() => handleStartClass(item.title)}
-                  >
-                    <Text style={styles.cardStartText}>Start Class</Text>
+                {/* Action Buttons */}
+                <View style={styles.cardActionBtnRow}>
+                  <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => loadStudents(item)}>
+                    <Ionicons name="people-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.cardViewStudentsText}>View Students</Text>
                   </TouchableOpacity>
-                )}
+
+                  {item.status === 'ACTIVE' && item.googleMeetLink ? (
+                    <TouchableOpacity style={styles.cardStartBtn} onPress={() => handleStartClass(item.googleMeetLink!)}>
+                      <Ionicons name="videocam" size={14} color="#FFF" />
+                      <Text style={styles.cardStartText}>Start Class</Text>
+                    </TouchableOpacity>
+                  ) : item.status === 'ACTIVE' ? (
+                    <View style={[styles.cardStartBtn, { backgroundColor: '#D1D5DB' }]}>
+                      <Ionicons name="videocam-off-outline" size={14} color="#9CA3AF" />
+                      <Text style={[styles.cardStartText, { color: '#9CA3AF' }]}>No Link</Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
@@ -320,371 +424,191 @@ export default function TeacherClassesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#7B2CBF',
-  },
+  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 24,
+    paddingTop: 8,
   },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-  },
-  backBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+  headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
+  backBtn: { alignItems: 'center', justifyContent: 'center', padding: 4 },
+  backBtnText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontSize: 24, fontWeight: '700', color: '#FFF',
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#E9D5FF',
-    marginTop: 6,
-  },
+  headerSubtitle: { fontSize: 13, fontWeight: '600', color: '#E9D5FF', marginTop: 3 },
   subTabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    gap: 10,
+    flexDirection: 'row', backgroundColor: '#FFF',
+    paddingHorizontal: 16, paddingVertical: 10,
+    paddingTop: 16,
+    borderBottomWidth: 1, borderBottomColor: '#E5E7EB', gap: 8,
   },
-  subTabBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+  subTabBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#F3F4F6' },
+  subTabBtnActive: { backgroundColor: '#7B2CBF' },
+  subTabText: { fontSize: 12, fontWeight: '600', color: '#4B5563' },
+  subTabTextActive: { color: '#FFF', fontWeight: 'bold' },
+  scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
+  scrollContent: { padding: 20 },
+  bottomSpacer: { height: 100 },
+  classList: { gap: 16 },
+  emptyCard: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FFF', borderRadius: 20, padding: 40,
+    borderWidth: 1, borderColor: '#E5E7EB',
   },
-  subTabBtnActive: {
-    backgroundColor: '#7B2CBF',
-  },
-  subTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  subTabTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  bottomSpacer: {
-    height: 100,
-  },
-  classList: {
-    gap: 16,
-  },
-  // Class card styles
+  emptyText: { fontSize: 13, color: '#9CA3AF', marginTop: 12 },
+
+  // ── Class Card ──────────────────────────────────────────────────────────────
   classCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    backgroundColor: '#FFF', borderRadius: 24, padding: 20,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.03, shadowRadius: 10, elevation: 2,
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  classCardTitle: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
+  classCardBatch: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  statusBadge: { borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  statusBadgeText: { fontSize: 10, fontWeight: 'bold' },
+  badgeActive: { backgroundColor: '#ECFDF5' },
+  badgeTextActive: { color: '#10B981' },
+  badgeUpcoming: { backgroundColor: '#FFF7ED' },
+  badgeTextUpcoming: { color: '#EA580C' },
+  badgeCompleted: { backgroundColor: '#F3F4F6' },
+  badgeTextCompleted: { color: '#6B7280' },
+
+  // Chips row (students + duration)
+  chipsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#F3E8FF', borderRadius: 20,
+    paddingVertical: 5, paddingHorizontal: 12,
   },
-  classCardTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  chipText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
+
+  // Schedule box
+  scheduleBox: {
+    backgroundColor: '#FAF5FF', borderRadius: 12, padding: 10,
+    borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 14,
   },
-  classCardBatch: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  statusBadge: {
-    borderRadius: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  badgeActive: {
-    backgroundColor: '#ECFDF5',
-  },
-  badgeTextActive: {
-    color: '#10B981',
-  },
-  badgeUpcoming: {
-    backgroundColor: '#FFF7ED',
-  },
-  badgeTextUpcoming: {
-    color: '#EA580C',
-  },
-  badgeCompleted: {
-    backgroundColor: '#F3F4F6',
-  },
-  badgeTextCompleted: {
-    color: '#6B7280',
-  },
-  metaInfoRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
-  },
-  metaInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  metaInfoText: {
-    fontSize: 12,
-    color: '#4B5563',
-    fontWeight: '500',
-  },
+  scheduleLabel: { fontSize: 8, color: '#9CA3AF', fontWeight: '600', marginBottom: 3 },
+  scheduleValue: { fontSize: 11, fontWeight: '600', color: '#1F2937' },
+
   // Progress bar
-  progressRow: {
-    marginBottom: 16,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  progressLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  progressVal: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#7B2CBF',
-    borderRadius: 3,
-  },
-  // Meet Box
+  progressRow: { marginBottom: 14 },
+  progressLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  progressLabel: { fontSize: 11, color: '#6B7280', fontWeight: '500' },
+  progressVal: { fontSize: 11, fontWeight: 'bold', color: '#1F2937' },
+  progressBarBg: { height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#7B2CBF', borderRadius: 3 },
+
+  // Meet box
   meetBox: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    backgroundColor: '#F9FAFB', borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 16,
   },
-  meetLabel: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    fontWeight: '600',
-  },
+  meetLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  meetLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600' },
   meetLinkWrapper: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10,
+    borderWidth: 1, borderColor: '#DBEAFE',
   },
-  meetLink: {
-    fontSize: 12,
-    color: '#7B2CBF',
-    fontWeight: '500',
-    flex: 0.9,
-  },
-  // Card action buttons
-  cardActionBtnRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  meetLinkText: { flex: 1, fontSize: 12, color: '#2563EB', fontWeight: '500' },
+  meetIconBtn: { padding: 4 },
+  noMeetText: { fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' },
+
+  // Action buttons
+  cardActionBtnRow: { flexDirection: 'row', gap: 12 },
   cardViewStudentsBtn: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: '#7B2CBF',
-    height: 40,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, borderWidth: 1.5, borderColor: '#7B2CBF',
+    height: 42, borderRadius: 12,
   },
-  cardViewStudentsText: {
-    color: '#7B2CBF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
+  cardViewStudentsText: { color: '#7B2CBF', fontSize: 12, fontWeight: 'bold' },
   cardStartBtn: {
-    flex: 1,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: '#7B2CBF', height: 42, borderRadius: 12,
+  },
+  cardStartText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+
+  // ── Drilldown ───────────────────────────────────────────────────────────────
+  drillHeader: {
     backgroundColor: '#7B2CBF',
-    height: 40,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  cardStartText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  // DRILLDOWN STYLES
-  metricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 20,
-  },
-  metricItem: {
+  drillCourseTitle: {
     flex: 1,
-    alignItems: 'center',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFF',
   },
-  metricVal: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  drillBatchSubtitle: { fontSize: 13, color: '#E9D5FF', marginTop: 2, marginLeft: 40, marginBottom: 0 },
+  drillHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 },
+  drillSearchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 14, height: 44,
+    paddingHorizontal: 14, marginTop: 14,
   },
-  metricLabel: {
-    fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginTop: 4,
-  },
+  drillSearchInput: { flex: 1, color: '#1F2937', fontSize: 13 },
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    height: 46,
-    paddingHorizontal: 14,
-    marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF',
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14,
+    height: 46, paddingHorizontal: 14, marginBottom: 16,
   },
-  searchIcon: {
-    marginRight: 8,
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, color: '#1F2937', fontSize: 13 },
+  metricsRow: {
+    flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 20,
+    padding: 18, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20,
   },
-  searchInput: {
-    flex: 1,
-    color: '#1F2937',
-    fontSize: 13,
-  },
-  studentList: {
-    gap: 12,
-  },
-  rosterTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 6,
-  },
+  metricItem: { flex: 1, alignItems: 'center' },
+  metricDivider: { width: 1, backgroundColor: '#F3F4F6' },
+  metricVal: { fontSize: 22, fontWeight: 'bold', color: '#1F2937' },
+  metricLabel: { fontSize: 10, color: '#6B7280', fontWeight: '500', marginTop: 4, textAlign: 'center' },
+  rosterTitle: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
+  studentList: { gap: 14 },
   studentCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#FFF', borderRadius: 20, padding: 16,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
   },
-  studentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  studentHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
   studentAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#F3E8FF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: '#7B2CBF', justifyContent: 'center', alignItems: 'center',
+    marginRight: 12,
   },
-  studentAvatarText: {
-    color: '#7B2CBF',
-    fontWeight: 'bold',
-    fontSize: 12,
+  studentAvatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
+  studentMeta: { flex: 1 },
+  studentName: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
+  enrolledDate: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  activeBadge: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center',
   },
-  studentMeta: {
-    flex: 1,
-    paddingLeft: 12,
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
+  contactText: { fontSize: 12, color: '#4B5563', flex: 1 },
+  barsRow: {
+    flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 14,
+    backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: '#F3F4F6',
   },
-  studentName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  studentEmail: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  studentPhone: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 1,
-  },
-  studentStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 14,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
-  },
-  studentStatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  studentStatLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  studentStatVal: {
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
+  barBlock: { flex: 1 },
+  barLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  barLabel: { fontSize: 11, color: '#6B7280', fontWeight: '500' },
+  barPct: { fontSize: 11, fontWeight: 'bold' },
+  barBg: { height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 3 },
   messageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#7B2CBF',
-    borderRadius: 8,
-    height: 34,
-    marginTop: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, borderWidth: 1.5, borderColor: '#E5E7EB',
+    borderRadius: 10, height: 38,
   },
-  messageBtnText: {
-    color: '#7B2CBF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
+  messageBtnText: { fontSize: 12, fontWeight: '600', color: '#7B2CBF' },
 });

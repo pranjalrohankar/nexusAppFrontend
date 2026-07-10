@@ -1,348 +1,329 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  Alert,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView,
+  Platform, Linking, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { api } from '../../services/api';
 
-interface ClassScheduleItem {
+const ACCENT_COLORS: any = [
+  'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
+  'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
+  'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
+  'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
+  'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
+];
+const ACCENT_LOCS: any = [0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1];
+
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function normDay(d: string): string {
+  const s = d.trim().substring(0, 3).toLowerCase();
+  return DAY_NAMES.find(n => n.toLowerCase().startsWith(s)) ?? d;
+}
+
+function getWeekRange(weekOffset: number) {
+  const today = new Date();
+  const day = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - day + 1 + weekOffset * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { monday, sunday };
+}
+
+function formatWeekRange(monday: Date, sunday: Date) {
+  const m = `${MONTH_NAMES[monday.getMonth()]} ${monday.getDate()}`;
+  const s = `${MONTH_NAMES[sunday.getMonth()]} ${sunday.getDate()}, ${sunday.getFullYear()}`;
+  return `${m} - ${s}`;
+}
+
+interface ClassItem {
   courseTitle: string;
   batchName: string;
   time: string;
+  studentsCount: number;
   meetLink: string;
 }
 
 interface DayAgenda {
   dayName: string;
-  classes: ClassScheduleItem[];
+  isToday: boolean;
+  classes: ClassItem[];
 }
 
 export default function TeacherScheduleScreen() {
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [weekOffset, setWeekOffset] = useState(0);
 
-  const timetableData: DayAgenda[] = [
-    {
-      dayName: 'Monday',
-      classes: [
-        { courseTitle: 'Data Science & ML', batchName: 'Batch A - Evening', time: '8:00 PM - 9:30 PM', meetLink: 'https://meet.google.com/abc-defg-hij' }
-      ]
-    },
-    {
-      dayName: 'Tuesday',
-      classes: [
-        { courseTitle: 'Full Stack Web Development', batchName: 'Batch B - Morning', time: '10:00 AM - 11:30 AM', meetLink: 'https://meet.google.com/xyz-pqrs-uvw' }
-      ]
-    },
-    {
-      dayName: 'Wednesday',
-      classes: [
-        { courseTitle: 'Data Science & ML', batchName: 'Batch A - Evening', time: '8:00 PM - 9:30 PM', meetLink: 'https://meet.google.com/abc-defg-hij' }
-      ]
-    },
-    {
-      dayName: 'Thursday',
-      classes: [
-        { courseTitle: 'Full Stack Web Development', batchName: 'Batch B - Morning', time: '10:00 AM - 11:30 AM', meetLink: 'https://meet.google.com/xyz-pqrs-uvw' },
-        { courseTitle: 'UI/UX Design Mastery', batchName: 'Batch C - Evening', time: '6:00 PM - 7:30 PM', meetLink: 'https://meet.google.com/ui-ux-design-sys' }
-      ]
-    },
-    {
-      dayName: 'Friday',
-      classes: [
-        { courseTitle: 'Data Science & ML', batchName: 'Batch A - Evening', time: '8:00 PM - 9:30 PM', meetLink: 'https://meet.google.com/abc-defg-hij' }
-      ]
-    },
-    {
-      dayName: 'Saturday',
-      classes: [
-        { courseTitle: 'Full Stack Web Development', batchName: 'Batch B - Morning', time: '10:00 AM - 11:30 AM', meetLink: 'https://meet.google.com/xyz-pqrs-uvw' }
-      ]
-    },
-    {
-      dayName: 'Sunday',
-      classes: []
-    }
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getMyBatches();
+      const raw = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setBatches(raw);
+    } catch {}
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const { monday, sunday } = getWeekRange(weekOffset);
+  const todayName = DAY_NAMES[new Date().getDay()];
+
+  // Build timetable from real batch data — filter by selected week
+  const timetable: DayAgenda[] = DAY_NAMES.map(day => {
+    const classes: ClassItem[] = batches
+      .filter(b => {
+        if (!Array.isArray(b.classDays) || !b.classDays.some((d: string) => normDay(d) === day)) return false;
+        // Check if selected week overlaps with batch start/end dates
+        const bStart = b.startDate ? new Date(b.startDate) : null;
+        const bEnd = b.endDate ? new Date(b.endDate) : null;
+        if (bStart && sunday < bStart) return false;
+        if (bEnd && monday > bEnd) return false;
+        return true;
+      })
+      .map(b => ({
+        courseTitle: b.selectCourse,
+        batchName: b.batchName,
+        time: b.classTimings ?? '—',
+        studentsCount: b.studentsCount ?? 0,
+        meetLink: b.googleMeetLink ?? '',
+      }));
+    return { dayName: day, isToday: day === todayName && weekOffset === 0, classes };
+  });
+
+  // Summary stats
+  const totalClasses = timetable.reduce((s, d) => s + d.classes.length, 0);
+  const uniqueCourses = new Set(batches.map(b => b.selectCourse)).size;
+  // Estimate hours: count classes * avg 1.5h
+  const totalHours = Math.round(totalClasses * 1.5);
+
+  // Reorder: start from Monday
+  const ordered = [
+    ...timetable.slice(1), // Mon–Sat
+    timetable[0],          // Sun
   ];
-
-  const handleJoinMeet = (course: string, link: string) => {
-    Alert.alert('Redirecting', `Opening Google Meet for ${course}:\n${link}`);
-  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* HEADER */}
       <View style={styles.header}>
+        <LinearGradient
+          colors={ACCENT_COLORS} locations={ACCENT_LOCS}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
         <Text style={styles.headerTitle}>Weekly Timetable</Text>
-        <Text style={styles.headerSubtitle}>Your teaching schedule for the week.</Text>
+        <Text style={styles.headerSubtitle}>Your teaching schedule for the week</Text>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
         {/* WEEK SWITCHER */}
         <View style={styles.weekSwitcher}>
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity style={styles.weekArrow} onPress={() => setWeekOffset(w => w - 1)}>
             <Ionicons name="chevron-back" size={20} color="#7B2CBF" />
           </TouchableOpacity>
-          <Text style={styles.weekRange}>May 25 - May 31, 2026</Text>
-          <TouchableOpacity onPress={() => {}}>
+          <View style={styles.weekCenter}>
+            <View style={styles.weekDateRow}>
+              <Ionicons name="calendar-outline" size={16} color="#7B2CBF" />
+              <Text style={styles.weekRange}>{formatWeekRange(monday, sunday)}</Text>
+            </View>
+            <Text style={styles.weekClassCount}>{totalClasses} classes this week</Text>
+          </View>
+          <TouchableOpacity style={styles.weekArrow} onPress={() => setWeekOffset(w => w + 1)}>
             <Ionicons name="chevron-forward" size={20} color="#7B2CBF" />
           </TouchableOpacity>
         </View>
 
-        {/* WEEK SUMMARY CARD */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>{"This Week's Summary"}</Text>
-          <View style={styles.summaryStatsRow}>
-            <View style={styles.summaryStatItem}>
-              <Text style={styles.summaryStatVal}>7</Text>
-              <Text style={styles.summaryStatLabel}>Classes</Text>
+        {/* WEEK SUMMARY */}
+        <LinearGradient
+          colors={['#FAF5FF', '#FFF7ED']}
+          locations={[0, 1]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.summaryCard}
+        >
+          <Text style={styles.summaryTitle}>This Week's Summary</Text>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryVal, { color: '#7B2CBF' }]}>{totalClasses}</Text>
+              <Text style={styles.summaryLabel}>Classes</Text>
             </View>
-            <View style={styles.summaryStatItem}>
-              <Text style={styles.summaryStatVal}>14</Text>
-              <Text style={styles.summaryStatLabel}>Hours</Text>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryVal, { color: '#F97316' }]}>{totalHours}</Text>
+              <Text style={styles.summaryLabel}>Hours</Text>
             </View>
-            <View style={styles.summaryStatItem}>
-              <Text style={styles.summaryStatVal}>3</Text>
-              <Text style={styles.summaryStatLabel}>Courses</Text>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryVal, { color: '#16A34A' }]}>{uniqueCourses}</Text>
+              <Text style={styles.summaryLabel}>Courses</Text>
             </View>
           </View>
-        </View>
+        </LinearGradient>
 
-        {/* TIMETABLE DAYS LIST */}
-        <View style={styles.timetableContainer}>
-          {timetableData.map((day, idx) => (
-            <View key={idx} style={styles.dayCard}>
-              <View style={styles.dayHeaderRow}>
-                <Text style={styles.dayName}>{day.dayName}</Text>
-                <View style={styles.dayClassCountBadge}>
-                  <Text style={styles.dayClassCountText}>
-                    {day.classes.length} {day.classes.length === 1 ? 'class' : 'classes'}
+        {/* TIMETABLE */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 40 }} />
+        ) : (
+          <View style={styles.timetable}>
+            {ordered.map((day, i) => (
+              <View key={i} style={styles.dayCard}>
+                {/* Day header */}
+                <View style={styles.dayHeader}>
+                  <View style={styles.dayHeaderLeft}>
+                    <Text style={styles.dayName}>{day.dayName}</Text>
+                    {day.isToday && (
+                      <View style={styles.todayBadge}>
+                        <Text style={styles.todayBadgeText}>Today</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.classCount}>
+                    {day.classes.length === 0 ? 'No classes' : `${day.classes.length} ${day.classes.length === 1 ? 'class' : 'classes'}`}
                   </Text>
                 </View>
-              </View>
 
-              {day.classes.length === 0 ? (
-                <View style={styles.freeDayBlock}>
-                  <Ionicons name="happy-outline" size={20} color="#9CA3AF" />
-                  <Text style={styles.freeDayText}>Free Day - No classes scheduled</Text>
-                </View>
-              ) : (
-                day.classes.map((cls, cIdx) => (
-                  <View key={cIdx} style={styles.classBlock}>
-                    <View style={styles.classHeaderCol}>
+                {/* Classes or free day */}
+                {day.classes.length === 0 ? (
+                  <View style={styles.freeDay}>
+                    <View style={styles.coffeeCircle}>
+                      <Text style={styles.coffeeEmoji}>☕</Text>
+                    </View>
+                    <Text style={styles.freeDayText}>Free day - No classes scheduled</Text>
+                  </View>
+                ) : (
+                  day.classes.map((cls, j) => (
+                    <View key={j} style={styles.classBlock}>
                       <Text style={styles.classCourse}>{cls.courseTitle}</Text>
                       <Text style={styles.classBatch}>{cls.batchName}</Text>
+                      <View style={styles.classMeta}>
+                        <View style={styles.metaItem}>
+                          <Ionicons name="time-outline" size={13} color="#6B7280" />
+                          <Text style={styles.metaText}>{cls.time}</Text>
+                        </View>
+                        <View style={styles.metaItem}>
+                          <Ionicons name="people-outline" size={13} color="#6B7280" />
+                          <Text style={styles.metaText}>{cls.studentsCount} students</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.meetBtn, !cls.meetLink && styles.meetBtnDisabled]}
+                        onPress={() => cls.meetLink && Linking.openURL(cls.meetLink)}
+                        disabled={!cls.meetLink}
+                      >
+                        <Ionicons name="videocam-outline" size={14} color="#FFF" />
+                        <Text style={styles.meetBtnText}>Join Google Meet</Text>
+                      </TouchableOpacity>
                     </View>
-                    <View style={styles.classTimeRow}>
-                      <Ionicons name="time-outline" size={14} color="#6B7280" />
-                      <Text style={styles.classTime}>{cls.time}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.meetBtn}
-                      onPress={() => handleJoinMeet(cls.courseTitle, cls.meetLink)}
-                    >
-                      <Ionicons name="videocam" size={14} color="#FFFFFF" />
-                      <Text style={styles.meetBtnText}>Join Google Meet</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              )}
-            </View>
-          ))}
-        </View>
+                  ))
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#7B2CBF',
-  },
+  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
+  headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontSize: 24, fontWeight: '700', color: '#FFF',
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#E9D5FF',
-    marginTop: 6,
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  bottomSpacer: {
-    height: 100,
-  },
+  headerSubtitle: { fontSize: 13, fontWeight: '600', color: '#E9D5FF', marginTop: 3 },
+
+  scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
+  scrollContent: { padding: 16 },
+
   // Week switcher
   weekSwitcher: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#FFF', borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 16,
   },
-  weekRange: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  // Summary card
+  weekArrow: { padding: 4 },
+  weekCenter: { flex: 1, alignItems: 'center' },
+  weekDateRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  weekRange: { fontSize: 14, fontWeight: 'bold', color: '#1F2937' },
+  weekClassCount: { fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 4 },
+
+  // Summary
   summaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
-    marginBottom: 24,
+    borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: '#E9D5FF',
+    marginBottom: 20, overflow: 'hidden',
   },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 16,
-  },
-  summaryStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  summaryStatItem: {
-    alignItems: 'center',
-  },
-  summaryStatVal: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#7B2CBF',
-  },
-  summaryStatLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginTop: 4,
-  },
+  summaryTitle: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', marginBottom: 16 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  summaryItem: { alignItems: 'center', flex: 1 },
+  summaryDivider: { width: 0, height: 0 },
+  summaryVal: { fontSize: 26, fontWeight: 'bold' },
+  summaryLabel: { fontSize: 11, color: '#6B7280', marginTop: 4 },
+
   // Timetable
-  timetableContainer: {
-    gap: 16,
-  },
+  timetable: { gap: 14 },
   dayCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#FFF', borderRadius: 20,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
-  dayHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 10,
-    marginBottom: 12,
+  dayHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
   },
-  dayName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  dayHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dayName: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
+  todayBadge: {
+    backgroundColor: '#F97316', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 3,
   },
-  dayClassCountBadge: {
-    backgroundColor: '#F3E8FF',
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+  todayBadgeText: { fontSize: 11, fontWeight: 'bold', color: '#FFF' },
+  classCount: { fontSize: 12, color: '#9CA3AF', fontWeight: '500' },
+
+  freeDay: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 24, gap: 8,
   },
-  dayClassCountText: {
-    color: '#7B2CBF',
-    fontSize: 10,
-    fontWeight: 'bold',
+  coffeeCircle: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 4,
   },
-  freeDayBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-  },
-  freeDayText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    fontWeight: '500',
-  },
+  coffeeEmoji: { fontSize: 28, textAlign: 'center' },
+  freeDayText: { fontSize: 12, color: '#9CA3AF' },
+
   classBlock: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    margin: 12, marginTop: 10,
+    backgroundColor: '#FAF5FF', borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: '#E9D5FF',
   },
-  classHeaderCol: {
-    marginBottom: 6,
-  },
-  classCourse: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  classBatch: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  classTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 12,
-  },
-  classTime: {
-    fontSize: 12,
-    color: '#4B5563',
-    fontWeight: '500',
-  },
+  classCourse: { fontSize: 14, fontWeight: 'bold', color: '#1F2937', marginBottom: 2 },
+  classBatch: { fontSize: 12, color: '#6B7280', marginBottom: 10 },
+  classMeta: { flexDirection: 'row', gap: 16, marginBottom: 12 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: { fontSize: 12, color: '#4B5563' },
   meetBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#7B2CBF',
-    height: 38,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
+    backgroundColor: '#7B2CBF', borderRadius: 10, height: 40,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  meetBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
+  meetBtnDisabled: { backgroundColor: '#D1D5DB' },
+  meetBtnText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
 });

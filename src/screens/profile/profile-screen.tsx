@@ -19,8 +19,12 @@ import AdminSystemSettingsScreen from './admin-system-settings-screen';
 import HelpSupportScreen from './help-support-screen';
 import NotificationsScreen from './notifications-screen';
 import PrivacySecurityScreen from './privacy-security-screen';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const PROFILE_PHOTO_KEY = 'user_profile_photo';
+
+let _adminProfileCache: any = null;
+let _teacherProfileCache: any = null;
 
 interface ProfileScreenProps {
   onLogout: () => void;
@@ -29,9 +33,10 @@ interface ProfileScreenProps {
   userRole?: 'student' | 'teacher' | 'admin';
   userName?: string;
   userEmail?: string;
+  lastLogin?: string;
 }
 
-export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '' }: ProfileScreenProps) {
+export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '', lastLogin = '' }: ProfileScreenProps) {
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -39,28 +44,39 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
   const loadPhoto = useCallback(() => {
     AsyncStorage.getItem(PROFILE_PHOTO_KEY)
       .then(uri => setPhotoUri(uri ?? null))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const refreshTeacherProfile = useCallback(() => {
     if (userRole === 'teacher') {
       api.getTeacherProfile()
         .then((res: any) => setTeacherProfile(res?.data ?? null))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [userRole]);
 
   useEffect(() => {
     loadPhoto();
     if (userRole === 'admin') {
+      // Always fetch fresh so lastLogin reflects the current session
+      _adminProfileCache = null;
       api.getAdminProfile()
-        .then((res: any) => setAdminProfile(res?.data ?? null))
-        .catch(() => {});
+        .then((res: any) => {
+          const data = res?.data ?? null;
+          if (data && lastLogin) data.lastLogin = lastLogin;
+          _adminProfileCache = data;
+          setAdminProfile(data);
+        })
+        .catch(() => { });
     }
     if (userRole === 'teacher') {
-      api.getTeacherProfile()
-        .then((res: any) => setTeacherProfile(res?.data ?? null))
-        .catch(() => {});
+      if (_teacherProfileCache) {
+        setTeacherProfile(_teacherProfileCache);
+      } else {
+        api.getTeacherProfile()
+          .then((res: any) => { _teacherProfileCache = res?.data ?? null; setTeacherProfile(_teacherProfileCache); })
+          .catch(() => { });
+      }
     }
   }, [userRole]);
 
@@ -68,7 +84,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
   // initials-avatar fallback can render instead of a blank box.
   const handlePhotoError = useCallback(() => {
     setPhotoUri(null);
-    AsyncStorage.removeItem(PROFILE_PHOTO_KEY).catch(() => {});
+    AsyncStorage.removeItem(PROFILE_PHOTO_KEY).catch(() => { });
   }, []);
 
   const formatRevenue = (amount: number) => {
@@ -84,7 +100,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
   if (currentSubView === 'privacy') {
     if (userRole === 'admin') {
-      return <AdminSecuritySettingsScreen onBack={() => onChangeSubView('profile')} />;
+      return <AdminSecuritySettingsScreen onBack={() => onChangeSubView('profile')} userId={adminProfile?.id} />;
     }
     return <PrivacySecurityScreen onBack={() => onChangeSubView('profile')} />;
   }
@@ -102,7 +118,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
     }
     return (
       <AccountSettingsScreen
-        onBack={() => { loadPhoto(); refreshTeacherProfile(); onChangeSubView('profile'); }}
+        onBack={() => { _teacherProfileCache = null; loadPhoto(); refreshTeacherProfile(); onChangeSubView('profile'); }}
         userRole={userRole}
         teacherProfile={userRole === 'teacher' ? teacherProfile : null}
       />
@@ -111,23 +127,42 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {/* 1. PURPLE HEADER (always rounded — matches design for every role) */}
+
+      
+      <View style={styles.headerBanner}>
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+          ]}
+          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerAccentLine}
+        />
+        <Text style={styles.headerTitle}>
+          {userRole === 'admin' ? 'Admin Profile' : userRole === 'teacher' ? 'Profile' : 'My Profile'}
+        </Text>
+      </View>
+      
       {/* Scrollable Content */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. PURPLE HEADER (always rounded — matches design for every role) */}
-        <View style={styles.headerBanner}>
-          <Text style={styles.headerTitle}>{userRole === 'teacher' ? 'Profile' : 'My Profile'}</Text>
-        </View>
+
 
         {/* 2. PROFILE DETAILS CARD — avatar sits on top overlapping header */}
         <View style={styles.profileCardOuter}>
           {/* AVATAR floats above card */}
           <View style={styles.avatarFloatContainer}>
             <View style={styles.avatarWrapper}>
-              {photoUri ? (
+              {photoUri && userRole !== 'admin' ? (
                 <Image
                   source={{ uri: photoUri }}
                   style={styles.avatarImage}
@@ -139,8 +174,8 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                     {userRole === 'teacher'
                       ? ((teacherProfile?.name ?? '').charAt(0).toUpperCase() || 'T')
                       : userRole === 'admin'
-                      ? ((adminProfile?.name ?? '').charAt(0).toUpperCase() || 'A')
-                      : ((userName ?? '').charAt(0).toUpperCase() || 'S')}
+                        ? 'A'
+                        : ((userName ?? '').charAt(0).toUpperCase() || 'S')}
                   </Text>
                 </View>
               )}
@@ -150,45 +185,47 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
           {/* WHITE CARD */}
           <View style={styles.profileCard}>
 
-          {/* User Info */}
-          <Text style={styles.userName}>
-            {userRole === 'teacher'
-              ? ((teacherProfile?.name ?? userName) || 'Teacher')
-              : userRole === 'admin'
-              ? ((adminProfile?.name ?? userName) || 'Administrator')
-              : (userName || 'Student')}
-          </Text>
-          <Text style={styles.userRole}>
-            {userRole === 'teacher'
-              ? 'Senior Instructor'
-              : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
-          </Text>
-
-          <View style={styles.joinedRow}>
-            <Text style={styles.joinedText}>
-              {userRole === 'teacher' && teacherProfile?.joinDate
-                ? `📅 Since ${teacherProfile.joinDate}`
-                : userRole === 'teacher'
-                ? '📅 Since January 2024'
-                : ''}
+            {/* User Info */}
+            <Text style={styles.userName}>
+              {userRole === 'teacher'
+                ? ((teacherProfile?.name ?? userName) || 'Teacher')
+                : userRole === 'admin'
+                  ? ((adminProfile?.name ?? userName) || 'Administrator')
+                  : (userName || 'Student')}
             </Text>
-            {userRole !== 'teacher' && (
-              <>
-                <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
-                <Text style={styles.joinedText}>
-                  {userRole === 'admin' && adminProfile?.createdAt
-                    ? `Joined ${adminProfile.createdAt}`
-                    : ''}
-                </Text>
-              </>
-            )}
-          </View>
+            <Text style={styles.userRole}>
+              {userRole === 'teacher'
+                ? 'Senior Instructor'
+                : userRole === 'admin'
+                  ? 'System Administrator'
+                  : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+            </Text>
 
-          {/* Badges / Skills tags row */}
-          <View style={styles.badgesWrapper}>
-            {userRole === 'teacher' ? (
-              teacherProfile?.specialization
-                ? teacherProfile.specialization.split(',').map((spec: string, i: number) => {
+            <View style={styles.joinedRow}>
+              <Text style={styles.joinedText}>
+                {userRole === 'teacher' && teacherProfile?.joinDate
+                  ? `📅 Since ${teacherProfile.joinDate}`
+                  : userRole === 'teacher'
+                    ? '📅 Since January 2024'
+                    : ''}
+              </Text>
+              {userRole !== 'teacher' && (
+                <>
+                  <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
+                  <Text style={styles.joinedText}>
+                    {userRole === 'admin' && adminProfile?.createdAt
+                      ? `Joined ${adminProfile.createdAt}`
+                      : ''}
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {/* Badges / Skills tags row */}
+            <View style={styles.badgesWrapper}>
+              {userRole === 'teacher' ? (
+                teacherProfile?.specialization
+                  ? teacherProfile.specialization.split(',').map((spec: string, i: number) => {
                     const colors = [
                       { bg: '#F3E8FF', text: '#7B2CBF' },
                       { bg: '#ECFDF5', text: '#10B981' },
@@ -203,171 +240,171 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                       </View>
                     );
                   })
-                : null
-            ) : userRole === 'admin' ? (
-              <>
-                <View style={[styles.skillsBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.skillsBadgeText, { color: '#DC2626' }]}>Security</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#E0F2FE' }]}><Text style={[styles.skillsBadgeText, { color: '#0369A1' }]}>Operations</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Database</Text></View>
-              </>
-            ) : (
-              <>
-                <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Frontend</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#ECFDF5' }]}><Text style={[styles.skillsBadgeText, { color: '#10B981' }]}>Backend</Text></View>
-                <View style={[styles.skillsBadge, { backgroundColor: '#FFF7ED' }]}><Text style={[styles.skillsBadgeText, { color: '#EA580C' }]}>UI/UX Design</Text></View>
-              </>
-            )}
-          </View>
-
-          {/* Stats Badges Row */}
-          <View style={styles.statsRow}>
-            {userRole === 'teacher' ? (
-              <>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
-                    <Ionicons name="book-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.coursesCount) : '-'}</Text>
-                  <Text style={styles.statLabel}>Courses</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#3B82F6' }]}>
-                    <Ionicons name="people-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.studentsCount) : '-'}</Text>
-                  <Text style={styles.statLabel}>Students</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
-                    <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.classesCount ?? 48) : '48'}</Text>
-                  <Text style={styles.statLabel}>Classes</Text>
-                </View>
-              </>
-            ) : userRole === 'admin' ? (
-              <>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
-                    <Ionicons name="people-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalStudents) : '-'}</Text>
-                  <Text style={styles.statLabel}>Students</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#3B82F6' }]}>
-                    <Ionicons name="person-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalTeachers) : '-'}</Text>
-                  <Text style={styles.statLabel}>Teachers</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#EA580C' }]}>
-                    <Ionicons name="book-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalCourses) : '-'}</Text>
-                  <Text style={styles.statLabel}>Courses</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
-                    <Ionicons name="cash-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>{adminProfile ? formatRevenue(adminProfile.revenue) : '-'}</Text>
-                  <Text style={styles.statLabel}>Revenue</Text>
-                </View>
-              </>
-            ) : (
-              // Student
-              <>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
-                    <Ionicons name="book-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>5</Text>
-                  <Text style={styles.statLabel}>Enrolled</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
-                    <Ionicons name="ribbon-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>3</Text>
-                  <Text style={styles.statLabel}>Completed</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#8B5CF6' }]}>
-                    <Ionicons name="medal-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>3</Text>
-                  <Text style={styles.statLabel}>Certificates</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <View style={[styles.statIconContainer, { backgroundColor: '#FF7A00' }]}>
-                    <Ionicons name="trending-up-outline" size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.statCount}>2</Text>
-                  <Text style={styles.statLabel}>In Progress</Text>
-                </View>
-              </>
-            )}
-          </View>
-
-          {/* Contact Details Pills */}
-          <View style={styles.contactDetails}>
-            {/* Email */}
-            <View style={[styles.detailPill, userRole === 'teacher' && { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
-              <View style={styles.detailIconBox}>
-                <Ionicons name="mail-outline" size={18} color="#6B7280" />
-              </View>
-              <View style={styles.detailTextBox}>
-                <Text style={styles.detailLabel}>Email</Text>
-                <Text style={styles.detailValue}>
-                  {userRole === 'teacher'
-                    ? ((teacherProfile?.email ?? userEmail) || '')
-                    : userRole === 'admin'
-                      ? ((adminProfile?.email ?? userEmail) || '')
-                      : (userEmail || '')}
-                </Text>
-              </View>
+                  : null
+              ) : userRole === 'admin' ? (
+                <>
+                  <View style={[styles.skillsBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.skillsBadgeText, { color: '#DC2626' }]}>Security</Text></View>
+                  <View style={[styles.skillsBadge, { backgroundColor: '#E0F2FE' }]}><Text style={[styles.skillsBadgeText, { color: '#0369A1' }]}>Operations</Text></View>
+                  <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Database</Text></View>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Frontend</Text></View>
+                  <View style={[styles.skillsBadge, { backgroundColor: '#ECFDF5' }]}><Text style={[styles.skillsBadgeText, { color: '#10B981' }]}>Backend</Text></View>
+                  <View style={[styles.skillsBadge, { backgroundColor: '#FFF7ED' }]}><Text style={[styles.skillsBadgeText, { color: '#EA580C' }]}>UI/UX Design</Text></View>
+                </>
+              )}
             </View>
 
-            {/* Phone */}
-            {(userRole === 'teacher' ? teacherProfile?.phone : userRole === 'admin' ? adminProfile?.phone : null) ? (
+            {/* Stats Badges Row */}
+            <View style={styles.statsRow}>
+              {userRole === 'teacher' ? (
+                <>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
+                      <Ionicons name="book-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.coursesCount) : '-'}</Text>
+                    <Text style={styles.statLabel}>Courses</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#3B82F6' }]}>
+                      <Ionicons name="people-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.studentsCount) : '-'}</Text>
+                    <Text style={styles.statLabel}>Students</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{teacherProfile ? String(teacherProfile.classesCount ?? 48) : '48'}</Text>
+                    <Text style={styles.statLabel}>Classes</Text>
+                  </View>
+                </>
+              ) : userRole === 'admin' ? (
+                <>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
+                      <Ionicons name="people-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalStudents) : '-'}</Text>
+                    <Text style={styles.statLabel}>Students</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#3B82F6' }]}>
+                      <Ionicons name="person-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalTeachers) : '-'}</Text>
+                    <Text style={styles.statLabel}>Teachers</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#EA580C' }]}>
+                      <Ionicons name="book-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{adminProfile ? String(adminProfile.totalCourses) : '-'}</Text>
+                    <Text style={styles.statLabel}>Courses</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
+                      <Ionicons name="cash-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>{adminProfile ? formatRevenue(adminProfile.revenue) : '-'}</Text>
+                    <Text style={styles.statLabel}>Revenue</Text>
+                  </View>
+                </>
+              ) : (
+                // Student
+                <>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
+                      <Ionicons name="book-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>5</Text>
+                    <Text style={styles.statLabel}>Enrolled</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
+                      <Ionicons name="ribbon-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>3</Text>
+                    <Text style={styles.statLabel}>Completed</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#8B5CF6' }]}>
+                      <Ionicons name="medal-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>3</Text>
+                    <Text style={styles.statLabel}>Certificates</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <View style={[styles.statIconContainer, { backgroundColor: '#FF7A00' }]}>
+                      <Ionicons name="trending-up-outline" size={18} color="#FFF" />
+                    </View>
+                    <Text style={styles.statCount}>2</Text>
+                    <Text style={styles.statLabel}>In Progress</Text>
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Contact Details Pills */}
+            <View style={styles.contactDetails}>
+              {/* Email */}
               <View style={[styles.detailPill, userRole === 'teacher' && { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
                 <View style={styles.detailIconBox}>
-                  <Ionicons name="call-outline" size={18} color="#6B7280" />
+                  <Ionicons name="mail-outline" size={18} color="#6B7280" />
                 </View>
                 <View style={styles.detailTextBox}>
-                  <Text style={styles.detailLabel}>Phone</Text>
+                  <Text style={styles.detailLabel}>Email</Text>
                   <Text style={styles.detailValue}>
                     {userRole === 'teacher'
-                      ? teacherProfile.phone
-                      : adminProfile.phone}
+                      ? ((teacherProfile?.email ?? userEmail) || '')
+                      : userRole === 'admin'
+                        ? ((adminProfile?.email ?? userEmail) || '')
+                        : (userEmail || '')}
                   </Text>
                 </View>
               </View>
-            ) : null}
 
-            {/* Location — teacher only, built from address fields saved by admin */}
-            {userRole === 'teacher' && (teacherProfile?.city || teacherProfile?.street) ? (
-              <View style={[styles.detailPill, { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
-                <View style={styles.detailIconBox}>
-                  <Ionicons name="location-outline" size={18} color="#6B7280" />
+              {/* Phone */}
+              {(userRole === 'teacher' ? teacherProfile?.phone : userRole === 'admin' ? adminProfile?.phone : null) ? (
+                <View style={[styles.detailPill, userRole === 'teacher' && { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
+                  <View style={styles.detailIconBox}>
+                    <Ionicons name="call-outline" size={18} color="#6B7280" />
+                  </View>
+                  <View style={styles.detailTextBox}>
+                    <Text style={styles.detailLabel}>Phone</Text>
+                    <Text style={styles.detailValue}>
+                      {userRole === 'teacher'
+                        ? teacherProfile.phone
+                        : adminProfile.phone}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.detailTextBox}>
-                  <Text style={styles.detailLabel}>Location</Text>
-                  <Text style={styles.detailValue}>
-                    {[
-                      teacherProfile.street,
-                      teacherProfile.city,
-                      teacherProfile.state,
-                      teacherProfile.pinCode,
-                    ].filter(Boolean).join(', ')}
-                  </Text>
+              ) : null}
+
+              {/* Location — teacher only, built from address fields saved by admin */}
+              {userRole === 'teacher' && (teacherProfile?.city || teacherProfile?.street) ? (
+                <View style={[styles.detailPill, { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
+                  <View style={styles.detailIconBox}>
+                    <Ionicons name="location-outline" size={18} color="#6B7280" />
+                  </View>
+                  <View style={styles.detailTextBox}>
+                    <Text style={styles.detailLabel}>Location</Text>
+                    <Text style={styles.detailValue}>
+                      {[
+                        teacherProfile.street,
+                        teacherProfile.city,
+                        teacherProfile.state,
+                        teacherProfile.pinCode,
+                      ].filter(Boolean).join(', ')}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ) : null}
+              ) : null}
+            </View>
           </View>
-        </View>
         </View>{/* profileCardOuter */}
 
         {/* DYNAMIC SECTION (System Administration for Admin, Enrolled Courses for Student — teacher has no section) */}
@@ -574,28 +611,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', // Light gray main screen background
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: 26,
     width: '100%',
     maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
     alignSelf: 'center',
   },
   bottomSpacer: {
-    height: 120, // Enough spacing to not be covered by floating tab bar
+    height: 100, // Enough spacing to not be covered by floating tab bar
+  },
+
+  headerAccentLine: {
+    height: 4,
+    marginBottom: 10,
   },
   // Curved purple banner header
   headerBanner: {
     backgroundColor: '#7B2CBF',
-    height: 155,
-    borderBottomLeftRadius: 36,
-    borderBottomRightRadius: 36,
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontWeight: '700',
   },
   // Avatar floats between header and card
   avatarFloatContainer: {
@@ -606,7 +645,7 @@ const styles = StyleSheet.create({
   // Outer container: positions avatar over the card
   profileCardOuter: {
     marginHorizontal: 20,
-    marginTop: -52,
+    marginTop: 20,
   },
   // Profile Info Card
   profileCard: {

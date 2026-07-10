@@ -1,18 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  TextInput,
-  Modal,
   ActivityIndicator,
   Animated,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { adminDataCache } from '../../components/layout/app-tabs';
 import { api } from '../../services/api';
 
 interface Enrollment {
@@ -66,18 +66,24 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [formPinCode, setFormPinCode] = useState('');
   const [formGuardianName, setFormGuardianName] = useState('');
   const [formGuardianPhone, setFormGuardianPhone] = useState('');
-  const [formCourse, setFormCourse] = useState('Data Science & Machine Learning');
+  const [formCourse, setFormCourse] = useState<string[]>([]);
+  const [formBatchName, setFormBatchName] = useState('');
   const [formEnrollmentDate, setFormEnrollmentDate] = useState('2026-06-02');
   const [formPaymentStatus, setFormPaymentStatus] = useState('Paid');
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<Student[]>(() => {
+    const cached = adminDataCache.students;
+    return cached.length > 0 ? cached.slice().reverse() : [];
+  });
+  const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
+  const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string }[]>([]);
+  const [loading, setLoading] = useState(adminDataCache.students.length === 0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 5;
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
+  const [showBatchDropdown, setShowBatchDropdown] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -93,8 +99,12 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   };
 
   useEffect(() => {
+    if (adminDataCache.students.length > 0 && onCountChange) {
+      onCountChange(adminDataCache.students.length);
+    }
     loadStudents();
     loadCourses();
+    loadBatches();
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
   }, []);
 
@@ -104,6 +114,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
       const res = await api.getStudents();
       if (res.success) {
         const list = res.data.slice().reverse();
+        adminDataCache.students = res.data;
         setStudents(list);
         if (onCountChange) onCountChange(list.length);
       } else {
@@ -117,19 +128,32 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   };
 
   const loadCourses = async () => {
+    if (adminDataCache.courses.length > 0) {
+      setCourses(adminDataCache.courses as Course[]);
+      return;
+    }
     try {
       const res = await api.getActiveCourses();
-      console.log('Courses API Response:', res);
       if (res.success) {
-        // amazonq-ignore-next-line
-        // amazonq-ignore-next-line
-        console.log('Courses loaded:', res.data);
+        adminDataCache.courses = res.data;
         setCourses(res.data);
-      } else {
-        console.log('Failed to load courses:', res.message);
       }
     } catch (err) {
       console.error('Failed to load courses', err);
+    }
+  };
+
+  const loadBatches = async () => {
+    try {
+      const data = await api.getBatches();
+      const list = Array.isArray(data) ? data : [];
+      setBatches(list.map((b: any) => ({
+        id: b.id,
+        batchName: b.batchName,
+        selectCourse: b.selectCourse,
+      })));
+    } catch (err) {
+      console.error('Failed to load batches', err);
     }
   };
 
@@ -161,11 +185,13 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormPinCode('560001');
     setFormGuardianName('');
     setFormGuardianPhone('');
-    setFormCourse('');
+    setFormCourse([]);
+    setFormBatchName('');
     setFormEnrollmentDate(new Date().toISOString().split('T')[0]);
     setFormPaymentStatus('Pending');
     setFormPassword('');
     setShowCourseDropdown(false);
+    setShowBatchDropdown(false);
     setIsModalVisible(true);
   };
 
@@ -183,16 +209,25 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormPinCode(student.pinCode || '560001');
     setFormGuardianName(student.guardianName || '');
     setFormGuardianPhone(student.guardianPhone || '');
-    // Prefer data from the first enrollment record (most up-to-date)
-    const firstEnrollment = student.enrollments && student.enrollments.length > 0 ? student.enrollments[0] : null;
-    setFormCourse(firstEnrollment?.courseTitle || student.course || '');
+    // Prefer data from enrollment records (allow multiple)
+    const enrollmentCourses = (student.enrollments && student.enrollments.length > 0)
+      ? student.enrollments.map(e => e.courseTitle)
+      : [];
+    const firstEnrollment = (student.enrollments && student.enrollments.length > 0) ? student.enrollments[0] : null;
+    if (enrollmentCourses.length > 0) {
+      setFormCourse(enrollmentCourses);
+    } else if (student.course) {
+      setFormCourse([student.course]);
+    } else {
+      setFormCourse([]);
+    }
     setFormEnrollmentDate(firstEnrollment?.enrollmentDate || student.enrollmentDate || '');
     setFormPaymentStatus(firstEnrollment?.paymentStatus || student.paymentStatus || 'Pending');
     setIsModalVisible(true);
   };
 
   const handleSaveStudent = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || !formCourse) {
+    if (!formFirstName || !formLastName || !formEmail || !formPhone || formCourse.length === 0) {
       showToast('Please fill out all required fields.', 'error');
       return;
     }
@@ -213,7 +248,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           pinCode: formPinCode,
           guardianName: formGuardianName,
           guardianPhone: formGuardianPhone,
-          course: formCourse,
+          course: formCourse.join(', '),
           enrollmentDate: formEnrollmentDate,
           paymentStatus: formPaymentStatus,
         });
@@ -256,9 +291,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           pinCode: formPinCode,
           guardianName: formGuardianName,
           guardianPhone: formGuardianPhone,
-          course: formCourse,
+          course: formCourse.join(', '),
           enrollmentDate: formEnrollmentDate,
           paymentStatus: formPaymentStatus,
+          batchName: formBatchName,
           role: 'STUDENT',
         });
         if (res.success) {
@@ -287,7 +323,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         showToast('Student deleted successfully', 'success');
         loadStudents();
       } else {
-        showToast(res?.message || 'Failed to delete', 'error');
+        showToast((res as any)?.message || 'Failed to delete', 'error');
       }
     } catch (err: any) {
       console.error('Delete error:', err);
@@ -642,43 +678,84 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
               <Text style={styles.formSectionTitle}>Enrollment Details</Text>
               <View style={[styles.formGroup, { zIndex: 1000 }]}>
                 <Text style={styles.fieldLabel}>Course *</Text>
-                <TouchableOpacity
-                  style={styles.modalInputDropdown}
-                  onPress={() => {
-                    console.log('Dropdown clicked, courses:', courses.length);
-                    setShowCourseDropdown(!showCourseDropdown);
-                  }}
-                >
-                  <Text style={[styles.dropdownText, !formCourse && styles.dropdownPlaceholder]}>
-                    {formCourse || 'Select a course'}
+                <View style={styles.checkboxGroup}>
+                  <Text style={[styles.dropdownText, formCourse.length === 0 && styles.dropdownPlaceholder]}>
+                    {formCourse.length > 0 ? formCourse.join(', ') : 'Select courses'}
                   </Text>
-                  <Ionicons name={showCourseDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
-                </TouchableOpacity>
-                {showCourseDropdown && (
-                  <View style={styles.dropdownList}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-                      {courses.length === 0 ? (
-                        <View style={styles.dropdownItem}>
-                          <Text style={styles.dropdownItemText}>No courses available</Text>
-                        </View>
-                      ) : (
-                        courses.map((course) => (
+                  <View style={styles.checkboxList}>
+                    {courses.length === 0 ? (
+                      <View style={styles.dropdownItem}>
+                        <Text style={styles.dropdownItemText}>No courses available</Text>
+                      </View>
+                    ) : (
+                      courses.map((course) => {
+                        const isSelected = formCourse.includes(course.title);
+                        return (
                           <TouchableOpacity
                             key={course.id}
-                            style={styles.dropdownItem}
+                            style={styles.checkboxRow}
                             onPress={() => {
-                              // amazonq-ignore-next-line
-                              console.log('Course selected:', course.title);
-                              setFormCourse(course.title);
-                              setShowCourseDropdown(false);
+                              if (isSelected) {
+                                setFormCourse(formCourse.filter(c => c !== course.title));
+                              } else {
+                                setFormCourse([...formCourse, course.title]);
+                              }
                             }}
                           >
-                            <Text style={styles.dropdownItemText}>{course.title}</Text>
-                            {formCourse === course.title && (
-                              <Ionicons name="checkmark" size={18} color="#7B2CBF" />
-                            )}
+                            <Ionicons
+                              name={isSelected ? 'checkbox' : 'square-outline'}
+                              size={18}
+                              color={isSelected ? '#7B2CBF' : '#9CA3AF'}
+                            />
+                            <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}>
+                              {course.title}
+                            </Text>
                           </TouchableOpacity>
-                        ))
+                        );
+                      })
+                    )}
+                  </View>
+                </View>
+              </View>
+              {/* Batch dropdown — filtered to the selected course */}
+              <View style={[styles.formGroup, { zIndex: 900 }]}>
+                <Text style={styles.fieldLabel}>Batch</Text>
+                <TouchableOpacity
+                  style={styles.modalInputDropdown}
+                  onPress={() => setShowBatchDropdown(!showBatchDropdown)}
+                >
+                  <Text style={[styles.dropdownText, !formBatchName && styles.dropdownPlaceholder]}>
+                    {formBatchName || 'Select a batch (optional)'}
+                  </Text>
+                  <Ionicons name={showBatchDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+                {showBatchDropdown && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+                      {/* "None" option */}
+                      <TouchableOpacity
+                        style={styles.dropdownItem}
+                        onPress={() => { setFormBatchName(''); setShowBatchDropdown(false); }}
+                      >
+                        <Text style={styles.dropdownItemText}>— No batch —</Text>
+                        {!formBatchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                      </TouchableOpacity>
+                      {batches
+                        .filter(b => formCourse.length === 0 || formCourse.some(c => (b.selectCourse || '').toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes((b.selectCourse || '').toLowerCase())))
+                        .map(b => (
+                          <TouchableOpacity
+                            key={b.id}
+                            style={styles.dropdownItem}
+                            onPress={() => { setFormBatchName(b.batchName); setShowBatchDropdown(false); }}
+                          >
+                            <Text style={styles.dropdownItemText}>{b.batchName}</Text>
+                            {formBatchName === b.batchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                          </TouchableOpacity>
+                        ))}
+                      {batches.filter(b => formCourse.length === 0 || formCourse.some(c => (b.selectCourse || '').toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes((b.selectCourse || '').toLowerCase()))).length === 0 && (
+                        <View style={styles.dropdownItem}>
+                          <Text style={[styles.dropdownItemText, { color: '#9CA3AF' }]}>No batches for this course</Text>
+                        </View>
                       )}
                     </ScrollView>
                   </View>
@@ -706,8 +783,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                         styles.paymentChip,
                         formPaymentStatus === status && (
                           status === 'Paid' ? styles.paymentChipPaid :
-                          status === 'Pending' ? styles.paymentChipPending :
-                          styles.paymentChipFailed
+                            status === 'Pending' ? styles.paymentChipPending :
+                              styles.paymentChipFailed
                         ),
                       ]}
                       onPress={() => setFormPaymentStatus(status)}
@@ -715,16 +792,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       <Ionicons
                         name={
                           status === 'Paid' ? 'checkmark-circle-outline' :
-                          status === 'Pending' ? 'time-outline' :
-                          'close-circle-outline'
+                            status === 'Pending' ? 'time-outline' :
+                              'close-circle-outline'
                         }
                         size={15}
                         color={
                           formPaymentStatus === status
                             ? '#FFF'
                             : status === 'Paid' ? '#10B981'
-                            : status === 'Pending' ? '#F59E0B'
-                            : '#EF4444'
+                              : status === 'Pending' ? '#F59E0B'
+                                : '#EF4444'
                         }
                       />
                       <Text style={[
@@ -732,8 +809,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                         formPaymentStatus === status
                           ? styles.paymentChipTextActive
                           : status === 'Paid' ? { color: '#10B981' }
-                          : status === 'Pending' ? { color: '#F59E0B' }
-                          : { color: '#EF4444' },
+                            : status === 'Pending' ? { color: '#F59E0B' }
+                              : { color: '#EF4444' },
                       ]}>
                         {status}
                       </Text>
@@ -800,7 +877,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   statsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EFF6FF',
     borderRadius: 16,
     marginBottom: 16,
     paddingVertical: 16,
@@ -810,7 +887,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -979,6 +1056,27 @@ const styles = StyleSheet.create({
   },
   dropdownPlaceholder: {
     color: '#9CA3AF',
+  },
+  checkboxGroup: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    padding: 10,
+  },
+  checkboxList: {
+    marginTop: 8,
+    gap: 8,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  dropdownItemTextActive: {
+    color: '#7B2CBF',
+    fontWeight: '600',
   },
   dropdownList: {
     position: 'absolute',

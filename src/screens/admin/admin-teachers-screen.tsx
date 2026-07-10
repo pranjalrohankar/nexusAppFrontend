@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
+import { adminDataCache } from '../../components/layout/app-tabs';
 
 interface Teacher {
   id: string;
@@ -55,9 +56,28 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   const [formEmploymentType, setFormEmploymentType] = useState('Full Time');
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const mapTeachers = (data: any[]): Teacher[] =>
+    data.map((t: any) => ({
+      id: String(t.teacherId ?? t.id ?? ''),
+      name: t.name || '',
+      joinedDate: t.joinDate || '',
+      status: (t.status === 'Active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
+      email: t.email || '',
+      phone: t.phone || '',
+      rating: t.rating ?? 5.0,
+      coursesCount: t.coursesCount ?? 0,
+      studentsCount: t.studentsCount ?? 0,
+      assignedCourseIds: Array.isArray(t.assignedCourses)
+        ? t.assignedCourses.map((c: any) => c.courseId)
+        : [],
+    })).filter((t: Teacher) => t.id && t.id !== 'undefined');
+
+  const [teachers, setTeachers] = useState<Teacher[]>(() => {
+    const cached = adminDataCache.teachers;
+    return cached.length > 0 ? mapTeachers(cached).slice().reverse() : [];
+  });
+  const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
+  const [loading, setLoading] = useState(adminDataCache.teachers.length === 0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 5;
   const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
@@ -68,21 +88,8 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     try {
       const res = await api.getTeachers();
       if (res.success && Array.isArray(res.data)) {
-        const mapped: Teacher[] = res.data.map((t: any) => ({
-          id: String(t.teacherId ?? t.id ?? ''),
-          name: t.name || '',
-          joinedDate: t.joinDate || '',
-          status: (t.status === 'Active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
-          email: t.email || '',
-          phone: t.phone || '',
-          rating: t.rating ?? 5.0,
-          coursesCount: t.coursesCount ?? 0,
-          studentsCount: t.studentsCount ?? 0,
-          assignedCourseIds: Array.isArray(t.assignedCourses)
-            ? t.assignedCourses.map((c: any) => c.courseId)
-            : [],
-        })).filter((t: Teacher) => t.id && t.id !== 'undefined');
-        const list = mapped.slice().reverse();
+        adminDataCache.teachers = res.data;
+        const list = mapTeachers(res.data).slice().reverse();
         setTeachers(list);
         if (onCountChange) onCountChange(list.length);
         setTotalStudents(res.totalStudents ?? 0);
@@ -95,9 +102,14 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   }, [onCountChange]);
 
   const fetchCourses = useCallback(async () => {
+    if (adminDataCache.courses.length > 0) {
+      setCourses(adminDataCache.courses as Course[]);
+      return;
+    }
     try {
       const res = await api.getAllCourses();
       if (res.success && Array.isArray(res.data)) {
+        adminDataCache.courses = res.data;
         setCourses(res.data.map((c: any) => ({ id: c.id, title: c.title })));
       }
     } catch { }
@@ -173,6 +185,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setFormSpecialization('');
     setFormJoinDate(teacher.joinedDate);
     setFormEmploymentType('');
+    setFormPassword('');
     setSelectedCourseIds(teacher.assignedCourseIds || []);
     if (courses.length === 0) await fetchCourses();
     setIsModalVisible(true);
@@ -714,7 +727,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   statsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EFF6FF',
     borderRadius: 16,
     marginBottom: 16,
     paddingVertical: 16,

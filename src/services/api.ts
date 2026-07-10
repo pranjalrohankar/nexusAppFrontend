@@ -1,9 +1,27 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const BASE_URL = Platform.OS === 'android'
-  ? 'http://10.0.2.2:8080/api'
-  : 'http://localhost:8080/api';
+export function getApiBaseUrl() {
+  const configuredUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest?.debuggerHost;
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    return `http://${host}:8080/api`;
+  }
+
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8080/api';
+  }
+
+  return 'http://localhost:8080/api';
+}
+
+const BASE_URL = getApiBaseUrl();
 
 let _token: string | null = null;
 
@@ -52,9 +70,12 @@ export function clearToken() {
   } catch {}
 }
 
-function buildHeaders() {
+function buildHeaders(contentType?: string) {
   const token = getToken();
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  const h: Record<string, string> = {};
+  if (contentType) {
+    h['Content-Type'] = contentType;
+  }
   if (token) {
     h['Authorization'] = `Bearer ${token}`;
     const safeToken = token.substring(0, 20).replace(/[\r\n]/g, '');
@@ -83,11 +104,20 @@ async function handleResponse(res: Response) {
   return { success: true, message: 'Operation successful' };
 }
 
-async function post(path: string, body: object) {
+async function post(path: string, body: object, contentType = 'application/json') {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: buildHeaders(contentType),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+async function postFormData(path: string, body: FormData) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: buildHeaders(),
-    body: JSON.stringify(body),
+    body,
   });
   return handleResponse(res);
 }
@@ -105,7 +135,7 @@ async function getPublic(path: string) {
 async function put(path: string, body: object) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'PUT',
-    headers: buildHeaders(),
+    headers: buildHeaders('application/json'),
     body: JSON.stringify(body),
   });
   return handleResponse(res);
@@ -116,12 +146,25 @@ async function del(path: string) {
     method: 'DELETE',
     headers: buildHeaders(),
   });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('DELETE Error:', res.status, text);
+    throw new Error(`HTTP ${res.status}: ${text}`);
+  }
+  return { success: true };
+}
+
+async function patch(path: string) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+  });
   return handleResponse(res);
 }
 
 export const api = {
-  login: (email: string, password: string, role: string) =>
-    post('/auth/login', { email, password, role }),
+  login: (email: string, password: string, role: string, deviceFingerprint?: string) =>
+    post('/auth/login', { email, password, role, deviceFingerprint }),
 
   createUser: (data: object) => post('/admin/users', data),
 
@@ -155,8 +198,32 @@ export const api = {
   getEnrollmentCount: (courseTitle: string) => get(`/enrollments/count/course?courseTitle=${encodeURIComponent(courseTitle.trim())}`),
 
   getEnquiries: () => get('/enquiries'),
+  markEnquiryRead: (id: number | string) => patch(`/enquiries/${id}/read`),
   submitEnquiry: (data: object) => post('/enquiries', data),
 
   getTeacherProfile: () => get('/teachers/profile'),
   updateTeacherProfile: (data: object) => put('/teachers/profile', data),
+  getMyBatches: () => get('/teachers/my-batches'),
+  getMyCoursesBatches: (course?: string) =>
+    get(`/teachers/my-courses-batches${course ? `?course=${encodeURIComponent(course)}` : ''}`),
+
+  getStudyMaterials: () => get('/materials'),
+  getStudyMaterialsByCourse: (course: string) => get(`/materials/by-course?course=${encodeURIComponent(course)}`),
+  uploadStudyMaterial: (data: FormData) => postFormData('/materials/upload', data),
+  deleteStudyMaterial: (id: number | string) => del(`/materials/${id}`),
+
+  getClassRecordings: () => get('/recordings'),
+  uploadClassRecording: (data: FormData) => postFormData('/recordings/upload', data),
+  getRecordingStreamUrl: (id: number) => `${BASE_URL}/recordings/stream/${id}`,
+  deleteClassRecording: (id: number | string) => del(`/recordings/${id}`),
+
+  getLoginHistory: (userId: number | string) => get(`/auth/login-history?userId=${userId}`),
+  getSecuritySettings: (userId: number | string) => get(`/auth/security-settings?userId=${userId}`),
+  updateSecuritySettings: (data: object) => put('/auth/security-settings', data),
+
+  // Student-specific endpoints
+  getStudentEnrollments: () => get('/student/enrollments'),
+  getStudentMaterials: () => get('/student/materials'),
+  getStudentRecordings: () => get('/student/recordings'),
+  getMaterialDownloadUrl: (id: number | string) => `${BASE_URL}/materials/download/${id}`,
 };
