@@ -43,15 +43,15 @@ const ACCENT_COLORS: any = [
   'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
   'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
 ];
-const ACCENT_LOCS: any = [0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1];
+const ACCENT_LOCS: any = [0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1];
 
 const TYPE_ICON: Record<string, { name: any; color: string; bg: string }> = {
-  PDF:   { name: 'document-text', color: '#EF4444', bg: '#FEE2E2' },
-  PPT:   { name: 'easel',         color: '#F97316', bg: '#FFEDD5' },
-  DOC:   { name: 'document',      color: '#3B82F6', bg: '#DBEAFE' },
-  VIDEO: { name: 'videocam',      color: '#8B5CF6', bg: '#EDE9FE' },
-  IMAGE: { name: 'image',         color: '#10B981', bg: '#D1FAE5' },
-  ZIP:   { name: 'archive',       color: '#64748B', bg: '#F1F5F9' },
+  PDF: { name: 'document-text', color: '#EF4444', bg: '#FEE2E2' },
+  PPT: { name: 'easel', color: '#F97316', bg: '#FFEDD5' },
+  DOC: { name: 'document', color: '#3B82F6', bg: '#DBEAFE' },
+  VIDEO: { name: 'videocam', color: '#8B5CF6', bg: '#EDE9FE' },
+  IMAGE: { name: 'image', color: '#10B981', bg: '#D1FAE5' },
+  ZIP: { name: 'archive', color: '#64748B', bg: '#F1F5F9' },
 };
 
 export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenProps) {
@@ -161,9 +161,9 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
   const handleUploadMaterial = async () => {
     if (!title.trim()) return Alert.alert('Error', 'Please enter title');
-    if (!selectedFile)  return Alert.alert('Error', 'Please select file');
+    if (!selectedFile) return Alert.alert('Error', 'Please select file');
     if (!course.trim()) return Alert.alert('Error', 'Please select course');
-    if (!batch.trim())  return Alert.alert('Error', 'Please select batch');
+    if (!batch.trim()) return Alert.alert('Error', 'Please select batch');
 
     try {
       const fileBlob = await (await fetch(selectedFile.uri)).blob();
@@ -187,7 +187,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         fileUri: res?.id ? `${API_BASE_URL}/api/materials/download/${res.id}` : '',
         downloads: 0,
       }, ...prev]);
-      loadMaterials().catch(() => {});
+      loadMaterials().catch(() => { });
       Alert.alert('Success', 'Material uploaded successfully');
       setShowUploadModal(false);
       resetForm();
