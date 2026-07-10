@@ -224,4 +224,6 @@ export const api = {
   // Student-specific endpoints
   getStudentEnrollments: () => get('/student/enrollments'),
   getStudentMaterials: () => get('/student/materials'),
+  getStudentRecordings: () => get('/student/recordings'),
+  getMaterialDownloadUrl: (id: number | string) => `${BASE_URL}/materials/download/${id}`,
 };
