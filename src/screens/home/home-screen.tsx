@@ -1,10 +1,13 @@
-import CourseDetails, { CourseData } from '@/screens/courses/course-details';
+﻿import CourseDetails, { CourseData } from '@/screens/courses/course-details';
 import ExploreCourses, { ExploreCourseItem } from '@/screens/courses/explore-courses';
 import ClassRecordingsScreen from '@/screens/home/class-recordings-screen';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState, useEffect } from 'react';
 import {
   Dimensions,
+  Modal,
+  Alert,
   Platform,
   ScrollView,
   StatusBar,
@@ -12,10 +15,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api } from '@/services/api';
+import { api, getApiBaseUrl } from '@/services/api';
+import { Video, ResizeMode } from 'expo-av';
 
 export const exploreCoursesList: ExploreCourseItem[] = [];
 
@@ -262,15 +267,434 @@ type TabType = 'JOIN_CLASS' | 'UPCOMING';
 
 interface HomeScreenProps {
   onOpenNotifications?: () => void;
+  userName?: string;
 }
 
-export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
+interface Enrollment {
+  courseTitle: string;
+  batchName: string;
+  instructor: string;
+  status: string;
+  classDays: string[];
+  classTimings?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+// Returns true if today matches a class day AND (no timing stored OR current time is within window)
+function isClassLiveNow(classTimings?: string): boolean {
+  if (!classTimings) return true; // no timing stored → show if today's day matches
+  const match = classTimings.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return true; // can't parse → show anyway
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  const now = new Date();
+  const classStart = new Date(now);
+  classStart.setHours(hours, minutes, 0, 0);
+  const diffMin = (now.getTime() - classStart.getTime()) / 60000;
+  return diffMin >= -15 && diffMin <= 90;
+}
+
+const TODAY_NAME = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
+
+const API_BASE = getApiBaseUrl().replace('/api', '');
+
+// ── Inline Video Modal ──────────────────────────────────────────────────
+
+function InlineVideoModal({ visible, uri, title, onClose }: {
+  visible: boolean; uri: string | null; title: string; onClose: () => void;
+}) {
+  const [playerSize, setPlayerSize] = useState({ w: 0, h: 0 });
+  const handleClose = () => { setPlayerSize({ w: 0, h: 0 }); onClose(); };
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose} transparent={false} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center',
+          paddingHorizontal: 16, paddingVertical: 14,
+          paddingTop: Platform.OS === 'android' ? 44 : 14,
+          backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+        }}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}
+          >
+            <Ionicons name="close" size={24} color="#1E2937" />
+          </TouchableOpacity>
+          <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1E2937' }} numberOfLines={1}>{title}</Text>
+        </View>
+        <View
+          style={{ flex: 1, backgroundColor: '#000' }}
+          onLayout={e => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
+          }}
+        >
+          {uri && playerSize.w > 0 ? (
+            <Video
+              source={{ uri }}
+              style={{ width: playerSize.w, height: playerSize.h, backgroundColor: '#000' }}
+              videoStyle={{ width: '100%', height: '100%' } as any}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              onError={() => { Alert.alert('Playback Error', 'Unable to play this video.'); handleClose(); }}
+            />
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [playUri, setPlayUri] = useState<string | null>(null);
+  const [playTitle, setPlayTitle] = useState('');
+
+  useEffect(() => {
+    api.getStudentRecordings().then((data: any) => {
+      setRecordings(Array.isArray(data) ? data : []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  // Filter chips = enrolled courses (not just courses that have recordings)
+  const categories = ['All', ...enrolledCourses];
+
+  const filtered = recordings.filter((r: any) => {
+    const q = search.toLowerCase();
+    const matchQ = r.title?.toLowerCase().includes(q) || r.course?.toLowerCase().includes(q);
+    const matchCat = activeFilter === 'All' || r.course === activeFilter;
+    return matchQ && matchCat;
+  });
+
+  const formatDate = (iso?: string) =>
+    iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+  const getStreamUrl = (id: number) => `${API_BASE}/api/recordings/stream/${id}`;
+
+  return (
+    <View>
+      {/* Search */}
+      <View style={rs.searchBox}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" />
+        <TextInput
+          style={rs.searchInput}
+          placeholder="Search recordings..."
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+      {/* Filter chips — all enrolled courses */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 }}>
+        <Ionicons name="filter-outline" size={16} color="#6B7280" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+          {categories.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[rs.chip, activeFilter === cat && rs.chipActive]}
+              onPress={() => setActiveFilter(cat)}
+            >
+              <Text style={[rs.chipText, activeFilter === cat && rs.chipTextActive]}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+      {/* Cards */}
+      {loading ? (
+        <ActivityIndicator color="#7B2CBF" style={{ marginVertical: 24 }} />
+      ) : filtered.length === 0 ? (
+        <View style={rs.empty}>
+          <Ionicons name="videocam-off-outline" size={36} color="#D1D5DB" />
+          <Text style={rs.emptyText}>No recordings found</Text>
+        </View>
+      ) : (
+        filtered.map((rec: any) => (
+          <View key={rec.id} style={rs.card}>
+            <View style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start' }}>
+              {/* Thumbnail — dark purple bg + lighter purple inner box + white play circle */}
+              <View style={rs.thumb}>
+                <View style={rs.thumbInner}>
+                  <View style={rs.playCircle}>
+                    <Ionicons name="play" size={13} color="#7B2CBF" style={{ marginLeft: 2 }} />
+                  </View>
+                </View>
+              </View>
+              {/* Info */}
+              <View style={{ flex: 1 }}>
+                <Text style={rs.cardTitle} numberOfLines={2}>{rec.title}</Text>
+                <Text style={rs.instructorText}>{rec.instructor || 'Instructor'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 }}>
+                  <Ionicons name="grid-outline" size={11} color="#7B2CBF" />
+                  <Text style={rs.courseTag} numberOfLines={1}>{rec.course}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+                  {(rec.classDate || rec.uploadedAt) && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <Ionicons name="calendar-outline" size={11} color="#6B7280" />
+                      <Text style={rs.meta}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
+                    </View>
+                  )}
+                  {rec.duration && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <Ionicons name="time-outline" size={11} color="#6B7280" />
+                      <Text style={rs.meta}>{rec.duration}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+            {/* Watch Now button */}
+            <TouchableOpacity
+              style={rs.watchBtn}
+              onPress={() => { setPlayTitle(rec.title); setPlayUri(getStreamUrl(rec.id)); }}
+            >
+              <Ionicons name="play" size={14} color="#FFF" />
+              <Text style={rs.watchBtnText}>Watch Now</Text>
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
+      {/* Video Modal */}
+      <InlineVideoModal
+        visible={!!playUri}
+        uri={playUri}
+        title={playTitle}
+        onClose={() => setPlayUri(null)}
+      />
+    </View>
+  );
+}
+
+function MaterialsSection() {
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+
+  useEffect(() => {
+    api.getStudentMaterials().then((data: any) => {
+      setMaterials(Array.isArray(data) ? data : []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const categories = ['All', ...Array.from(new Set(materials.map((m: any) => m.course).filter(Boolean)))];
+  const filtered = materials.filter((m: any) => {
+    const q = search.toLowerCase();
+    const matchQ = m.title?.toLowerCase().includes(q) || m.course?.toLowerCase().includes(q);
+    const matchCat = activeFilter === 'All' || m.course === activeFilter;
+    return matchQ && matchCat;
+  });
+
+  const formatDate = (iso?: string) =>
+    iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+
+  const getFileIcon = (filename?: string) => {
+    const ext = filename?.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') return 'document-text';
+    if (['doc','docx'].includes(ext || '')) return 'document';
+    if (['ppt','pptx'].includes(ext || '')) return 'easel';
+    if (['zip','rar'].includes(ext || '')) return 'archive';
+    return 'attach';
+  };
+
+  return (
+    <View>
+      <View style={rs.searchBox}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" />
+        <TextInput
+          style={rs.searchInput}
+          placeholder="Search materials..."
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+        {categories.map(cat => (
+          <TouchableOpacity
+            key={cat}
+            style={[rs.chip, activeFilter === cat && rs.chipActive]}
+            onPress={() => setActiveFilter(cat)}
+          >
+            <Text style={[rs.chipText, activeFilter === cat && rs.chipTextActive]}>{cat}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      {loading ? (
+        <ActivityIndicator color="#7B2CBF" style={{ marginVertical: 24 }} />
+      ) : filtered.length === 0 ? (
+        <View style={rs.empty}>
+          <Ionicons name="document-outline" size={36} color="#D1D5DB" />
+          <Text style={rs.emptyText}>No materials found</Text>
+        </View>
+      ) : (
+        filtered.map((mat: any) => (
+          <View key={mat.id} style={rs.card}>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={[rs.thumb, { backgroundColor: '#F3E8FF' }]}>
+                <Ionicons name={getFileIcon(mat.fileName) as any} size={24} color="#7B2CBF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={rs.cardTitle} numberOfLines={2}>{mat.title || mat.fileName}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <Ionicons name="book-outline" size={11} color="#7B2CBF" />
+                  <Text style={rs.courseTag}>{mat.course}</Text>
+                </View>
+                {mat.uploadedAt && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 }}>
+                    <Ionicons name="calendar-outline" size={11} color="#6B7280" />
+                    <Text style={rs.meta}>{formatDate(mat.uploadedAt)}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[rs.watchBtn, { backgroundColor: '#F97316' }]}
+              onPress={() => {
+                const url = api.getMaterialDownloadUrl(mat.id);
+                if (Platform.OS === 'web') { (window as any).open(url, '_blank'); }
+              }}
+            >
+              <Ionicons name="download-outline" size={13} color="#FFF" />
+              <Text style={rs.watchBtnText}>Download</Text>
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+function ResourceTabsSection({ enrollments }: { enrollments: Enrollment[] }) {
+  const [activeResTab, setActiveResTab] = useState<'recordings' | 'materials'>('recordings');
+  const enrolledCourses = enrollments.map(e => e.courseTitle);
+  return (
+    <View style={styles.section}>
+      {/* Tab toggle */}
+      <View style={styles.toggleRow}>
+        <TouchableOpacity
+          style={[styles.toggleTab, activeResTab === 'recordings' && styles.toggleTabActive]}
+          onPress={() => setActiveResTab('recordings')}
+        >
+          <Ionicons name="videocam-outline" size={16} color={activeResTab === 'recordings' ? '#FFF' : '#4B5563'} style={styles.tabIcon} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={[styles.toggleTabText, activeResTab === 'recordings' && styles.toggleTabTextActive]}>Recording</Text>
+            {activeResTab === 'recordings' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleTab, activeResTab === 'materials' && styles.toggleTabActive]}
+          onPress={() => setActiveResTab('materials')}
+        >
+          <Ionicons name="book-outline" size={16} color={activeResTab === 'materials' ? '#FFF' : '#4B5563'} style={styles.tabIcon} />
+          <Text style={[styles.toggleTabText, activeResTab === 'materials' && styles.toggleTabTextActive]}>Study material</Text>
+        </TouchableOpacity>
+      </View>
+      {activeResTab === 'recordings'
+        ? <RecordingsSection enrolledCourses={enrolledCourses} />
+        : <MaterialsSection />}
+    </View>
+  );
+}
+
+function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
+  enrollments: Enrollment[];
+  setSelectedCourse: (c: CourseData | null) => void;
+  InstructorAvatar: React.FC<{ name: string; courseKey?: string }>;
+}) {
+  const liveClasses = enrollments.filter(e => {
+    if (e.status !== 'ACTIVE') return false;
+    const todayMatch = Array.isArray(e.classDays) && e.classDays.some(
+      d => d.trim().toLowerCase().startsWith(TODAY_NAME.substring(0, 3))
+    );
+    return todayMatch && isClassLiveNow(e.classTimings);
+  });
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Join Classes</Text>
+      {liveClasses.length === 0 ? (
+        <View style={[styles.classCard, { alignItems: 'center', padding: 32, gap: 8 }]}>
+          <Ionicons name="videocam-off-outline" size={32} color="#D1D5DB" />
+          <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600' }}>No live classes today</Text>
+          <Text style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center' }}>Your next class will appear here when it's time to join</Text>
+        </View>
+      ) : (
+        liveClasses.map((enr, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={[styles.classCard, { padding: 0, overflow: 'hidden', marginBottom: idx < liveClasses.length - 1 ? 12 : 0 }]}
+            onPress={() => setSelectedCourse(coursesData[enr.courseTitle] ?? null)}
+            activeOpacity={0.8}
+          >
+            <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
+                <View style={styles.livePillBadge}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 5 }} />
+                  <Text style={styles.livePillText}>LIVE</Text>
+                </View>
+              </View>
+              {enr.classDays && enr.classDays.length > 0 ? (
+                <View style={styles.classTimeRow}>
+                  <Ionicons name="time-outline" size={16} color="#E9D5FF" />
+                  <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>
+                    {enr.classDays.join(', ')}{enr.classTimings ? ` - ${enr.classTimings}` : ''}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+              {enr.instructor ? (
+                <View style={styles.instructorRow}>
+                  <InstructorAvatar name={enr.instructor} courseKey={enr.courseTitle} />
+                  <View>
+                    <Text style={styles.instructorLabel}>Instructor</Text>
+                    <Text style={styles.instructorName}>{enr.instructor}</Text>
+                  </View>
+                </View>
+              ) : null}
+              <View style={styles.progressContainer}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.progressLabel}>Progress</Text>
+                  <Text style={styles.progressValue}>8/50 Classes</Text>
+                </View>
+                <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, { width: '16%' }]} />
+                </View>
+              </View>
+              <View style={[styles.cardFooter, styles.rowBetween]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                  <Text style={styles.liveNowText}>Live Now</Text>
+                </View>
+                <TouchableOpacity style={styles.joinNowButton}>
+                  <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
+                  <Text style={styles.joinNowText}>Join Now</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))
+      )}
+    </View>
+  );
+}
+
+export default function HomeScreen({ onOpenNotifications, userName }: HomeScreenProps) {
   const [activeTab, setActiveTab] = useState<TabType>('JOIN_CLASS');
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCourse, setSelectedCourse] = useState<CourseData | null>(null);
   const [isExploring, setIsExploring] = useState(false);
   const [isViewingRecordings, setIsViewingRecordings] = useState(false);
   const [liveExploreList, setLiveExploreList] = useState<ExploreCourseItem[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
 
   useEffect(() => {
     api.getActiveCourses().then((data: any) => {
@@ -284,6 +708,11 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
         price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
         key: c.title,
       })));
+    }).catch(() => {});
+
+    api.getStudentEnrollments().then((data: any) => {
+      const list = Array.isArray(data) ? data : [];
+      setEnrollments(list);
     }).catch(() => {});
   }, []);
 
@@ -337,12 +766,25 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: '#7B2CBF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
-      {/* 1. HEADER */}
-      <View style={styles.header}>
-        <View style={{ width: '100%', maxWidth: Platform.OS === 'web' ? 800 : undefined, alignSelf: 'center' }}>
-          <View style={styles.logoRow}>
+      <LinearGradient
+        colors={[
+          'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+          'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+          'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+          'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+          'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+        ]}
+        locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={styles.headerAccentLine}
+      />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* 1. HEADER */}
+        <View style={styles.header}>
+          <View style={styles.headerInner}>
+            <View style={styles.logoRow}>
             <View>
               <Text style={styles.logoText}>
                 NE<Text style={styles.logoTextGold}>X</Text>US
@@ -366,10 +808,10 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
               </TouchableOpacity>
             </View>
           </View>
+          </View>
         </View>
-      </View>
 
-      <ScrollView
+        <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -377,14 +819,16 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
         {/* 3. WELCOME CARD */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeHeaderRow}>
-            <Text style={[styles.welcomeTitle, { fontSize: 18, fontWeight: 'bold', fontFamily: undefined }]}>Master Skills, Achieve More</Text>
+            <Text style={[styles.welcomeTitle, { fontSize: 18, fontWeight: 'bold', fontFamily: undefined }]}>
+              {userName ? `Welcome, ${userName.split(' ')[0]}!` : 'Master Skills, Achieve More'}
+            </Text>
           </View>
           <Text style={[styles.welcomeSubtitle, { fontSize: 11, lineHeight: 16 }]}>Access live classes, study materials, assignments, and recorded sessions —all in one seamless learning platform designed to help you stay ahead.</Text>
 
           <View style={styles.statsRow}>
             <View style={styles.statsBox}>
               <Text style={styles.statsLabel}>Courses Enrolled</Text>
-              <Text style={styles.statsValue}>3</Text>
+              <Text style={styles.statsValue}>{enrollments.length}</Text>
             </View>
             <View style={styles.statsBox}>
               <Text style={styles.statsLabel}>Hours Learned</Text>
@@ -432,218 +876,63 @@ export default function HomeScreen({ onOpenNotifications }: HomeScreenProps) {
 
         {/* 5. DYNAMIC CLASSES VIEW */}
         {activeTab === 'JOIN_CLASS' ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Join Classes</Text>
-
-            {/* Live Class Card */}
-            <TouchableOpacity
-              style={[styles.classCard, { padding: 0, overflow: 'hidden' }]}
-              onPress={() => setSelectedCourse(coursesData['Data Science & Machine Learning'])}
-              activeOpacity={0.8}
-            >
-              {/* Purple Header */}
-              <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
-                <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>Data Science & Machine Learning</Text>
-                  <View style={styles.liveBadge}>
-                    <Text style={styles.liveBadgeText}>● LIVE</Text>
-                  </View>
-                </View>
-
-                <View style={styles.classTimeRow}>
-                  <Ionicons name="time-outline" size={16} color="#E9D5FF" />
-                  <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>Tue, Thu, Sat - 8:00 PM</Text>
-                </View>
-              </View>
-
-              <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
-                {/* Instructor */}
-                <View style={styles.instructorRow}>
-                  <InstructorAvatar name="Priya Sharma" courseKey="Data Science & Machine Learning" />
-                  <View>
-                    <Text style={styles.instructorLabel}>Instructor</Text>
-                    <Text style={styles.instructorName}>Priya Sharma</Text>
-                  </View>
-                </View>
-
-                {/* Progress */}
-                <View style={styles.progressContainer}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.progressLabel}>Progress</Text>
-                    <Text style={[styles.progressValue, { color: '#7B2CBF' }]}>8/50 Classes</Text>
-                  </View>
-                  <View style={styles.progressBarBg}>
-                    <View style={[styles.progressBarFill, { width: '16%', backgroundColor: '#FFB703' }]} />
-                  </View>
-                </View>
-
-                {/* Footer */}
-                <View style={[styles.rowBetween, styles.cardFooter, { marginTop: 16 }]}>
-                  <View style={styles.classTimeRow}>
-                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                    <Text style={styles.liveNowText}>Live Now</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.joinNowButton, { backgroundColor: '#EF4444' }]}
-                    onPress={() => setSelectedCourse(coursesData['Data Science & Machine Learning'])}
-                  >
-                    <Ionicons name="play" size={14} color="#FFF" style={styles.playIcon} />
-                    <Text style={styles.joinNowText}>Join Now</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
+          <LiveClassesView
+            enrollments={enrollments}
+            setSelectedCourse={setSelectedCourse}
+            InstructorAvatar={InstructorAvatar}
+          />
         ) : (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Upcoming Classes</Text>
-
-            {/* Upcoming Class Card 1 */}
-            <TouchableOpacity
-              style={styles.classCard}
-              onPress={() => setSelectedCourse(coursesData['Full Stack Web Development'])}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.classTitle}>Full Stack Web Development</Text>
-
-              <View style={styles.classTimeRow}>
-                <Ionicons name="time-outline" size={16} color="#6B7280" />
-                <Text style={styles.classTimeText}>Mon, Wed, Fri - 7:00 PM</Text>
+            {enrollments.filter(e => e.status === 'ACTIVE' || e.status === 'UPCOMING').length === 0 ? (
+              <View style={[styles.classCard, { alignItems: 'center', padding: 32, gap: 8 }]}>
+                <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
+                <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600' }}>No upcoming classes</Text>
               </View>
-
-              <View style={styles.instructorRow}>
-                <InstructorAvatar name="Rajesh Kumar" />
-                <View>
-                  <Text style={styles.instructorLabel}>Instructor</Text>
-                  <Text style={styles.instructorName}>Rajesh Kumar</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            {/* Upcoming Class Card 2 */}
-            <TouchableOpacity
-              style={[styles.classCard, styles.marginTop12]}
-              onPress={() => setSelectedCourse(coursesData['UI/UX Design Mastery'])}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.classTitle}>UI/UX Design Mastery</Text>
-
-              <View style={styles.classTimeRow}>
-                <Ionicons name="time-outline" size={16} color="#6B7280" />
-                <Text style={styles.classTimeText}>Mon, Wed, Fri - 7:00 PM</Text>
-              </View>
-
-              <View style={styles.instructorRow}>
-                <InstructorAvatar name="Rajesh Kumar" />
-                <View>
-                  <Text style={styles.instructorLabel}>Instructor</Text>
-                  <Text style={styles.instructorName}>Rajesh Kumar</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+            ) : (
+              enrollments
+                .filter(e => e.status === 'ACTIVE' || e.status === 'UPCOMING')
+                .map((enr, idx) => (
+                  <View
+                    key={idx}
+                    style={[styles.upcomingCard, idx > 0 && { marginTop: 12 }]}
+                  >
+                    <Text style={styles.upcomingTitle}>{enr.courseTitle}</Text>
+                    <View style={styles.upcomingRow}>
+                      <Ionicons name="time-outline" size={16} color="#E9D5FF" />
+                      <Text style={styles.upcomingTime}>
+                        {enr.classDays && enr.classDays.length > 0
+                          ? `${enr.classDays.join(', ')}${enr.classTimings ? ` - ${enr.classTimings}` : ''}`
+                          : enr.classTimings || 'Schedule TBD'}
+                      </Text>
+                    </View>
+                    <View style={styles.upcomingRow}>
+                      <Ionicons name="person-outline" size={16} color="#E9D5FF" />
+                      <View>
+                        <Text style={styles.upcomingInstructorLabel}>Instructor</Text>
+                        <Text style={styles.upcomingInstructorName}>{enr.instructor || 'TBD'}</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+            )}
           </View>
         )}
 
-        {/* 6. TRENDING COURSES */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔥 Trending Courses</Text>
+          {/* 6. RECORDINGS & STUDY MATERIALS TABS */}
+        <ResourceTabsSection enrollments={enrollments} />
 
-          {activeTab === 'JOIN_CLASS' ? (
-            <>
-              {/* Java Card */}
-              <TouchableOpacity
-                style={styles.trendingCard}
-                onPress={() => setSelectedCourse(coursesData['Java Full Stack'])}
-              >
-                <View style={styles.trendingTextCol}>
-                  <View style={styles.trendingBadge}>
-                    <Text style={styles.trendingBadgeText}>TRENDING</Text>
-                  </View>
-                  <Text style={styles.trendingCardTitle}>Java Full Stack</Text>
-                  <View style={styles.trendingStatsRow}>
-                    <Ionicons name="people-outline" size={14} color="#E9D5FF" />
-                    <Text style={styles.trendingStatsText}>2.5k</Text>
-                    <Ionicons name="star" size={14} color="#FFD700" style={styles.marginLeft8} />
-                    <Text style={styles.trendingStatsText}>4.9</Text>
-                  </View>
-                </View>
-                <Ionicons name="arrow-forward-outline" size={20} color="#FFF" />
-              </TouchableOpacity>
-
-              {/* Node Card */}
-              <TouchableOpacity
-                style={[styles.trendingCard, styles.marginTop12]}
-                onPress={() => setSelectedCourse(coursesData['Node js for AI'])}
-              >
-                <View style={styles.trendingTextCol}>
-                  <View style={styles.trendingBadge}>
-                    <Text style={styles.trendingBadgeText}>TRENDING</Text>
-                  </View>
-                  <Text style={styles.trendingCardTitle}>Node js for AI</Text>
-                  <View style={styles.trendingStatsRow}>
-                    <Ionicons name="people-outline" size={14} color="#E9D5FF" />
-                    <Text style={styles.trendingStatsText}>3.2k</Text>
-                    <Ionicons name="star" size={14} color="#FFD700" style={styles.marginLeft8} />
-                    <Text style={styles.trendingStatsText}>4.8</Text>
-                  </View>
-                </View>
-                <Ionicons name="arrow-forward-outline" size={20} color="#FFF" />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              {/* React Native Card */}
-              <TouchableOpacity
-                style={styles.trendingCard}
-                onPress={() => setSelectedCourse(coursesData['React Native Bootcamp'])}
-              >
-                <View style={styles.trendingTextCol}>
-                  <View style={styles.trendingBadge}>
-                    <Text style={styles.trendingBadgeText}>TRENDING</Text>
-                  </View>
-                  <Text style={styles.trendingCardTitle}>React Native Bootcamp</Text>
-                  <View style={styles.trendingStatsRow}>
-                    <Ionicons name="people-outline" size={14} color="#E9D5FF" />
-                    <Text style={styles.trendingStatsText}>2.5k</Text>
-                    <Ionicons name="star" size={14} color="#FFD700" style={styles.marginLeft8} />
-                    <Text style={styles.trendingStatsText}>4.9</Text>
-                  </View>
-                </View>
-                <Ionicons name="arrow-forward-outline" size={20} color="#FFF" />
-              </TouchableOpacity>
-
-              {/* Python Card */}
-              <TouchableOpacity
-                style={[styles.trendingCard, styles.marginTop12]}
-                onPress={() => setSelectedCourse(coursesData['Python for AI'])}
-              >
-                <View style={styles.trendingTextCol}>
-                  <View style={styles.trendingBadge}>
-                    <Text style={styles.trendingBadgeText}>TRENDING</Text>
-                  </View>
-                  <Text style={styles.trendingCardTitle}>Python for AI</Text>
-                  <View style={styles.trendingStatsRow}>
-                    <Ionicons name="people-outline" size={14} color="#E9D5FF" />
-                    <Text style={styles.trendingStatsText}>3.2k</Text>
-                    <Ionicons name="star" size={14} color="#FFD700" style={styles.marginLeft8} />
-                    <Text style={styles.trendingStatsText}>4.8</Text>
-                  </View>
-                </View>
-                <Ionicons name="arrow-forward-outline" size={20} color="#FFF" />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
         <View style={styles.bottomSpacer} />
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#7B2CBF', // Rich purple header background
+    backgroundColor: 'transparent',
   },
   scrollView: {
     flex: 1,
@@ -661,8 +950,15 @@ const styles = StyleSheet.create({
   // Header
   header: {
     backgroundColor: '#7B2CBF',
-    paddingHorizontal: 16,
     paddingBottom: 16,
+    paddingTop: 8,
+  },
+  headerAccentLine: { height: 3, borderRadius: 2 },
+  headerInner: {
+    paddingHorizontal: 16,
+    maxWidth: Platform.OS === 'web' ? 800 : undefined,
+    alignSelf: 'center',
+    width: '100%',
   },
   logoRow: {
     flexDirection: 'row',
@@ -891,6 +1187,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
+  livePillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  livePillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
   classTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -988,54 +1298,117 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  // Trending Courses
-  trendingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  // Upcoming card
+  upcomingCard: {
     backgroundColor: '#7B2CBF',
     borderRadius: 20,
     padding: 20,
     shadowColor: '#7B2CBF',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  trendingTextCol: {
+  upcomingTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  upcomingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  upcomingTime: {
+    fontSize: 13,
+    color: '#E9D5FF',
     flex: 1,
   },
-  trendingBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignSelf: 'flex-start',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 8,
+  upcomingInstructorLabel: {
+    fontSize: 11,
+    color: '#D8B4FE',
+    marginBottom: 2,
   },
-  trendingBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  trendingCardTitle: {
-    fontSize: 16,
+  upcomingInstructorName: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 8,
   },
-  trendingStatsRow: {
+});
+
+const rs = StyleSheet.create({
+  searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    height: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
+    marginBottom: 12,
   },
-  trendingStatsText: {
-    fontSize: 12,
-    color: '#E9D5FF',
-    marginLeft: 4,
-    fontWeight: '500',
+  searchInput: { flex: 1, fontSize: 14, color: '#1F2937' },
+  chip: {
+    paddingVertical: 7, paddingHorizontal: 14,
+    borderRadius: 18, backgroundColor: '#F3F4F6',
+    borderWidth: 1, borderColor: '#E5E7EB',
   },
-  marginLeft8: {
-    marginLeft: 8,
+  chipActive: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
+  chipText: { fontSize: 12, fontWeight: '600', color: '#4B5563' },
+  chipTextActive: { color: '#FFF' },
+  card: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
+  thumb: {
+    width: 72, height: 72,
+    borderRadius: 16,
+    backgroundColor: '#8B8FA8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  thumbInner: {
+    width: 46, height: 46,
+    borderRadius: 12,
+    backgroundColor: '#7B2CBF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playCircle: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#FFF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  cardTitle: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', lineHeight: 21 },
+  instructorText: { fontSize: 12, color: '#6B7280', marginTop: 3 },
+  courseTag: { fontSize: 11, fontWeight: '600', color: '#7B2CBF' },
+  meta: { fontSize: 11, color: '#6B7280' },
+  watchBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#7B2CBF',
+    height: 42,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  watchBtnText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+  fileSize: { fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
+  empty: { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  emptyText: { fontSize: 14, color: '#9CA3AF', fontWeight: '600' },
 });

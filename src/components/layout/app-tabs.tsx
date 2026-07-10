@@ -229,6 +229,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
           return (
             <HomeScreen
               key={tabKeys[0]}
+              userName={userName}
               onOpenNotifications={() => {
                 setActiveIndex(3); // profile index
                 setProfileSubView('notifications');
@@ -253,6 +254,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
         default:
           return (
             <HomeScreen
+              userName={userName}
               onOpenNotifications={() => {
                 setActiveIndex(3);
                 setProfileSubView('notifications');
