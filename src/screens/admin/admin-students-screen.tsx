@@ -70,6 +70,12 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [formBatchName, setFormBatchName] = useState('');
   const [formEnrollmentDate, setFormEnrollmentDate] = useState('2026-06-02');
   const [formPaymentStatus, setFormPaymentStatus] = useState('Paid');
+  // Edit mode — new course to add
+  const [newCourse, setNewCourse] = useState('');
+  const [newBatchName, setNewBatchName] = useState('');
+  const [newEnrollmentDate, setNewEnrollmentDate] = useState('');
+  const [newPaymentStatus, setNewPaymentStatus] = useState('Pending');
+  const [showNewBatchDropdown, setShowNewBatchDropdown] = useState(false);
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
 
@@ -108,8 +114,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
   }, []);
 
-  const loadStudents = async () => {
-    setLoading(true);
+  const loadStudents = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const res = await api.getStudents();
       if (res.success) {
@@ -123,7 +129,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     } catch (err) {
       showToast('Cannot connect to server', 'error');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
@@ -190,8 +196,13 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormEnrollmentDate(new Date().toISOString().split('T')[0]);
     setFormPaymentStatus('Pending');
     setFormPassword('');
+    setNewCourse('');
+    setNewBatchName('');
+    setNewEnrollmentDate(new Date().toISOString().split('T')[0]);
+    setNewPaymentStatus('Pending');
     setShowCourseDropdown(false);
     setShowBatchDropdown(false);
+    setShowNewBatchDropdown(false);
     setIsModalVisible(true);
   };
 
@@ -209,37 +220,31 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormPinCode(student.pinCode || '560001');
     setFormGuardianName(student.guardianName || '');
     setFormGuardianPhone(student.guardianPhone || '');
-    // Prefer data from enrollment records (allow multiple)
-    const enrollmentCourses = (student.enrollments && student.enrollments.length > 0)
-      ? student.enrollments.map(e => e.courseTitle)
-      : [];
-    const firstEnrollment = (student.enrollments && student.enrollments.length > 0) ? student.enrollments[0] : null;
-    if (enrollmentCourses.length > 0) {
-      setFormCourse(enrollmentCourses);
-    } else if (student.course) {
-      setFormCourse([student.course]);
-    } else {
-      setFormCourse([]);
-    }
-    setFormEnrollmentDate(firstEnrollment?.enrollmentDate || student.enrollmentDate || '');
-    setFormPaymentStatus(firstEnrollment?.paymentStatus || student.paymentStatus || 'Pending');
+    setFormEnrollmentDate(student.enrollmentDate || '');
+    setFormPaymentStatus(student.paymentStatus || 'Pending');
+    // Reset add-new-course fields
+    setNewCourse('');
+    setNewBatchName('');
+    setNewEnrollmentDate(new Date().toISOString().split('T')[0]);
+    setNewPaymentStatus('Pending');
+    setShowNewBatchDropdown(false);
     setIsModalVisible(true);
   };
 
   const handleSaveStudent = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || formCourse.length === 0) {
+    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedStudent && !newCourse)) {
       showToast('Please fill out all required fields.', 'error');
       return;
     }
 
     if (selectedStudent) {
-      // Editing existing student
-      console.log('Updating student with ID:', selectedStudent.id);
       setSaving(true);
       try {
+        // 1. Update personal info
         const res = await api.updateStudent(selectedStudent.id, {
           firstName: formFirstName,
           lastName: formLastName,
+          email: formEmail,
           phone: formPhone,
           dob: formDob,
           street: formStreet,
@@ -248,20 +253,56 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           pinCode: formPinCode,
           guardianName: formGuardianName,
           guardianPhone: formGuardianPhone,
-          course: formCourse.join(', '),
           enrollmentDate: formEnrollmentDate,
           paymentStatus: formPaymentStatus,
         });
-        console.log('Update response:', res);
-        if (res && res.success) {
-          showToast('Student updated successfully', 'success');
-          setIsModalVisible(false);
-          loadStudents();
-        } else {
+        if (!res?.success) {
           showToast(res?.message || 'Failed to update', 'error');
+          return;
         }
+        // 2. Enroll in new course if selected
+        if (newCourse) {
+          const enrollRes = await api.enrollStudent(selectedStudent.id, {
+            courseTitle: newCourse,
+            batchName: newBatchName,
+            enrollmentDate: newEnrollmentDate,
+            paymentStatus: newPaymentStatus,
+          });
+          if (!enrollRes?.success) {
+            showToast(enrollRes?.message || 'Failed to add new course', 'error');
+            return;
+          }
+          showToast('Student updated & enrolled in ' + newCourse, 'success');
+        } else {
+          showToast('Student updated successfully', 'success');
+        }
+        setIsModalVisible(false);
+        // Optimistically update the card in local state immediately
+        const updatedName = `${formFirstName} ${formLastName}`.trim();
+        setStudents(prev => prev.map(s => {
+          if (s.id !== selectedStudent.id) return s;
+          const updatedEnrollments = newCourse
+            ? [...(s.enrollments || []), { courseTitle: newCourse, enrollmentDate: newEnrollmentDate, paymentStatus: newPaymentStatus }]
+            : s.enrollments;
+          return {
+            ...s,
+            name: updatedName,
+            email: formEmail,
+            phone: formPhone,
+            dob: formDob,
+            street: formStreet,
+            city: formCity,
+            state: formState,
+            pinCode: formPinCode,
+            guardianName: formGuardianName,
+            guardianPhone: formGuardianPhone,
+            enrollments: updatedEnrollments,
+            coursesCount: updatedEnrollments?.length ?? s.coursesCount,
+          };
+        }));
+        // Also refresh from server in background to stay in sync
+        loadStudents(false);
       } catch (err: any) {
-        console.error('Update error:', err);
         showToast(err.message || 'Cannot connect to server', 'error');
       } finally {
         setSaving(false);
@@ -291,10 +332,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           pinCode: formPinCode,
           guardianName: formGuardianName,
           guardianPhone: formGuardianPhone,
-          course: formCourse.join(', '),
-          enrollmentDate: formEnrollmentDate,
-          paymentStatus: formPaymentStatus,
-          batchName: formBatchName,
+          course: newCourse,
+          enrollmentDate: newEnrollmentDate,
+          paymentStatus: newPaymentStatus,
+          batchName: newBatchName,
           role: 'STUDENT',
         });
         if (res.success) {
@@ -676,11 +717,35 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 
               {/* Enrollment Details */}
               <Text style={styles.formSectionTitle}>Enrollment Details</Text>
+
+              {/* In edit mode: show existing enrollments as read-only */}
+              {selectedStudent && selectedStudent.enrollments && selectedStudent.enrollments.length > 0 && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Current Enrollments</Text>
+                  <View style={styles.existingEnrollmentsBox}>
+                    {selectedStudent.enrollments.map((enr, idx) => (
+                      <View key={idx} style={styles.existingEnrollmentRow}>
+                        <Ionicons name="book-outline" size={13} color="#7B2CBF" />
+                        <Text style={styles.existingEnrollmentText}>{enr.courseTitle}</Text>
+                        <View style={[
+                          styles.existingEnrollmentBadge,
+                          enr.paymentStatus === 'Paid' ? styles.badgePaid :
+                          enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
+                        ]}>
+                          <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Add new course — shown in both add and edit mode */}
               <View style={[styles.formGroup, { zIndex: 1000 }]}>
-                <Text style={styles.fieldLabel}>Course *</Text>
+                <Text style={styles.fieldLabel}>{selectedStudent ? 'Add New Course' : 'Course *'}</Text>
                 <View style={styles.checkboxGroup}>
-                  <Text style={[styles.dropdownText, formCourse.length === 0 && styles.dropdownPlaceholder]}>
-                    {formCourse.length > 0 ? formCourse.join(', ') : 'Select courses'}
+                  <Text style={[styles.dropdownText, !newCourse && styles.dropdownPlaceholder]}>
+                    {newCourse || 'Select a course'}
                   </Text>
                   <View style={styles.checkboxList}>
                     {courses.length === 0 ? (
@@ -688,71 +753,69 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                         <Text style={styles.dropdownItemText}>No courses available</Text>
                       </View>
                     ) : (
-                      courses.map((course) => {
-                        const isSelected = formCourse.includes(course.title);
-                        return (
+                      courses
+                        .filter(c => !selectedStudent || !selectedStudent.enrollments?.some(e => e.courseTitle === c.title))
+                        .map((course) => (
                           <TouchableOpacity
                             key={course.id}
                             style={styles.checkboxRow}
                             onPress={() => {
-                              if (isSelected) {
-                                setFormCourse(formCourse.filter(c => c !== course.title));
-                              } else {
-                                setFormCourse([...formCourse, course.title]);
-                              }
+                              const picked = newCourse === course.title ? '' : course.title;
+                              setNewCourse(picked);
+                              setNewBatchName(''); // auto-clear batch when course changes
+                              setShowNewBatchDropdown(false);
                             }}
                           >
                             <Ionicons
-                              name={isSelected ? 'checkbox' : 'square-outline'}
+                              name={newCourse === course.title ? 'radio-button-on' : 'radio-button-off'}
                               size={18}
-                              color={isSelected ? '#7B2CBF' : '#9CA3AF'}
+                              color={newCourse === course.title ? '#7B2CBF' : '#9CA3AF'}
                             />
-                            <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextActive]}>
+                            <Text style={[styles.dropdownItemText, newCourse === course.title && styles.dropdownItemTextActive]}>
                               {course.title}
                             </Text>
                           </TouchableOpacity>
-                        );
-                      })
+                        ))
                     )}
                   </View>
                 </View>
               </View>
-              {/* Batch dropdown — filtered to the selected course */}
+
+              {/* Batch — auto-filtered by selected course */}
               <View style={[styles.formGroup, { zIndex: 900 }]}>
-                <Text style={styles.fieldLabel}>Batch</Text>
+                <Text style={styles.fieldLabel}>Batch {newCourse ? '(auto-filtered)' : ''}</Text>
                 <TouchableOpacity
                   style={styles.modalInputDropdown}
-                  onPress={() => setShowBatchDropdown(!showBatchDropdown)}
+                  onPress={() => newCourse && setShowNewBatchDropdown(!showNewBatchDropdown)}
                 >
-                  <Text style={[styles.dropdownText, !formBatchName && styles.dropdownPlaceholder]}>
-                    {formBatchName || 'Select a batch (optional)'}
+                  <Text style={[styles.dropdownText, !newBatchName && styles.dropdownPlaceholder]}>
+                    {newBatchName || (newCourse ? 'Select a batch (optional)' : 'Select a course first')}
                   </Text>
-                  <Ionicons name={showBatchDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
+                  <Ionicons name={showNewBatchDropdown ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
                 </TouchableOpacity>
-                {showBatchDropdown && (
+                {showNewBatchDropdown && newCourse && (
                   <View style={styles.dropdownList}>
                     <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-                      {/* "None" option */}
                       <TouchableOpacity
                         style={styles.dropdownItem}
-                        onPress={() => { setFormBatchName(''); setShowBatchDropdown(false); }}
+                        onPress={() => { setNewBatchName(''); setShowNewBatchDropdown(false); }}
                       >
                         <Text style={styles.dropdownItemText}>— No batch —</Text>
-                        {!formBatchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                        {!newBatchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
                       </TouchableOpacity>
                       {batches
-                        .filter(b => formCourse.length === 0 || formCourse.some(c => (b.selectCourse || '').toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes((b.selectCourse || '').toLowerCase())))
+                        .filter(b => (b.selectCourse || '').toLowerCase().includes(newCourse.toLowerCase()) || newCourse.toLowerCase().includes((b.selectCourse || '').toLowerCase()))
                         .map(b => (
                           <TouchableOpacity
                             key={b.id}
                             style={styles.dropdownItem}
-                            onPress={() => { setFormBatchName(b.batchName); setShowBatchDropdown(false); }}
+                            onPress={() => { setNewBatchName(b.batchName); setShowNewBatchDropdown(false); }}
                           >
                             <Text style={styles.dropdownItemText}>{b.batchName}</Text>
-                            {formBatchName === b.batchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
+                            {newBatchName === b.batchName && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
                           </TouchableOpacity>
                         ))}
-                      {batches.filter(b => formCourse.length === 0 || formCourse.some(c => (b.selectCourse || '').toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes((b.selectCourse || '').toLowerCase()))).length === 0 && (
+                      {batches.filter(b => (b.selectCourse || '').toLowerCase().includes(newCourse.toLowerCase()) || newCourse.toLowerCase().includes((b.selectCourse || '').toLowerCase())).length === 0 && (
                         <View style={styles.dropdownItem}>
                           <Text style={[styles.dropdownItemText, { color: '#9CA3AF' }]}>No batches for this course</Text>
                         </View>
@@ -761,13 +824,14 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                   </View>
                 )}
               </View>
+
               <View style={styles.formRow}>
                 <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.fieldLabel}>Date</Text>
+                  <Text style={styles.fieldLabel}>Enrollment Date</Text>
                   <TextInput
                     style={styles.modalInput}
-                    value={formEnrollmentDate}
-                    onChangeText={setFormEnrollmentDate}
+                    value={newEnrollmentDate}
+                    onChangeText={setNewEnrollmentDate}
                     placeholder="e.g. 2026-06-02"
                     placeholderTextColor="#9CA3AF"
                   />
@@ -781,13 +845,13 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       key={status}
                       style={[
                         styles.paymentChip,
-                        formPaymentStatus === status && (
+                        newPaymentStatus === status && (
                           status === 'Paid' ? styles.paymentChipPaid :
                             status === 'Pending' ? styles.paymentChipPending :
                               styles.paymentChipFailed
                         ),
                       ]}
-                      onPress={() => setFormPaymentStatus(status)}
+                      onPress={() => setNewPaymentStatus(status)}
                     >
                       <Ionicons
                         name={
@@ -797,8 +861,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                         }
                         size={15}
                         color={
-                          formPaymentStatus === status
-                            ? '#FFF'
+                          newPaymentStatus === status ? '#FFF'
                             : status === 'Paid' ? '#10B981'
                               : status === 'Pending' ? '#F59E0B'
                                 : '#EF4444'
@@ -806,7 +869,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       />
                       <Text style={[
                         styles.paymentChipText,
-                        formPaymentStatus === status
+                        newPaymentStatus === status
                           ? styles.paymentChipTextActive
                           : status === 'Paid' ? { color: '#10B981' }
                             : status === 'Pending' ? { color: '#F59E0B' }
@@ -847,6 +910,38 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 }
 
 const styles = StyleSheet.create({
+  existingEnrollmentsBox: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    padding: 10,
+    gap: 8,
+  },
+  existingEnrollmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  existingEnrollmentText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  existingEnrollmentBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgePaid: { backgroundColor: '#ECFDF5' },
+  badgePending: { backgroundColor: '#FEF3C7' },
+  badgeFailed: { backgroundColor: '#FEE2E2' },
+  existingEnrollmentBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#374151',
+  },
   filterTabsRow: {
     flexDirection: 'row',
     gap: 8,
