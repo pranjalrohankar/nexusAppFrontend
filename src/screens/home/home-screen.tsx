@@ -3,6 +3,7 @@ import ExploreCourses, { ExploreCourseItem } from '@/screens/courses/explore-cou
 import ClassRecordingsScreen from '@/screens/home/class-recordings-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import React, { useState, useEffect } from 'react';
 import {
   Dimensions,
@@ -333,7 +334,14 @@ function InlineVideoModal({ visible, uri, title, onClose }: {
             if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
           }}
         >
-          {uri && playerSize.w > 0 ? (
+          {uri && Platform.OS === 'web' ? (
+            <video
+              src={uri}
+              controls
+              autoPlay
+              style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
+            />
+          ) : uri && playerSize.w > 0 ? (
             <Video
               source={{ uri }}
               style={{ width: playerSize.w, height: playerSize.h, backgroundColor: '#000' }}
@@ -377,7 +385,7 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
-  const getStreamUrl = (id: number) => `${API_BASE}/api/recordings/stream/${id}`;
+  const getStreamUrl = (id: number) => `${getApiBaseUrl().replace('/api', '')}/api/recordings/stream/${id}`;
 
   return (
     <View>
@@ -394,7 +402,6 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
       </View>
       {/* Filter chips — all enrolled courses */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 }}>
-        <Ionicons name="filter-outline" size={16} color="#6B7280" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
           {categories.map(cat => (
             <TouchableOpacity
@@ -560,7 +567,7 @@ function MaterialsSection() {
               style={[rs.watchBtn, { backgroundColor: '#F97316' }]}
               onPress={() => {
                 const url = api.getMaterialDownloadUrl(mat.id);
-                if (Platform.OS === 'web') { (window as any).open(url, '_blank'); }
+                Linking.openURL(url);
               }}
             >
               <Ionicons name="download-outline" size={13} color="#FFF" />

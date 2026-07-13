@@ -14,10 +14,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode } from 'expo-av';
+import * as Linking from 'expo-linking';
 import { api, getApiBaseUrl } from '@/services/api';
 
-const API_BASE = getApiBaseUrl().replace('/api', '');
 const IS_WEB = Platform.OS === 'web';
+
+// Always resolve fresh so mobile gets correct host, not stale localhost
+const getStreamUrl = (id: number) => `${getApiBaseUrl().replace('/api', '')}/api/recordings/stream/${id}`;
 
 interface ClassRecordingsScreenProps {
   onBack: () => void;
@@ -48,7 +51,6 @@ function VideoModal({
   onClose: () => void;
 }) {
   const [playerSize, setPlayerSize] = useState({ w: 0, h: 0 });
-
   const handleClose = () => { setPlayerSize({ w: 0, h: 0 }); onClose(); };
 
   return (
@@ -74,14 +76,19 @@ function VideoModal({
             if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
           }}
         >
-          {uri && playerSize.w > 0 ? (
+          {uri && IS_WEB ? (
+            // Web: use native HTML video element
+            <video
+              src={uri}
+              controls
+              autoPlay
+              style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
+            />
+          ) : uri && playerSize.w > 0 ? (
+            // Native iOS/Android: use expo-av
             <Video
               source={{ uri }}
-              style={{
-                width: playerSize.w,
-                height: playerSize.h,
-                backgroundColor: '#000',
-              }}
+              style={{ width: playerSize.w, height: playerSize.h, backgroundColor: '#000' }}
               videoStyle={{ width: '100%', height: '100%' } as any}
               useNativeControls
               resizeMode={ResizeMode.CONTAIN}
@@ -146,8 +153,6 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
     } catch {}
     finally { setLoading(false); }
   };
-
-  const getStreamUrl = (id: number) => `${API_BASE}/api/recordings/stream/${id}`;
 
   const filterCategories = ['All', ...Array.from(new Set(recordings.map(r => r.course).filter(Boolean)))];
 
@@ -362,7 +367,7 @@ const s = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  cardDesktop: { width: 'calc(50% - 10px)' as any, minWidth: 320 },
+  cardDesktop: { width: IS_WEB ? ('calc(50% - 10px)' as any) : '48%', minWidth: 320 },
 
   cardHeader: { flexDirection: 'row', gap: 16 },
   thumbnail: {

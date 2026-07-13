@@ -172,6 +172,7 @@ export const api = {
   getTeachers: () => get('/teachers/all'),
   getTeacher: (id: number | string) => get(`/teachers/${id}`),
   updateStudent: (id: number | string, data: object) => put(`/admin/students/${id}`, data),
+  enrollStudent: (id: number | string, data: object) => post(`/admin/students/${id}/enroll`, data),
   deleteStudent: (id: number | string) => del(`/admin/students/${id}`),
   updateTeacher: (id: number | string, data: object) => put(`/teachers/${id}`, data),
   deleteTeacher: (id: number | string) => del(`/teachers/${id}`),
@@ -225,5 +226,5 @@ export const api = {
   getStudentEnrollments: () => get('/student/enrollments'),
   getStudentMaterials: () => get('/student/materials'),
   getStudentRecordings: () => get('/student/recordings'),
-  getMaterialDownloadUrl: (id: number | string) => `${BASE_URL}/materials/download/${id}`,
+  getMaterialDownloadUrl: (id: number | string) => `${getApiBaseUrl()}/materials/download/${id}`,
 };
