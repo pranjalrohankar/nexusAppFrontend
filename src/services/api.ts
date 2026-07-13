@@ -223,6 +223,8 @@ export const api = {
   updateSecuritySettings: (data: object) => put('/auth/security-settings', data),
 
   // Student-specific endpoints
+  getStudentProfile: () => get('/student/profile'),
+  updateStudentProfile: (data: object) => put('/student/profile', data),
   getStudentEnrollments: () => get('/student/enrollments'),
   getStudentMaterials: () => get('/student/materials'),
   getStudentRecordings: () => get('/student/recordings'),
