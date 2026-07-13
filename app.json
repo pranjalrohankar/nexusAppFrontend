@@ -1,24 +1,24 @@
 {
   "expo": {
-    "name": "MyFirstApp",
-    "slug": "MyFirstApp",
-    "version": "1.0.0",
+    "name": "Nexus CTC",
+    "slug": "nexus-ctc",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myfirstapp",
+    "icon": "./assets/images/nexusctc.png",
+    "scheme": "nexus-ctc",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/nexusctc.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#1E1B4B",
+        "foregroundImage": "./assets/images/nexusctc.png",
+        "backgroundImage": "./assets/images/nexusctc.png",
+        "monochromeImage": "./assets/images/nexusctc.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.ankit8210.MyFirstApp"
+      "package": "com.nexusctc.nexuslms"
     },
     "web": {
       "output": "static",
@@ -29,10 +29,10 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#1E1B4B",
           "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
+            "image": "./assets/images/nexusctc.png",
+            "imageWidth": 96
           }
         }
       ]

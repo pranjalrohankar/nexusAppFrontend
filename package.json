@@ -1,7 +1,7 @@
 {
-  "name": "myfirstapp",
+  "name": "nexus-ctc",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
     "@expo/ui": "~0.2.0-beta.9",
