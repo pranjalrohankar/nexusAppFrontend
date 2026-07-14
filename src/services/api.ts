@@ -260,11 +260,11 @@ export const api = {
     put("/auth/security-settings", data),
 
   // Student-specific endpoints
-  getStudentProfile: () => get("/student/profile"),
-  updateStudentProfile: (data: object) => put("/student/profile", data),
-  getStudentEnrollments: () => get("/student/enrollments"),
-  getStudentMaterials: () => get("/student/materials"),
-  getStudentRecordings: () => get("/student/recordings"),
-  getMaterialDownloadUrl: (id: number | string) =>
-    `${getApiBaseUrl()}/materials/download/${id}`,
+  getStudentProfile: () => get('/student/profile'),
+  updateStudentProfile: (data: object) => put('/student/profile', data),
+  sendStudentSupportMessage: (data: object) => post('/student/support-message', data),
+  getStudentEnrollments: () => get('/student/enrollments'),
+  getStudentMaterials: () => get('/student/materials'),
+  getStudentRecordings: () => get('/student/recordings'),
+  getMaterialDownloadUrl: (id: number | string) => `${getApiBaseUrl()}/materials/download/${id}`,
 };
