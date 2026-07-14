@@ -225,6 +225,7 @@ export const api = {
   // Student-specific endpoints
   getStudentProfile: () => get('/student/profile'),
   updateStudentProfile: (data: object) => put('/student/profile', data),
+  sendStudentSupportMessage: (data: object) => post('/student/support-message', data),
   getStudentEnrollments: () => get('/student/enrollments'),
   getStudentMaterials: () => get('/student/materials'),
   getStudentRecordings: () => get('/student/recordings'),
