@@ -41,7 +41,17 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     const sync = setInterval(() => {
       setEnquiries([...adminDataCache.enquiries]);
     }, 5000);
-    return () => clearInterval(sync);
+
+    // Poll dashboard every 10s to keep online status fresh
+    const dashPoll = setInterval(() => {
+      api.getDashboard().catch(() => null).then((dashRes: any) => {
+        if (!dashRes?.data) return;
+        adminDataCache.dashboard = dashRes.data;
+        setDashData(dashRes.data);
+      });
+    }, 10000);
+
+    return () => { clearInterval(sync); clearInterval(dashPoll); };
   }, []);
 
   const unreadCount = enquiries.filter(e => !e.isRead).length;
@@ -65,7 +75,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     name: e.studentName,
     course: e.courseTitle,
     time: e.enrollmentDate || 'N/A',
-    dotColor: '#10B981',
+    onlineStatus: e.onlineStatus as 'online' | 'offline' | 'always_online' | undefined,
   }));
 
   const classesToday = (dashData?.classesToday ?? []).map((c: any) => ({
@@ -170,8 +180,16 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
                   <Text style={styles.enrollCourse}>{item.course}</Text>
                 </View>
                 <View style={styles.enrollRight}>
-                  <View style={styles.enrollActiveBadge}>
-                    <Text style={styles.enrollActiveBadgeText}>Active</Text>
+                  <View style={[
+                    styles.enrollActiveBadge,
+                    { backgroundColor: (item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? '#DCFCE7' : '#FEE2E2' }
+                  ]}>
+                    <Text style={[
+                      styles.enrollActiveBadgeText,
+                      { color: (item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? '#16A34A' : '#EF4444' }
+                    ]}>
+                      {(item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? 'Active' : 'Inactive'}
+                    </Text>
                   </View>
                   <Text style={styles.enrollTime}>{displayDate}</Text>
                 </View>

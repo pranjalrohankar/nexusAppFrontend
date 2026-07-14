@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
   TextInput, Platform, ActivityIndicator, Linking, Share, StatusBar,
@@ -32,6 +32,7 @@ interface Student {
   enrollmentDate: string;
   paymentStatus: string;
   active: boolean;
+  onlineStatus?: 'online' | 'offline' | 'always_online';
 }
 
 export default function TeacherClassesScreen() {
@@ -43,6 +44,33 @@ export default function TeacherClassesScreen() {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const selectedBatchRef = useRef<BatchItem | null>(null);
+
+  // Keep ref in sync so the polling interval can access current batch
+  useEffect(() => { selectedBatchRef.current = selectedBatch; }, [selectedBatch]);
+
+  // Poll every 10s to refresh online status when viewing students
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const batch = selectedBatchRef.current;
+      if (!batch) return;
+      try {
+        const res = await api.getBatchStudents(batch.id);
+        const list = Array.isArray(res) ? res : (res?.data ?? []);
+        setStudents(list.map((s: any) => ({
+          id: String(s.id ?? s.enrollmentId ?? Math.random()),
+          name: s.name || s.studentName || '—',
+          email: s.email || s.studentEmail || '—',
+          phone: s.phone || s.studentPhone || '—',
+          enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
+          paymentStatus: s.paymentStatus || '',
+          active: s.active ?? (s.paymentStatus === 'Paid'),
+          onlineStatus: s.onlineStatus,
+        })));
+      } catch {}
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loadBatches = useCallback(async () => {
     setLoading(true);
@@ -75,6 +103,7 @@ export default function TeacherClassesScreen() {
         enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
         paymentStatus: s.paymentStatus || '',
         active: s.active ?? (s.paymentStatus === 'Paid'),
+        onlineStatus: s.onlineStatus,
       })));
     } catch (e) {
       console.error('Failed to load students', e);
@@ -122,7 +151,7 @@ export default function TeacherClassesScreen() {
     const filtered = students.filter(s =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-    const activeCount = students.filter(s => s.active).length;
+    const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
 
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -211,11 +240,27 @@ export default function TeacherClassesScreen() {
                         <Text style={styles.enrolledDate}>{formatEnrolledDate(s.enrollmentDate)}</Text>
                       ) : null}
                     </View>
-                    {s.active && (
-                      <View style={styles.activeBadge}>
-                        <Ionicons name="person" size={11} color="#FFF" />
-                      </View>
-                    )}
+                    <View style={[
+                      styles.onlineStatusBadge,
+                      (s.onlineStatus === 'online' || s.onlineStatus === 'always_online')
+                        ? styles.onlineStatusBadgeActive
+                        : styles.onlineStatusBadgeInactive
+                    ]}>
+                      <View style={[
+                        styles.onlineDot,
+                        (s.onlineStatus === 'online' || s.onlineStatus === 'always_online')
+                          ? styles.onlineDotGreen
+                          : styles.onlineDotGray
+                      ]} />
+                      <Text style={[
+                        styles.onlineStatusText,
+                        (s.onlineStatus === 'online' || s.onlineStatus === 'always_online')
+                          ? styles.onlineStatusTextActive
+                          : styles.onlineStatusTextInactive
+                      ]}>
+                        {(s.onlineStatus === 'online' || s.onlineStatus === 'always_online') ? 'Active' : 'Inactive'}
+                      </Text>
+                    </View>
                   </View>
 
                   {/* Email + Phone */}
@@ -592,6 +637,18 @@ const styles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center',
   },
+  onlineStatusBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+  },
+  onlineStatusBadgeActive: { backgroundColor: '#ECFDF5' },
+  onlineStatusBadgeInactive: { backgroundColor: '#FEE2E2' },
+  onlineDot: { width: 7, height: 7, borderRadius: 4 },
+  onlineDotGreen: { backgroundColor: '#10B981' },
+  onlineDotGray: { backgroundColor: '#EF4444' },
+  onlineStatusText: { fontSize: 11, fontWeight: 'bold' },
+  onlineStatusTextActive: { color: '#10B981' },
+  onlineStatusTextInactive: { color: '#EF4444' },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
   contactText: { fontSize: 12, color: '#4B5563', flex: 1 },
   barsRow: {

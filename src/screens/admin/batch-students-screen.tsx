@@ -14,6 +14,7 @@ interface BatchStudent {
   email: string;
   phone: string;
   active: boolean;
+  onlineStatus?: 'online' | 'offline' | 'always_online';
   joinedDate: string;
   attendance: number;
 }
@@ -75,6 +76,28 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
 
   useEffect(() => { loadStudents(); }, []);
 
+  // Poll every 10s to keep online status fresh without showing spinner
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.getBatchStudents(batch.id);
+        const raw = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        if (raw.length === 0) return;
+        setStudents(raw.map((e: any) => ({
+          id: e.id ?? e.studentId ?? e.enrollmentId ?? Math.random(),
+          name: e.name ?? e.studentName ?? '',
+          email: e.email ?? e.studentEmail ?? '',
+          phone: e.phone ?? e.studentPhone ?? '',
+          active: e.active !== false,
+          onlineStatus: e.onlineStatus,
+          joinedDate: e.joinedDate ?? e.enrollmentDate ?? '',
+          attendance: typeof e.attendance === 'number' ? e.attendance : 0,
+        })).filter((s: BatchStudent) => s.name.trim() !== ''));
+      } catch {}
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [batch.id]);
+
   const loadStudents = async () => {
     setLoading(true);
     try {
@@ -94,6 +117,7 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
           email: e.email ?? e.studentEmail ?? '',
           phone: e.phone ?? e.studentPhone ?? '',
           active: e.active !== false,
+          onlineStatus: e.onlineStatus,
           joinedDate: e.joinedDate ?? e.enrollmentDate ?? e.createdAt ?? '',
           attendance: typeof e.attendance === 'number' ? e.attendance : 0,
         })).filter((s: BatchStudent) => s.name.trim() !== '');
@@ -125,12 +149,13 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
   const filtered = students.filter(s => {
     const q = searchQuery.toLowerCase();
     const matchSearch = s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-    if (activeFilter === 'Active') return matchSearch && s.active;
-    if (activeFilter === 'Inactive') return matchSearch && !s.active;
+    const isActive = s.onlineStatus === 'online' || s.onlineStatus === 'always_online';
+    if (activeFilter === 'Active') return matchSearch && isActive;
+    if (activeFilter === 'Inactive') return matchSearch && !isActive;
     return matchSearch;
   });
 
-  const activeCount = students.filter(s => s.active).length;
+  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
   const avgAttendance = students.length > 0
     ? Math.round(students.reduce((sum, s) => sum + s.attendance, 0) / students.length)
     : 0;
@@ -272,9 +297,13 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
                     <Text style={styles.studentName}>{student.name}</Text>
                     <Text style={styles.joinedText}>Joined {formatDate(student.joinedDate)}</Text>
                   </View>
-                  <View style={[styles.activeBadge, { backgroundColor: student.active ? '#ECFDF5' : '#FEE2E2' }]}>
-                    <Text style={[styles.activeBadgeText, { color: student.active ? '#10B981' : '#EF4444' }]}>
-                      {student.active ? 'active' : 'inactive'}
+                  <View style={[styles.activeBadge, {
+                    backgroundColor: (student.onlineStatus === 'online' || student.onlineStatus === 'always_online') ? '#ECFDF5' : '#FEE2E2'
+                  }]}>
+                    <Text style={[styles.activeBadgeText, {
+                      color: (student.onlineStatus === 'online' || student.onlineStatus === 'always_online') ? '#10B981' : '#EF4444'
+                    }]}>
+                      {(student.onlineStatus === 'online' || student.onlineStatus === 'always_online') ? 'active' : 'inactive'}
                     </Text>
                   </View>
                   <TouchableOpacity style={styles.menuBtn}>

@@ -337,7 +337,12 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
           </View>
 
           {/* Bottom Logout Button */}
-          <TouchableOpacity style={styles.webLogoutButton} onPress={onLogout}>
+          <TouchableOpacity style={styles.webLogoutButton} onPress={async () => {
+            if (userRole === 'student') {
+              try { await api.setActivityStatus(false); } catch {}
+            }
+            onLogout();
+          }}>
             <Ionicons name="log-out-outline" size={20} color="#EF4444" />
             <Text style={styles.webLogoutLabel}>Logout</Text>
           </TouchableOpacity>
