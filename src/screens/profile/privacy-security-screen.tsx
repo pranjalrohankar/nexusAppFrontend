@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface PrivacySecurityScreenProps {
   onBack: () => void;
@@ -25,6 +26,13 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. HEADER BANNER */}
       <View style={styles.header}>
+        <LinearGradient
+          colors={['rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)','rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)','rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)','rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)','rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)']}
+          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.gradientBar}
+        />
         <View style={styles.headerContent}>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
@@ -107,50 +115,7 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
           </View>
         </View>
 
-        {/* 4. SECURITY OPTIONS */}
-        <Text style={styles.sectionHeader}>Security Options</Text>
-        <View style={styles.cardContainer}>
-          {/* Change Password */}
-          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}
-            onPress={() => Alert.alert('Change Password', 'A password reset link will be sent to your registered email address.')}>
-            <View style={[styles.iconContainer, { backgroundColor: '#FAF5FF' }]}>
-              <Ionicons name="lock-closed-outline" size={18} color="#7B2CBF" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.itemTitle}>Change Password</Text>
-              <Text style={styles.itemSubtitle}>Update your password</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-
-          {/* Two-Factor Authentication */}
-          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}
-            onPress={() => Alert.alert('Two-Factor Authentication', 'Two-factor authentication adds an extra layer of security. This feature will be available soon.')}>
-            <View style={[styles.iconContainer, { backgroundColor: '#ECFDF5' }]}>
-              <Ionicons name="key-outline" size={18} color="#10B981" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.itemTitle}>Two-Factor Authentication</Text>
-              <Text style={styles.itemSubtitle}>Add extra security layer</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-
-          {/* Login History */}
-          <TouchableOpacity style={[styles.rowItem, { borderBottomWidth: 0 }]} activeOpacity={0.7}
-            onPress={() => Alert.alert('Login History', 'Your last login was recorded. Detailed login history will be available in a future update.')}>
-            <View style={[styles.iconContainer, { backgroundColor: '#EFF6FF' }]}>
-              <Ionicons name="phone-portrait-outline" size={18} color="#3B82F6" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.itemTitle}>Login History</Text>
-              <Text style={styles.itemSubtitle}>View recent login activity</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* 5. PRIVACY POLICY BLOCK */}
+        {/* 4. PRIVACY POLICY BLOCK */}
         <View style={styles.policyBlock}>
           <Text style={styles.policyTitle}>Privacy Policy</Text>
           <Text style={styles.policyDescription}>
@@ -176,35 +141,6 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
           </TouchableOpacity>
         </View>
 
-        {/* 7. DATA MANAGEMENT */}
-        <View style={styles.dataManagementCard}>
-          <View style={styles.dataHeader}>
-            <View style={styles.alertIconBox}>
-              <Ionicons name="alert-circle" size={20} color="#EF4444" />
-            </View>
-            <View style={styles.securedTextBox}>
-              <Text style={styles.dataTitle}>Data Management</Text>
-              <Text style={styles.dataDescription}>
-                Request a copy of your data or permanently delete your account and all associated data.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.dataButtonsRow}>
-            <TouchableOpacity style={styles.downloadButton} activeOpacity={0.8}
-            onPress={() => Alert.alert('Download Data', 'Your data export request has been received. You will receive an email with your data within 24 hours.')}>
-            <Text style={styles.downloadButtonText}>Download Data</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteButton} activeOpacity={0.8}
-            onPress={() => Alert.alert(
-              'Delete Account',
-              'This will permanently delete your account and all associated data. This action cannot be undone. Please contact your administrator to proceed.',
-              [{ text: 'Cancel', style: 'cancel' }, { text: 'Contact Admin', style: 'destructive', onPress: () => {} }]
-            )}>
-            <Text style={styles.deleteButtonText}>Delete Account</Text>
-          </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Bottom Spacer */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -217,11 +153,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#7B2CBF',
   },
+  gradientBar: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 6,
+  },
   header: {
     backgroundColor: '#7B2CBF',
-    height: 70,
-    justifyContent: 'center',
     paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   headerContent: {
     flexDirection: 'row',
@@ -235,10 +176,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-    marginLeft: 16,
+    fontSize: 24,
+    fontWeight: '700',
+    marginLeft: 14,
   },
   scrollView: {
     flex: 1,
