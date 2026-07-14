@@ -4,6 +4,9 @@ node_modules/
 # Android
 android/
 
+# Expo config
+app.json
+
 # Expo
 .expo/
 dist/
