@@ -598,7 +598,12 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
         </View>
 
         {/* 5. LOGOUT BUTTON */}
-        <TouchableOpacity style={[styles.logoutButton, { borderRadius: 14 }]} onPress={onLogout} activeOpacity={0.8}>
+        <TouchableOpacity style={[styles.logoutButton, { borderRadius: 14 }]} onPress={async () => {
+          if (userRole === 'student') {
+            try { await api.setActivityStatus(false); } catch {}
+          }
+          onLogout();
+        }} activeOpacity={0.8}>
           <Text style={styles.logoutText}>Logout</Text>
           <Ionicons name="arrow-forward" size={18} color="#EF4444" />
         </TouchableOpacity>

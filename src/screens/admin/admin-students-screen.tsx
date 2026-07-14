@@ -27,6 +27,7 @@ interface Student {
   email: string;
   phone: string;
   active: boolean;
+  onlineStatus?: 'online' | 'offline' | 'always_online';
   coursesCount: number;
   createdAt: string;
   enrollments: Enrollment[];
@@ -112,6 +113,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     loadCourses();
     loadBatches();
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
+
+    // Poll every 15s to keep online status fresh
+    const interval = setInterval(() => loadStudents(false), 15000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadStudents = async (showSpinner = true) => {
@@ -166,17 +171,18 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const filteredStudents = students.filter(student => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
+    const isActive = student.onlineStatus === 'online' || student.onlineStatus === 'always_online';
     if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Active') return matchesSearch && student.active;
-    if (activeTab === 'Inactive') return matchesSearch && !student.active;
+    if (activeTab === 'Active') return matchesSearch && isActive;
+    if (activeTab === 'Inactive') return matchesSearch && !isActive;
     return matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
   const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const activeCount = students.filter(s => s.active).length;
-  const inactiveCount = students.filter(s => !s.active).length;
+  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
+  const inactiveCount = students.filter(s => s.onlineStatus !== 'online' && s.onlineStatus !== 'always_online').length;
 
   const handleOpenAddModal = () => {
     setSelectedStudent(null);
@@ -466,16 +472,26 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             paginatedStudents.map((item) => (
               <View key={item.id} style={styles.studentCard}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>{item.name[0]}</Text>
+                  <View style={styles.avatarWrapper}>
+                    <View style={styles.avatarCircle}>
+                      <Text style={styles.avatarText}>{item.name[0]}</Text>
+                    </View>
+                    {item.onlineStatus !== undefined && (
+                      <View style={[
+                        styles.onlineDot,
+                        item.onlineStatus === 'online' || item.onlineStatus === 'always_online'
+                          ? styles.onlineDotGreen
+                          : styles.onlineDotGray
+                      ]} />
+                    )}
                   </View>
                   <View style={styles.metaCol}>
                     <Text style={styles.studentName}>{item.name}</Text>
                     <Text style={styles.joinedText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
-                  <View style={[styles.statusBadge, item.active ? styles.statusActive : styles.statusInactive]}>
-                    <Text style={[styles.statusText, item.active ? styles.statusActiveText : styles.statusInactiveText]}>
-                      {item.active ? 'Active' : 'Inactive'}
+                  <View style={[styles.statusBadge, (item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? styles.statusActive : styles.statusInactive]}>
+                    <Text style={[styles.statusText, (item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? styles.statusActiveText : styles.statusInactiveText]}>
+                      {(item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
                 </View>
@@ -1223,6 +1239,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginRight: 12,
+  },
   avatarCircle: {
     width: 44,
     height: 44,
@@ -1230,7 +1250,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3E8FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 1,
+    right: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  onlineDotGreen: {
+    backgroundColor: '#10B981',
+  },
+  onlineDotGray: {
+    backgroundColor: '#9CA3AF',
   },
   avatarText: {
     color: '#7B2CBF',
