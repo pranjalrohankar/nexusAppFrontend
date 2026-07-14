@@ -39,7 +39,9 @@ interface ProfileScreenProps {
 export default function ProfileScreen({ onLogout, currentSubView, onChangeSubView, userRole = 'student', userName = '', userEmail = '', lastLogin = '' }: ProfileScreenProps) {
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [teacherProfile, setTeacherProfile] = useState<any>(null);
+  const [studentProfile, setStudentProfile] = useState<any>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [studentEnrollments, setStudentEnrollments] = useState<any[]>([]);
 
   const loadPhoto = useCallback(() => {
     AsyncStorage.getItem(PROFILE_PHOTO_KEY)
@@ -57,6 +59,14 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
 
   useEffect(() => {
     loadPhoto();
+    if (userRole === 'student') {
+      api.getStudentProfile()
+        .then((res: any) => setStudentProfile(res?.data ?? null))
+        .catch(() => {});
+      api.getStudentEnrollments()
+        .then((res: any) => setStudentEnrollments(Array.isArray(res) ? res : []))
+        .catch(() => {});
+    }
     if (userRole === 'admin') {
       // Always fetch fresh so lastLogin reflects the current session
       _adminProfileCache = null;
@@ -191,34 +201,29 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 ? ((teacherProfile?.name ?? userName) || 'Teacher')
                 : userRole === 'admin'
                   ? ((adminProfile?.name ?? userName) || 'Administrator')
-                  : (userName || 'Student')}
+                  : ((studentProfile?.name ?? userName) || 'Student')}
             </Text>
             <Text style={styles.userRole}>
               {userRole === 'teacher'
                 ? 'Senior Instructor'
                 : userRole === 'admin'
                   ? 'System Administrator'
-                  : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+                  : 'Student'}
             </Text>
 
             <View style={styles.joinedRow}>
+              <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
               <Text style={styles.joinedText}>
                 {userRole === 'teacher' && teacherProfile?.joinDate
-                  ? `📅 Since ${teacherProfile.joinDate}`
+                  ? `Since ${teacherProfile.joinDate}`
                   : userRole === 'teacher'
-                    ? '📅 Since January 2024'
-                    : ''}
+                    ? 'Since January 2024'
+                    : userRole === 'student' && studentProfile?.joinedDate
+                      ? `Joined ${studentProfile.joinedDate}`
+                      : userRole === 'admin' && adminProfile?.createdAt
+                        ? `Joined ${adminProfile.createdAt}`
+                        : ''}
               </Text>
-              {userRole !== 'teacher' && (
-                <>
-                  <Ionicons name="calendar-outline" size={14} color="#9CA3AF" />
-                  <Text style={styles.joinedText}>
-                    {userRole === 'admin' && adminProfile?.createdAt
-                      ? `Joined ${adminProfile.createdAt}`
-                      : ''}
-                  </Text>
-                </>
-              )}
             </View>
 
             {/* Badges / Skills tags row */}
@@ -248,11 +253,21 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Database</Text></View>
                 </>
               ) : (
-                <>
-                  <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Frontend</Text></View>
-                  <View style={[styles.skillsBadge, { backgroundColor: '#ECFDF5' }]}><Text style={[styles.skillsBadgeText, { color: '#10B981' }]}>Backend</Text></View>
-                  <View style={[styles.skillsBadge, { backgroundColor: '#FFF7ED' }]}><Text style={[styles.skillsBadgeText, { color: '#EA580C' }]}>UI/UX Design</Text></View>
-                </>
+                studentEnrollments.length > 0
+                  ? studentEnrollments.slice(0, 3).map((e, i) => {
+                      const colors = [
+                        { bg: '#F3E8FF', text: '#7B2CBF' },
+                        { bg: '#ECFDF5', text: '#10B981' },
+                        { bg: '#FFF7ED', text: '#EA580C' },
+                      ];
+                      const c = colors[i % colors.length];
+                      return (
+                        <View key={i} style={[styles.skillsBadge, { backgroundColor: c.bg }]}>
+                          <Text style={[styles.skillsBadgeText, { color: c.text }]}>{e.courseTitle}</Text>
+                        </View>
+                      );
+                    })
+                  : null
               )}
             </View>
 
@@ -320,28 +335,28 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                     <View style={[styles.statIconContainer, { backgroundColor: '#7B2CBF' }]}>
                       <Ionicons name="book-outline" size={18} color="#FFF" />
                     </View>
-                    <Text style={styles.statCount}>5</Text>
+                    <Text style={styles.statCount}>{studentEnrollments.length}</Text>
                     <Text style={styles.statLabel}>Enrolled</Text>
                   </View>
                   <View style={styles.statItem}>
                     <View style={[styles.statIconContainer, { backgroundColor: '#10B981' }]}>
                       <Ionicons name="ribbon-outline" size={18} color="#FFF" />
                     </View>
-                    <Text style={styles.statCount}>3</Text>
+                    <Text style={styles.statCount}>{studentEnrollments.filter((e: any) => e.status === 'COMPLETED').length}</Text>
                     <Text style={styles.statLabel}>Completed</Text>
                   </View>
                   <View style={styles.statItem}>
                     <View style={[styles.statIconContainer, { backgroundColor: '#8B5CF6' }]}>
                       <Ionicons name="medal-outline" size={18} color="#FFF" />
                     </View>
-                    <Text style={styles.statCount}>3</Text>
+                    <Text style={styles.statCount}>{studentEnrollments.filter((e: any) => e.paymentStatus === 'Paid').length}</Text>
                     <Text style={styles.statLabel}>Certificates</Text>
                   </View>
                   <View style={styles.statItem}>
                     <View style={[styles.statIconContainer, { backgroundColor: '#FF7A00' }]}>
                       <Ionicons name="trending-up-outline" size={18} color="#FFF" />
                     </View>
-                    <Text style={styles.statCount}>2</Text>
+                    <Text style={styles.statCount}>{studentEnrollments.filter((e: any) => e.status === 'ACTIVE').length}</Text>
                     <Text style={styles.statLabel}>In Progress</Text>
                   </View>
                 </>
@@ -362,13 +377,16 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                       ? ((teacherProfile?.email ?? userEmail) || '')
                       : userRole === 'admin'
                         ? ((adminProfile?.email ?? userEmail) || '')
-                        : (userEmail || '')}
+                        : ((studentProfile?.email ?? userEmail) || '')}
                   </Text>
                 </View>
               </View>
 
               {/* Phone */}
-              {(userRole === 'teacher' ? teacherProfile?.phone : userRole === 'admin' ? adminProfile?.phone : null) ? (
+              {(userRole === 'student'
+                ? studentProfile?.phone
+                : userRole === 'teacher' ? teacherProfile?.phone
+                : adminProfile?.phone) ? (
                 <View style={[styles.detailPill, userRole === 'teacher' && { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
                   <View style={styles.detailIconBox}>
                     <Ionicons name="call-outline" size={18} color="#6B7280" />
@@ -376,16 +394,28 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <View style={styles.detailTextBox}>
                     <Text style={styles.detailLabel}>Phone</Text>
                     <Text style={styles.detailValue}>
-                      {userRole === 'teacher'
-                        ? teacherProfile.phone
+                      {userRole === 'student' ? studentProfile.phone
+                        : userRole === 'teacher' ? teacherProfile.phone
                         : adminProfile.phone}
                     </Text>
                   </View>
                 </View>
               ) : null}
 
-              {/* Location — teacher only, built from address fields saved by admin */}
-              {userRole === 'teacher' && (teacherProfile?.city || teacherProfile?.street) ? (
+              {/* Location */}
+              {userRole === 'student' && (studentProfile?.city || studentProfile?.street) ? (
+                <View style={styles.detailPill}>
+                  <View style={styles.detailIconBox}>
+                    <Ionicons name="location-outline" size={18} color="#6B7280" />
+                  </View>
+                  <View style={styles.detailTextBox}>
+                    <Text style={styles.detailLabel}>Location</Text>
+                    <Text style={styles.detailValue}>
+                      {[studentProfile.city, studentProfile.state].filter(Boolean).join(', ')}
+                    </Text>
+                  </View>
+                </View>
+              ) : userRole === 'teacher' && (teacherProfile?.city || teacherProfile?.street) ? (
                 <View style={[styles.detailPill, { borderWidth: 0, borderRadius: 0, backgroundColor: '#F3F4F6' }]}>
                   <View style={styles.detailIconBox}>
                     <Ionicons name="location-outline" size={18} color="#6B7280" />
@@ -393,12 +423,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <View style={styles.detailTextBox}>
                     <Text style={styles.detailLabel}>Location</Text>
                     <Text style={styles.detailValue}>
-                      {[
-                        teacherProfile.street,
-                        teacherProfile.city,
-                        teacherProfile.state,
-                        teacherProfile.pinCode,
-                      ].filter(Boolean).join(', ')}
+                      {[teacherProfile.street, teacherProfile.city, teacherProfile.state, teacherProfile.pinCode].filter(Boolean).join(', ')}
                     </Text>
                   </View>
                 </View>
@@ -439,50 +464,42 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
             </View>
-
             <View style={styles.coursesList}>
-              {/* Course 1: Full Stack Development */}
-              <View style={styles.courseCard}>
-                <View style={styles.courseHeaderRow}>
-                  <Text style={styles.courseTitle}>Full Stack Development</Text>
-                  <Text style={[styles.coursePercent, { color: '#FF7A00' }]}>75%</Text>
+              {studentEnrollments.length === 0 ? (
+                <View style={styles.courseCard}>
+                  <Text style={{ color: '#9CA3AF', fontSize: 13, textAlign: 'center' }}>No enrollments yet.</Text>
                 </View>
-                <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: '75%', backgroundColor: '#FF7A00' }]} />
-                </View>
-              </View>
-
-              {/* Course 2: Data Science & AI */}
-              <View style={styles.courseCard}>
-                <View style={styles.courseHeaderRow}>
-                  <Text style={styles.courseTitle}>Data Science & AI</Text>
-                  <Text style={[styles.coursePercent, { color: '#FF7A00' }]}>45%</Text>
-                </View>
-                <View style={styles.badgeRow}>
-                  <View style={[styles.statusBadge, { backgroundColor: '#FFF7ED' }]}>
-                    <Text style={[styles.statusBadgeText, { color: '#FF7A00' }]}>In Progress</Text>
-                  </View>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: '45%', backgroundColor: '#FF7A00' }]} />
-                </View>
-              </View>
-
-              {/* Course 3: Digital Marketing */}
-              <View style={styles.courseCard}>
-                <View style={styles.courseHeaderRow}>
-                  <Text style={styles.courseTitle}>Digital Marketing</Text>
-                  <Text style={[styles.coursePercent, { color: '#10B981' }]}>100%</Text>
-                </View>
-                <View style={styles.badgeRow}>
-                  <View style={[styles.statusBadge, { backgroundColor: '#ECFDF5' }]}>
-                    <Text style={[styles.statusBadgeText, { color: '#10B981' }]}>Completed</Text>
-                  </View>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: '100%', backgroundColor: '#10B981' }]} />
-                </View>
-              </View>
+              ) : (
+                studentEnrollments.map((e: any, i: number) => {
+                  const isCompleted = e.status === 'COMPLETED';
+                  const isActive = e.status === 'ACTIVE';
+                  const progressColor = isCompleted ? '#10B981' : '#FF7A00';
+                  const progressPct = isCompleted ? 100 : isActive ? 50 : 25;
+                  return (
+                    <View key={i} style={styles.courseCard}>
+                      <View style={styles.courseHeaderRow}>
+                        <Text style={styles.courseTitle}>{e.courseTitle}</Text>
+                        <Text style={[styles.coursePercent, { color: progressColor }]}>
+                          {isCompleted ? '100%' : e.paymentStatus === 'Paid' ? '50%' : '25%'}
+                        </Text>
+                      </View>
+                      <View style={styles.badgeRow}>
+                        <View style={[styles.statusBadge, { backgroundColor: isCompleted ? '#ECFDF5' : '#FFF7ED' }]}>
+                          <Text style={[styles.statusBadgeText, { color: progressColor }]}>
+                            {isCompleted ? 'Completed' : 'In Progress'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, {
+                          width: `${isCompleted ? 100 : e.paymentStatus === 'Paid' ? 50 : 25}%` as any,
+                          backgroundColor: progressColor
+                        }]} />
+                      </View>
+                    </View>
+                  );
+                })
+              )}
             </View>
           </View>
         )}
