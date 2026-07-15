@@ -1,19 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   TextInput,
   Platform,
   Modal,
-  Alert,
   useWindowDimensions,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Video, ResizeMode } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Linking from 'expo-linking';
 import { api, getApiBaseUrl } from '@/services/api';
 
@@ -38,6 +39,398 @@ interface RecordingItem {
 
 const THEME_COLORS = ['#8B5CF6', '#6366F1', '#F59E0B', '#10B981', '#3B82F6', '#EC4899'];
 
+const SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+function formatTime(secs: number) {
+  if (!isFinite(secs) || isNaN(secs)) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Mobile custom video player
+function MobileVideoPlayer({ uri, title, onClose }: { uri: string; title: string; onClose: () => void }) {
+  const player = useVideoPlayer(uri, p => { p.play(); });
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [speed, setSpeed] = useState(1.0);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const duration = player.duration ?? 0;
+
+  // Poll player state every 500ms instead of useEvent
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(player.currentTime ?? 0);
+      setIsPlaying(!player.paused);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [player]);
+
+  const resetHideTimer = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setControlsVisible(true);
+    hideTimer.current = setTimeout(() => setControlsVisible(false), 3500);
+  }, []);
+
+  useEffect(() => {
+    resetHideTimer();
+    return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+  }, []);
+
+  const togglePlay = () => { isPlaying ? player.pause() : player.play(); resetHideTimer(); };
+  const toggleMute = () => { player.muted = !muted; setMuted(!muted); resetHideTimer(); };
+  const seek = (ratio: number) => { if (duration > 0) { player.currentTime = ratio * duration; resetHideTimer(); } };
+  const setPlaybackSpeed = (s: number) => { player.playbackRate = s; setSpeed(s); setShowSpeedMenu(false); setShowMenu(false); };
+  const handleDownload = () => { setShowMenu(false); Linking.openURL(uri); };
+  const handlePiP = () => { setShowMenu(false); try { (player as any).enterPictureInPicture?.(); } catch {} };
+
+  const barWidth = useRef(0);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => seek(Math.max(0, Math.min(1, e.nativeEvent.locationX / (barWidth.current || 1)))),
+      onPanResponderMove: (e) => seek(Math.max(0, Math.min(1, e.nativeEvent.locationX / (barWidth.current || 1)))),
+    })
+  ).current;
+
+  const progress = duration > 0 ? (currentTime ?? 0) / duration : 0;
+
+  return (
+    // Outer flex column: video on top, controls below — NO overlapping native views
+    <View style={vm.root}>
+
+      {/* VIDEO — fixed height, native view */}
+      <Pressable onPress={() => { setShowMenu(false); setShowSpeedMenu(false); resetHideTimer(); }} style={vm.videoWrap}>
+        <VideoView
+          player={player}
+          style={vm.video}
+          contentFit="contain"
+          allowsPictureInPicture
+          nativeControls={false}
+        />
+        {/* Center play/pause sits OUTSIDE VideoView, in the Pressable */}
+        {controlsVisible && (
+          <View style={vm.centerWrap} pointerEvents="box-none">
+            <TouchableOpacity style={vm.centerPlay} onPress={togglePlay} activeOpacity={0.8}>
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={44} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </Pressable>
+
+      {/* TOP BAR — pure RN view, never overlaps VideoView */}
+      <View style={vm.topBar}>
+        <TouchableOpacity onPress={() => { player.pause(); onClose(); }} style={vm.iconBtn}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={vm.titleText} numberOfLines={1}>{title}</Text>
+      </View>
+
+      {/* BOTTOM CONTROLS — pure RN view */}
+      <View style={vm.bottomBar}>
+        {/* Seek bar */}
+        <View
+          style={vm.seekBar}
+          onLayout={e => { barWidth.current = e.nativeEvent.layout.width; }}
+          {...panResponder.panHandlers}
+        >
+          <View style={vm.seekTrack}>
+            <View style={[vm.seekFill, { width: `${progress * 100}%` as any }]} />
+            <View style={[vm.seekThumb, { left: `${progress * 100}%` as any }]} />
+          </View>
+        </View>
+        {/* Time + icons row */}
+        <View style={vm.timeRow}>
+          <Text style={vm.timeText}>{formatTime(currentTime ?? 0)} / {formatTime(duration)}</Text>
+          <View style={vm.rightIcons}>
+            <TouchableOpacity onPress={toggleMute} style={vm.iconBtn}>
+              <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { try { player.enterFullscreen?.(); } catch {} }} style={vm.iconBtn}>
+              <Ionicons name="expand" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setShowMenu(v => !v); setShowSpeedMenu(false); }} style={vm.iconBtn}>
+              <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* 3-dot dropdown menu */}
+      {showMenu && (
+        <View style={vm.menu}>
+          <TouchableOpacity style={vm.menuItem} onPress={handleDownload}>
+            <Ionicons name="download-outline" size={20} color="#1F2937" />
+            <Text style={vm.menuText}>Download</Text>
+          </TouchableOpacity>
+          <View style={vm.menuDivider} />
+          <TouchableOpacity style={vm.menuItem} onPress={() => setShowSpeedMenu(v => !v)}>
+            <Ionicons name="speedometer-outline" size={20} color="#1F2937" />
+            <Text style={vm.menuText}>Playback speed ({speed}x)</Text>
+            <Ionicons name={showSpeedMenu ? 'chevron-down' : 'chevron-forward'} size={16} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
+          {showSpeedMenu && (
+            <View style={vm.speedList}>
+              {SPEEDS.map(s => (
+                <TouchableOpacity key={s} style={vm.speedItem} onPress={() => setPlaybackSpeed(s)}>
+                  <Text style={[vm.speedText, speed === s && vm.speedActive]}>{s}x</Text>
+                  {speed === s && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <View style={vm.menuDivider} />
+          <TouchableOpacity style={vm.menuItem} onPress={handlePiP}>
+            <Ionicons name="tablet-portrait-outline" size={20} color="#1F2937" />
+            <Text style={vm.menuText}>Picture in picture</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Web custom video player (works on phone browser too)
+function WebVideoPlayer({ uri, title, onClose }: { uri: string; title: string; onClose: () => void }) {
+  const videoRef = useRef<any>(null);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1.0);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideTimer = useRef<any>(null);
+
+  const resetHideTimer = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setControlsVisible(true);
+    hideTimer.current = setTimeout(() => setControlsVisible(false), 3500);
+  }, []);
+
+  useEffect(() => {
+    resetHideTimer();
+    return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+  }, []);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setPlaying(true); } else { v.pause(); setPlaying(false); }
+    resetHideTimer();
+  };
+
+  const toggleMute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+    resetHideTimer();
+  };
+
+  const handleTimeUpdate = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    setCurrentTime(v.currentTime);
+    setProgress(v.duration ? v.currentTime / v.duration : 0);
+  };
+
+  const handleLoadedMetadata = () => {
+    const v = videoRef.current;
+    if (v) setDuration(v.duration);
+  };
+
+  const handleSeek = (e: any) => {
+    const v = videoRef.current;
+    if (!v || !v.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    v.currentTime = ratio * v.duration;
+    resetHideTimer();
+  };
+
+  const setPlaybackSpeed = (s: number) => {
+    const v = videoRef.current;
+    if (v) v.playbackRate = s;
+    setSpeed(s);
+    setShowSpeedMenu(false);
+    setShowMenu(false);
+  };
+
+  const handleDownload = () => {
+    setShowMenu(false);
+    const a = document.createElement('a');
+    a.href = uri;
+    a.download = title || 'recording';
+    a.click();
+  };
+
+  const handlePiP = () => {
+    setShowMenu(false);
+    const v = videoRef.current;
+    if (v && (document as any).pictureInPictureEnabled) {
+      if ((document as any).pictureInPictureElement) {
+        (document as any).exitPictureInPicture();
+      } else {
+        v.requestPictureInPicture?.();
+      }
+    }
+  };
+
+  const handleFullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.requestFullscreen) v.requestFullscreen();
+    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+  };
+
+  const containerStyle: any = {
+    flex: 1, backgroundColor: '#000', display: 'flex', flexDirection: 'column',
+    userSelect: 'none', position: 'relative',
+  };
+
+  const topBarStyle: any = {
+    display: 'flex', flexDirection: 'row', alignItems: 'center',
+    padding: '10px 12px', backgroundColor: '#111', flexShrink: 0,
+  };
+
+  const videoAreaStyle: any = {
+    flex: 1, position: 'relative', backgroundColor: '#000',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  };
+
+  const bottomBarStyle: any = {
+    backgroundColor: '#111', padding: '8px 14px 16px', flexShrink: 0,
+  };
+
+  const seekTrackStyle: any = {
+    width: '100%', height: 4, backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2, position: 'relative', cursor: 'pointer',
+  };
+
+  const menuStyle: any = {
+    position: 'absolute', right: 12, bottom: 90,
+    backgroundColor: '#fff', borderRadius: 12,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.25)', minWidth: 230,
+    zIndex: 100, overflow: 'hidden',
+  };
+
+  const menuItemStyle: any = {
+    display: 'flex', flexDirection: 'row', alignItems: 'center',
+    padding: '14px 16px', gap: 12, cursor: 'pointer', background: 'none', border: 'none', width: '100%',
+  };
+
+  return (
+    <div style={containerStyle} onClick={() => { setShowMenu(false); setShowSpeedMenu(false); resetHideTimer(); }}>
+      {/* video element — no native controls */}
+      <div style={videoAreaStyle}>
+        <video
+          ref={videoRef}
+          src={uri}
+          autoPlay
+          style={{ width: '100%', height: '100%', objectFit: 'contain', outline: 'none' } as any}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+        />
+        {/* Center play/pause */}
+        {controlsVisible && (
+          <div
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            style={{
+              position: 'absolute', width: 72, height: 72, borderRadius: 36,
+              backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            } as any}
+          >
+            <Ionicons name={playing ? 'pause' : 'play'} size={44} color="#fff" />
+          </div>
+        )}
+      </div>
+
+      {/* TOP BAR */}
+      <div style={topBarStyle}>
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </button>
+        <span style={{ flex: 1, color: '#fff', fontWeight: 700, fontSize: 15, margin: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+          {title}
+        </span>
+      </div>
+
+      {/* BOTTOM BAR */}
+      <div style={bottomBarStyle}>
+        {/* Seek bar */}
+        <div style={{ padding: '8px 0', cursor: 'pointer' } as any} onClick={(e) => { e.stopPropagation(); handleSeek(e); }}>
+          <div style={seekTrackStyle}>
+            <div style={{ position: 'absolute', left: 0, top: 0, height: 4, width: `${progress * 100}%`, backgroundColor: '#7B2CBF', borderRadius: 2 } as any} />
+            <div style={{ position: 'absolute', top: -6, left: `${progress * 100}%`, marginLeft: -8, width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' } as any} />
+          </div>
+        </div>
+        {/* Time + icons */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 } as any}>
+          <span style={{ color: '#fff', fontSize: 13 } as any}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+          <div style={{ display: 'flex', gap: 4 } as any}>
+            <button onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
+              <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
+              <Ionicons name="expand" size={20} color="#fff" />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setShowMenu(v => !v); setShowSpeedMenu(false); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
+              <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3-dot menu */}
+      {showMenu && (
+        <div style={menuStyle} onClick={(e) => e.stopPropagation()}>
+          <button style={menuItemStyle} onClick={handleDownload}>
+            <Ionicons name="download-outline" size={20} color="#1F2937" />
+            <span style={{ fontSize: 14, color: '#1F2937', fontWeight: 500 } as any}>Download</span>
+          </button>
+          <div style={{ height: 1, backgroundColor: '#F3F4F6', margin: '0 8px' }} />
+          <button style={menuItemStyle} onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(v => !v); }}>
+            <Ionicons name="speedometer-outline" size={20} color="#1F2937" />
+            <span style={{ fontSize: 14, color: '#1F2937', fontWeight: 500, flex: 1, textAlign: 'left' } as any}>Playback speed ({speed}x)</span>
+            <Ionicons name={showSpeedMenu ? 'chevron-down' : 'chevron-forward'} size={16} color="#9CA3AF" />
+          </button>
+          {showSpeedMenu && (
+            <div style={{ backgroundColor: '#F9FAFB', margin: '0 8px 4px', borderRadius: 8 }}>
+              {SPEEDS.map(s => (
+                <button key={s} style={{ ...menuItemStyle, justifyContent: 'space-between' }} onClick={() => setPlaybackSpeed(s)}>
+                  <span style={{ fontSize: 14, color: speed === s ? '#7B2CBF' : '#4B5563', fontWeight: speed === s ? 700 : 400 } as any}>{s}x</span>
+                  {speed === s && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ height: 1, backgroundColor: '#F3F4F6', margin: '0 8px' }} />
+          <button style={menuItemStyle} onClick={handlePiP}>
+            <Ionicons name="tablet-portrait-outline" size={20} color="#1F2937" />
+            <span style={{ fontSize: 14, color: '#1F2937', fontWeight: 500 } as any}>Picture in picture</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Shared full-screen video modal
 function VideoModal({
   visible,
@@ -50,80 +443,64 @@ function VideoModal({
   title: string;
   onClose: () => void;
 }) {
-  const [playerSize, setPlayerSize] = useState({ w: 0, h: 0 });
-  const handleClose = () => { setPlayerSize({ w: 0, h: 0 }); onClose(); };
-
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      onRequestClose={handleClose}
+      onRequestClose={onClose}
       transparent={false}
       statusBarTranslucent
     >
-      <View style={vm.root}>
-        <View style={vm.header}>
-          <TouchableOpacity onPress={handleClose} style={vm.closeBtn}>
-            <Ionicons name="close" size={24} color="#1E2937" />
-          </TouchableOpacity>
-          <Text style={vm.titleText} numberOfLines={1}>{title}</Text>
-        </View>
-
-        <View
-          style={vm.playerArea}
-          onLayout={(e) => {
-            const { width, height } = e.nativeEvent.layout;
-            if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
-          }}
-        >
-          {uri && IS_WEB ? (
-            // Web: use native HTML video element
-            <video
-              src={uri}
-              controls
-              autoPlay
-              style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
-            />
-          ) : uri && playerSize.w > 0 ? (
-            // Native iOS/Android: use expo-av
-            <Video
-              source={{ uri }}
-              style={{ width: playerSize.w, height: playerSize.h, backgroundColor: '#000' }}
-              videoStyle={{ width: '100%', height: '100%' } as any}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              onError={() => { Alert.alert('Playback Error', 'Unable to play this video.'); handleClose(); }}
-            />
-          ) : null}
-        </View>
-      </View>
+      <SafeAreaView style={vm.safeRoot} edges={['top', 'bottom']}>
+        {uri && IS_WEB ? (
+          <WebVideoPlayer uri={uri} title={title} onClose={onClose} />
+        ) : uri ? (
+          <MobileVideoPlayer uri={uri} title={title} onClose={onClose} />
+        ) : null}
+      </SafeAreaView>
     </Modal>
   );
 }
 
 const vm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    paddingTop: Platform.OS === 'android' ? 44 : 14,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+  safeRoot: { flex: 1, backgroundColor: '#000' },
+  // Column layout: topBar → videoWrap → bottomBar (no overlapping)
+  root: { flex: 1, backgroundColor: '#000', flexDirection: 'column', justifyContent: 'space-between' },
+  topBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#111',
   },
-  closeBtn: {
-    width: 40, height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  titleText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#fff', marginHorizontal: 8 },
+  iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  videoWrap: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  video: { flex: 1 },
+  centerWrap: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  centerPlay: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center',
   },
-  titleText: { flex: 1, fontSize: 17, fontWeight: '700', color: '#1E2937' },
-  playerArea: { flex: 1, backgroundColor: '#000' },
+  bottomBar: { backgroundColor: '#111', paddingHorizontal: 14, paddingBottom: 16, paddingTop: 8 },
+  seekBar: { height: 32, justifyContent: 'center' },
+  seekTrack: { height: 4, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2 },
+  seekFill: { height: 4, backgroundColor: '#7B2CBF', borderRadius: 2, position: 'absolute', left: 0, top: 0 },
+  seekThumb: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff', position: 'absolute', top: -6, marginLeft: -8 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  timeText: { fontSize: 13, color: '#fff' },
+  rightIcons: { flexDirection: 'row' },
+  menu: {
+    position: 'absolute', right: 12, bottom: 100,
+    backgroundColor: '#fff', borderRadius: 12,
+    paddingVertical: 4, minWidth: 230,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 12,
+  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  menuText: { fontSize: 14, color: '#1F2937', fontWeight: '500' },
+  menuDivider: { height: 1, backgroundColor: '#F3F4F6', marginHorizontal: 8 },
+  speedList: { backgroundColor: '#F9FAFB', marginHorizontal: 8, borderRadius: 8, marginBottom: 4 },
+  speedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  speedText: { fontSize: 14, color: '#4B5563' },
+  speedActive: { color: '#7B2CBF', fontWeight: '700' },
 });
 
 export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenProps) {
@@ -168,7 +545,7 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
     iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
   return (
-    <SafeAreaView style={s.safeArea} edges={['top']}>
+    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerTopRow}>
           <TouchableOpacity style={s.backButton} onPress={onBack}>
