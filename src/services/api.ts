@@ -3,8 +3,13 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
+  if (Platform.OS === "web") {
+    return "http://localhost:8080/api";
+  }
+
   const extra = (Constants.expoConfig?.extra ?? {}) as {
     apiUrl?: string;
+    apiUrlWeb?: string;
     apiBaseUrl?: string;
     apiPort?: number | string;
   };

@@ -16,6 +16,7 @@ import TestsScreen from '@/screens/tests/tests-screen';
 import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Dimensions,
   Platform,
@@ -71,6 +72,7 @@ interface AppTabsProps {
 
 export default function AppTabs({ userRole, userName, userEmail, onLogout, lastLogin }: AppTabsProps) {
   const isNarrowWeb = useIsNarrowWeb();
+  const insets = useSafeAreaInsets();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showUploadRecording, setShowUploadRecording] = useState(false);
@@ -272,7 +274,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
         <View style={styles.container}>
           <View style={[styles.screenContainer, profileSubView === 'profile' && styles.screenWithTabBar]}>{renderScreen()}</View>
           {profileSubView === 'profile' && (
-            <View style={styles.tabBar}>
+          <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
               {tabs.map((tab, idx) => {
                 const isActive = idx === activeIndex;
                 return (
@@ -365,7 +367,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
 
       {/* BOTTOM TAB BAR — hidden when a profile sub-view is open */}
       {profileSubView === 'profile' && (
-        <View style={styles.tabBar}>
+        <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           {tabs.map((tab, idx) => {
             const isActive = idx === activeIndex;
             return (
@@ -400,12 +402,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   screenWithTabBar: {
-    paddingBottom: Platform.OS === 'ios' ? 76 : 64,
+    paddingBottom: 80,
   },
   // Tab Bar — flat bottom bar matching UI screenshot
   tabBar: {
     flexDirection: 'row',
-    height: 64,
+    minHeight: 58,
     backgroundColor: '#FFFFFF',
     borderRadius: 0,
     justifyContent: 'space-around',
@@ -420,7 +422,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     paddingHorizontal: 16,
-    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
     zIndex: 100,
@@ -429,10 +430,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    paddingVertical: 8,
+    paddingTop: 14,
+    paddingBottom: 4,
     borderRadius: 12,
     marginHorizontal: 4,
-    marginVertical: 6,
+    marginTop: 6,
+    marginBottom: 2,
   },
   tabButtonActive: {
     backgroundColor: '#7B2CBF',
