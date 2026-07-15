@@ -270,4 +270,9 @@ export const api = {
   setActivityStatus: (online: boolean) => put('/student/activity-status', { online }),
   getPrivacySettings: () => get('/student/privacy-settings'),
   updatePrivacySettings: (data: object) => put('/student/privacy-settings', data),
+
+  // Teacher notification endpoints
+  getTeacherNotifications: () => get('/notifications/teacher'),
+  markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
+  markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
 };
