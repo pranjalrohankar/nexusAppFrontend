@@ -144,7 +144,7 @@ try {
   }
   deviceFingerprint = stored;
 } catch {}
-const res = await api.login(signInEmail, signInPassword, selectedRole, deviceFingerprint ?? undefined);
+const res = await api.login(signInEmail.trim(), signInPassword.trim(), selectedRole, deviceFingerprint ?? undefined);
 if (res.success) {
 setToken(res.data.token);
 onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
