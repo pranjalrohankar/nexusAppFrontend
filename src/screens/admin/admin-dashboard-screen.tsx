@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar,
 } from 'react-native';
@@ -14,12 +14,19 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   const [enquiries, setEnquiries] = useState<any[]>(adminDataCache.enquiries);
   const [showEnquiries, setShowEnquiries] = useState(false);
 
+  // Track last known enquiry count so we only re-render when something
+  // actually changed — prevents cascading setEnquiries calls from the
+  // interval that were logging a "Sending request with token" on each tick.
+  const lastEnqCountRef = useRef(adminDataCache.enquiries.length);
+  const dashDataRef = useRef<any>(adminDataCache.dashboard);
+
   const fetchEnquiries = () => {
     api.getEnquiries()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
         adminDataCache.enquiries = list;
         setEnquiries(list);
+        lastEnqCountRef.current = list.length;
       })
       .catch(() => {});
   };
@@ -34,12 +41,27 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
       adminDataCache.dashboard = d;
       adminDataCache.enquiries = list;
       setDashData(d);
+      dashDataRef.current = d;
       setEnquiries(list);
+      lastEnqCountRef.current = list.length;
     });
 
-    // Sync badge count from cache every 5s (picks up polling updates from app-tabs)
+    // Sync badge count from cache every 5 s (picks up badge updates written
+    // by app-tabs polling), but ONLY update React state when the count
+    // actually changed so we don't cause unnecessary re-renders (and the
+    // flood of "Sending request with token" console lines that came with them).
     const sync = setInterval(() => {
-      setEnquiries([...adminDataCache.enquiries]);
+      const cached = adminDataCache.enquiries;
+      if (cached.length !== lastEnqCountRef.current) {
+        lastEnqCountRef.current = cached.length;
+        setEnquiries([...cached]);
+      }
+      // Also pick up dashboard cache changes (e.g. teacher added/deleted)
+      const cachedDash = adminDataCache.dashboard;
+      if (cachedDash && cachedDash !== dashDataRef.current) {
+        dashDataRef.current = cachedDash;
+        setDashData(cachedDash);
+      }
     }, 5000);
 
     // Poll dashboard every 10s to keep online status fresh
@@ -86,7 +108,9 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     studentsCount: c.studentsCount ?? 0,
   }));
 
-  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
 
   if (showEnquiries) {
     return (
@@ -96,6 +120,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
         onEnquiriesUpdate={(updated) => {
           setEnquiries(updated);
           adminDataCache.enquiries = updated;
+          lastEnqCountRef.current = updated.length;
         }}
       />
     );
@@ -104,6 +129,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
+
       {/* HEADER */}
       <View style={styles.header}>
         <LinearGradient
@@ -141,6 +167,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
         {/* KPI METRICS GRID */}
         <View style={styles.metricsGrid}>
           {metrics.map((m, idx) => (
@@ -165,14 +192,17 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
           </TouchableOpacity>
         </View>
         <View style={styles.enrollmentsCard}>
-          {recentEnrollments.map((item: any) => {
+          {recentEnrollments.length === 0 ? (
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 13 }}>No recent enrollments</Text>
+            </View>
+          ) : recentEnrollments.map((item: any) => {
             const initials = (item.name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-            const avatarBg = '#7B2CBF';
             const isToday = item.time && (item.time === new Date().toISOString().split('T')[0] || item.time === 'Today');
             const displayDate = isToday ? 'Today' : item.time;
             return (
               <View key={item.id} style={styles.enrollmentItem}>
-                <View style={[styles.enrollAvatar, { backgroundColor: avatarBg }]}>
+                <View style={[styles.enrollAvatar, { backgroundColor: '#7B2CBF' }]}>
                   <Text style={styles.enrollAvatarText}>{initials}</Text>
                 </View>
                 <View style={styles.enrollInfo}>
@@ -286,11 +316,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
   },
   classesTodayHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  classesTodayIconBox: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#F3E8FF',
-    justifyContent: 'center', alignItems: 'center',
-  },
+  classesTodayIconBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center' },
   classesTodayTitle: { fontSize: 16, fontWeight: '700', color: '#1F2937' },
   classesTodayDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   noClassesBox: { paddingVertical: 20, alignItems: 'center' },
@@ -306,9 +332,6 @@ const styles = StyleSheet.create({
   classRowContent: { flex: 1 },
   classCourse: { fontSize: 13, fontWeight: '700', color: '#1F2937' },
   classTeacher: { fontSize: 11, color: '#6B7280', marginTop: 3 },
-  classTimePill: {
-    backgroundColor: '#FFF7ED', borderRadius: 8,
-    paddingVertical: 5, paddingHorizontal: 10,
-  },
+  classTimePill: { backgroundColor: '#FFF7ED', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
   classTimeText: { fontSize: 12, fontWeight: '700', color: '#EA580C' },
 });
