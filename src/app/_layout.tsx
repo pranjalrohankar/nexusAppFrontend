@@ -129,6 +129,10 @@ export default function TabLayout() {
           setUserId(id ?? null);
           setLastLogin(loginTime ?? '');
           setIsAuthenticated(true);
+          // Mark student as online after login
+          if (role === 'student') {
+            setTimeout(() => api.setActivityStatus(true).catch(() => {}), 500);
+          }
         }} />
       )}
     </ThemeProvider>

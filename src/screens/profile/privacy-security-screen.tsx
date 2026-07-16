@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { api } from '../../services/api';
 
 interface PrivacySecurityScreenProps {
   onBack: () => void;
@@ -21,6 +22,20 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
   const [profileVisible, setProfileVisible] = useState(true);
   const [activityVisible, setActivityVisible] = useState(true);
   const [dataCollectionEnabled, setDataCollectionEnabled] = useState(false);
+
+  useEffect(() => {
+    api.getPrivacySettings()
+      .then((res: any) => {
+        if (res?.data?.activityStatusEnabled !== undefined)
+          setActivityVisible(res.data.activityStatusEnabled);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleActivityToggle = (value: boolean) => {
+    setActivityVisible(value);
+    api.updatePrivacySettings({ activityStatusEnabled: value }).catch(() => {});
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -89,7 +104,7 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             </View>
             <Switch
               value={activityVisible}
-              onValueChange={setActivityVisible}
+              onValueChange={handleActivityToggle}
               trackColor={{ false: '#D1D5DB', true: '#C084FC' }}
               thumbColor={activityVisible ? '#7B2CBF' : '#F3F4F6'}
               ios_backgroundColor="#E5E7EB"

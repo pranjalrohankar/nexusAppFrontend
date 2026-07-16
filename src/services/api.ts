@@ -3,8 +3,13 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
+  if (Platform.OS === "web") {
+    return "http://localhost:8080/api";
+  }
+
   const extra = (Constants.expoConfig?.extra ?? {}) as {
     apiUrl?: string;
+    apiUrlWeb?: string;
     apiBaseUrl?: string;
     apiPort?: number | string;
   };
@@ -268,4 +273,7 @@ export const api = {
   getStudentMaterials: () => get('/student/materials'),
   getStudentRecordings: () => get('/student/recordings'),
   getMaterialDownloadUrl: (id: number | string) => `${getApiBaseUrl()}/materials/download/${id}`,
+  setActivityStatus: (online: boolean) => put('/student/activity-status', { online }),
+  getPrivacySettings: () => get('/student/privacy-settings'),
+  updatePrivacySettings: (data: object) => put('/student/privacy-settings', data),
 };
