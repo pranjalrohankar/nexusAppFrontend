@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,13 +6,15 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  Platform,
   Alert,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { api } from '../../services/api';
 
 interface AlertItem {
   id: string;
@@ -23,22 +25,73 @@ interface AlertItem {
   read: boolean;
 }
 
+const DOT_COLORS: Record<string, string> = {
+  'Class Starting Soon': '#EF4444',
+  'New Student Enrolled': '#3B82F6',
+  'Student Query': '#F59E0B',
+  'Schedule Updated': '#10B981',
+  'Milestone Achieved': '#8B5CF6',
+};
+
+function getDefaultDotColor(title: string): string {
+  return DOT_COLORS[title] ?? '#7B2CBF';
+}
+
+function formatRelativeTime(createdAt: string): string {
+  const diff = Date.now() - new Date(createdAt).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins} min${mins !== 1 ? 's' : ''} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days !== 1 ? 's' : ''} ago`;
+}
+
 export default function TeacherAlertsScreen() {
   const [pushEnabled, setPushEnabled] = useState(true);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(false);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [alerts, setAlerts] = useState<AlertItem[]>([
-    { id: '1', dotColor: '#EF4444', title: 'Class Starting Soon', desc: 'Data Science & ML class starts in 30 minutes.', time: '15 mins ago', read: false },
-    { id: '2', dotColor: '#3B82F6', title: 'New Student Enrolled', desc: '2 students joined Full Stack Web Development.', time: '1 hour ago', read: false },
-    { id: '3', dotColor: '#F59E0B', title: 'Student Query', desc: 'Rahul Kumar asked a question in Discussion.', time: '3 hours ago', read: false },
-    { id: '4', dotColor: '#10B981', title: 'Schedule Updated', desc: 'UI/UX Design class rescheduled to Thursday 6:00 PM.', time: '5 hours ago', read: true },
-    { id: '5', dotColor: '#8B5CF6', title: 'Milestone Achieved', desc: 'Your courses reached 100+ enrolments!', time: '1 day ago', read: true }
-  ]);
+  const loadNotifications = useCallback(async () => {
+    try {
+      const data = await api.getTeacherNotifications();
+      const list: any[] = Array.isArray(data) ? data : [];
+      setAlerts(
+        list.map((n: any) => ({
+          id: String(n.id),
+          dotColor: getDefaultDotColor(n.title),
+          title: n.title ?? 'Notification',
+          desc: n.message ?? '',
+          time: n.createdAt ? formatRelativeTime(n.createdAt) : '',
+          read: n.seen ?? false,
+        }))
+      );
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-  const handleMarkAllRead = () => {
-    setAlerts(alerts.map(a => ({ ...a, read: true })));
-    Alert.alert('Success', 'All notifications marked as read.');
+  useEffect(() => { loadNotifications(); }, [loadNotifications]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadNotifications();
+  }, [loadNotifications]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead('TEACHER');
+      setAlerts(prev => prev.map(a => ({ ...a, read: true })));
+      Alert.alert('Success', 'All notifications marked as read.');
+    } catch {
+      Alert.alert('Error', 'Failed to mark notifications as read.');
+    }
   };
 
   return (
@@ -67,6 +120,7 @@ export default function TeacherAlertsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#7B2CBF']} />}
       >
         {/* PREFERENCE TOGGLES */}
         <View style={styles.preferenceCard}>
@@ -117,6 +171,14 @@ export default function TeacherAlertsScreen() {
 
         {/* ALERTS FEED LIST */}
         <Text style={styles.sectionTitle}>Recent Activities</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 20 }} />
+        ) : alerts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="notifications-off-outline" size={40} color="#D1D5DB" />
+            <Text style={styles.emptyText}>No notifications yet</Text>
+          </View>
+        ) : (
         <View style={styles.alertsContainer}>
           {alerts.map((item) => (
             <View key={item.id} style={[styles.alertCard, item.read && styles.alertCardRead]}>
@@ -135,6 +197,7 @@ export default function TeacherAlertsScreen() {
             </View>
           ))}
         </View>
+        )}
 
         {/* MARK ALL READ LINK */}
         <TouchableOpacity style={styles.markReadBtn} onPress={handleMarkAllRead}>
@@ -310,5 +373,15 @@ const styles = StyleSheet.create({
     color: '#7B2CBF',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#9CA3AF',
   },
 });
