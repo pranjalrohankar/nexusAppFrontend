@@ -1,10 +1,10 @@
-﻿import CourseDetails, { CourseData } from '@/screens/courses/course-details';
+import CourseDetails, { CourseData } from '@/screens/courses/course-details';
 import ExploreCourses, { ExploreCourseItem } from '@/screens/courses/explore-courses';
 import ClassRecordingsScreen from '@/screens/home/class-recordings-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dimensions,
   Modal,
@@ -16,12 +16,14 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   View,
   ActivityIndicator,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiBaseUrl } from '@/services/api';
-import { Video, ResizeMode } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 export const exploreCoursesList: ExploreCourseItem[] = [];
 
@@ -305,58 +307,165 @@ const API_BASE = getApiBaseUrl().replace('/api', '');
 
 // ── Inline Video Modal ──────────────────────────────────────────────────
 
-function InlineVideoModal({ visible, uri, title, onClose }: {
-  visible: boolean; uri: string | null; title: string; onClose: () => void;
-}) {
-  const [playerSize, setPlayerSize] = useState({ w: 0, h: 0 });
-  const handleClose = () => { setPlayerSize({ w: 0, h: 0 }); onClose(); };
+const SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+function fmtTime(secs: number) {
+  if (!isFinite(secs) || isNaN(secs)) return '0:00';
+  const m = Math.floor(secs / 60), s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string; onClose: () => void }) {
+  const player = useVideoPlayer(uri, p => { p.play(); });
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [speed, setSpeed] = useState(1.0);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const videoViewRef = useRef<VideoView>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const duration = player.duration ?? 0;
+  useEffect(() => {
+    const interval = setInterval(() => { setCurrentTime(player.currentTime ?? 0); setIsPlaying(player.playing); }, 500);
+    return () => clearInterval(interval);
+  }, [player]);
+  const resetHide = useCallback(() => { if (hideTimer.current) clearTimeout(hideTimer.current); setControlsVisible(true); hideTimer.current = setTimeout(() => setControlsVisible(false), 3500); }, []);
+  useEffect(() => { resetHide(); return () => { if (hideTimer.current) clearTimeout(hideTimer.current); }; }, []);
+  const togglePlay = () => { isPlaying ? player.pause() : player.play(); resetHide(); };
+  const toggleMute = () => { player.muted = !muted; setMuted(!muted); resetHide(); };
+  const seek = (ratio: number) => { if (duration > 0) { player.currentTime = ratio * duration; resetHide(); } };
+  const setPlaybackSpeed = (s: number) => { player.playbackRate = s; setSpeed(s); setShowSpeedMenu(false); setShowMenu(false); };
+  const handleDownload = () => { setShowMenu(false); Linking.openURL(uri); };
+  const handlePiP = () => { setShowMenu(false); try { (player as any).enterPictureInPicture?.(); } catch {} };
+  const barWidth = useRef(0);
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => seek(Math.max(0, Math.min(1, e.nativeEvent.locationX / (barWidth.current || 1)))),
+    onPanResponderMove: (e) => seek(Math.max(0, Math.min(1, e.nativeEvent.locationX / (barWidth.current || 1)))),
+  })).current;
+  const progress = duration > 0 ? currentTime / duration : 0;
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleClose} transparent={false} statusBarTranslucent>
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 16, paddingVertical: 14,
-          paddingTop: Platform.OS === 'android' ? 44 : 14,
-          backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
-        }}>
-          <TouchableOpacity
-            onPress={handleClose}
-            style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}
-          >
-            <Ionicons name="close" size={24} color="#1E2937" />
+    <View style={vp.root}>
+      <View style={vp.topBar}>
+        <TouchableOpacity onPress={() => { player.pause(); onClose(); }} style={vp.iconBtn}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={vp.titleText} numberOfLines={1}>{title}</Text>
+      </View>
+      <Pressable style={vp.videoWrap} onPress={() => { setShowMenu(false); setShowSpeedMenu(false); resetHide(); }}>
+        <VideoView ref={videoViewRef} player={player} style={vp.video} contentFit="contain" allowsPictureInPicture nativeControls={false} />
+        {controlsVisible && (
+          <View style={vp.centerWrap} pointerEvents="box-none">
+            <TouchableOpacity style={vp.centerPlay} onPress={togglePlay} activeOpacity={0.8}>
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={44} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </Pressable>
+      <View style={vp.bottomBar}>
+        <View style={vp.seekBar} onLayout={e => { barWidth.current = e.nativeEvent.layout.width; }} {...panResponder.panHandlers}>
+          <View style={vp.seekTrack}>
+            <View style={[vp.seekFill, { width: `${progress * 100}%` as any }]} />
+            <View style={[vp.seekThumb, { left: `${progress * 100}%` as any }]} />
+          </View>
+        </View>
+        <View style={vp.timeRow}>
+          <Text style={vp.timeText}>{fmtTime(currentTime)} / {fmtTime(duration)}</Text>
+          <View style={vp.rightIcons}>
+            <TouchableOpacity onPress={toggleMute} style={vp.iconBtn}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { try { videoViewRef.current?.enterFullscreen(); } catch {} }} style={vp.iconBtn}><Ionicons name="expand" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setShowMenu(v => !v); setShowSpeedMenu(false); }} style={vp.iconBtn}><Ionicons name="ellipsis-vertical" size={20} color="#fff" /></TouchableOpacity>
+          </View>
+        </View>
+      </View>
+      {showMenu && (
+        <View style={vp.menu}>
+          <TouchableOpacity style={vp.menuItem} onPress={handleDownload}><Ionicons name="download-outline" size={20} color="#1F2937" /><Text style={vp.menuText}>Download</Text></TouchableOpacity>
+          <View style={vp.menuDivider} />
+          <TouchableOpacity style={vp.menuItem} onPress={() => setShowSpeedMenu(v => !v)}>
+            <Ionicons name="speedometer-outline" size={20} color="#1F2937" />
+            <Text style={vp.menuText}>Playback speed ({speed}x)</Text>
+            <Ionicons name={showSpeedMenu ? 'chevron-down' : 'chevron-forward'} size={16} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
-          <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1E2937' }} numberOfLines={1}>{title}</Text>
+          {showSpeedMenu && (
+            <View style={vp.speedList}>
+              {SPEEDS.map(s => (
+                <TouchableOpacity key={s} style={vp.speedItem} onPress={() => setPlaybackSpeed(s)}>
+                  <Text style={[vp.speedText, speed === s && vp.speedActive]}>{s}x</Text>
+                  {speed === s && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <View style={vp.menuDivider} />
+          <TouchableOpacity style={vp.menuItem} onPress={handlePiP}><Ionicons name="tablet-portrait-outline" size={20} color="#1F2937" /><Text style={vp.menuText}>Picture in picture</Text></TouchableOpacity>
         </View>
-        <View
-          style={{ flex: 1, backgroundColor: '#000' }}
-          onLayout={e => {
-            const { width, height } = e.nativeEvent.layout;
-            if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
-          }}
-        >
-          {uri && Platform.OS === 'web' ? (
-            <video
-              src={uri}
-              controls
-              autoPlay
-              style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
-            />
-          ) : uri && playerSize.w > 0 ? (
-            <Video
-              source={{ uri }}
-              style={{ width: playerSize.w, height: playerSize.h, backgroundColor: '#000' }}
-              videoStyle={{ width: '100%', height: '100%' } as any}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              onError={() => { Alert.alert('Playback Error', 'Unable to play this video.'); handleClose(); }}
-            />
-          ) : null}
-        </View>
+      )}
+    </View>
+  );
+}
+function InlineVideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: string | null; title: string; onClose: () => void }) {
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent={false} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {uri && Platform.OS === 'web' ? (
+          <>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center',
+              paddingHorizontal: 16, paddingVertical: 14,
+              backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+            }}>
+              <TouchableOpacity
+                onPress={onClose}
+                style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}
+              >
+                <Ionicons name="close" size={24} color="#1E2937" />
+              </TouchableOpacity>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1E2937' }} numberOfLines={1}>{title}</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: '#000' }}>
+              <video
+                src={uri}
+                controls
+                autoPlay
+                style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
+              />
+            </View>
+          </>
+        ) : uri ? (
+          <NativeVideoPlayer uri={uri} title={title} onClose={onClose} />
+        ) : null}
       </View>
     </Modal>
   );
 }
+const vp = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000', flexDirection: 'column', justifyContent: 'space-between' },
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#111' },
+  titleText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#fff', marginHorizontal: 8 },
+  iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  videoWrap: { flex: 1, backgroundColor: '#000' },
+  video: { flex: 1 },
+  centerWrap: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  centerPlay: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+  bottomBar: { backgroundColor: '#111', paddingHorizontal: 14, paddingBottom: 16, paddingTop: 8 },
+  seekBar: { height: 32, justifyContent: 'center' },
+  seekTrack: { height: 4, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2 },
+  seekFill: { height: 4, backgroundColor: '#7B2CBF', borderRadius: 2, position: 'absolute', left: 0, top: 0 },
+  seekThumb: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff', position: 'absolute', top: -6, marginLeft: -8 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  timeText: { fontSize: 13, color: '#fff' },
+  rightIcons: { flexDirection: 'row' },
+  menu: { position: 'absolute', right: 12, bottom: 100, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 4, minWidth: 230, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 12 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  menuText: { fontSize: 14, color: '#1F2937', fontWeight: '500' },
+  menuDivider: { height: 1, backgroundColor: '#F3F4F6', marginHorizontal: 8 },
+  speedList: { backgroundColor: '#F9FAFB', marginHorizontal: 8, borderRadius: 8, marginBottom: 4 },
+  speedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  speedText: { fontSize: 14, color: '#4B5563' },
+  speedActive: { color: '#7B2CBF', fontWeight: '700' },
+});
 
 function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
   const [recordings, setRecordings] = useState<any[]>([]);
@@ -775,46 +884,36 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
   return (
     <View style={{ flex: 1, backgroundColor: '#7B2CBF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
-      <LinearGradient
-        colors={[
-          'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
-          'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
-          'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
-          'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
-          'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
-        ]}
-        locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-        style={styles.headerAccentLine}
-      />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* 1. HEADER */}
         <View style={styles.header}>
           <View style={styles.headerInner}>
+            {/* Accent line FIRST — above NEXUS title, same as teacher panel */}
+            <LinearGradient
+              colors={[
+                'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+                'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+                'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+                'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+                'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+              ]}
+              locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.headerAccentLine}
+            />
             <View style={styles.logoRow}>
-            <View>
-              <Text style={styles.logoText}>
-                NE<Text style={styles.logoTextGold}>X</Text>US
-              </Text>
+              <View>
+                <Text style={styles.logoText}>
+                  NE<Text style={styles.logoTextGold}>X</Text>US
+                </Text>
+              </View>
+              <View style={styles.headerIcons}>
+                <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
+                  <Ionicons name="notifications-outline" size={22} color="#FFF" />
+                  <View style={styles.badgeDot} />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.headerIcons}>
-              <TouchableOpacity 
-                style={styles.iconButton} 
-                onPress={() => setIsViewingRecordings(true)}
-              >
-                <View style={{ justifyContent: 'center', alignItems: 'center', width: 22, height: 22 }}>
-                  <Ionicons name="videocam" size={22} color="#FFF" />
-                  <View style={{ position: 'absolute', left: 6, top: 6 }}>
-                    <Ionicons name="play" size={9} color="#7B2CBF" />
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
-                <Ionicons name="notifications-outline" size={22} color="#FFF" />
-                <View style={styles.badgeDot} />
-              </TouchableOpacity>
-            </View>
-          </View>
           </View>
         </View>
 
@@ -960,7 +1059,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     paddingTop: 8,
   },
-  headerAccentLine: { height: 3, borderRadius: 2 },
+  headerAccentLine: { height: 4, marginBottom: 10 },
   headerInner: {
     paddingHorizontal: 16,
     maxWidth: Platform.OS === 'web' ? 800 : undefined,
@@ -971,7 +1070,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
   },
   logoText: {
     fontSize: 22,

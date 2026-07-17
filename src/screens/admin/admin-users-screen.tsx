@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,9 +10,17 @@ type UserTab = 'Students' | 'Teachers';
 
 export default function AdminUsersScreen() {
   const [activeTab, setActiveTab] = useState<UserTab>('Students');
-  const [onAddPress, setOnAddPress] = useState<(() => void) | null>(null);
   const [studentCount, setStudentCount] = useState<number>(0);
   const [teacherCount, setTeacherCount] = useState<number>(0);
+
+  const [onStudentAddPress, setOnStudentAddPress] = useState<(() => void) | null>(null);
+  const [onTeacherAddPress, setOnTeacherAddPress] = useState<(() => void) | null>(null);
+
+  // Stable callbacks so child screens don't re-fetch when parent re-renders
+  const handleStudentCountChange = useCallback((n: number) => setStudentCount(n), []);
+  const handleTeacherCountChange = useCallback((n: number) => setTeacherCount(n), []);
+  const handleStudentRegisterAdd = useCallback((fn: () => void) => setOnStudentAddPress(() => fn), []);
+  const handleTeacherRegisterAdd = useCallback((fn: () => void) => setOnTeacherAddPress(() => fn), []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -46,7 +54,10 @@ export default function AdminUsersScreen() {
           </View>
           <TouchableOpacity
             style={styles.addBtn}
-            onPress={() => onAddPress && onAddPress()}
+            onPress={() => {
+              if (activeTab === 'Students') onStudentAddPress && onStudentAddPress();
+              else onTeacherAddPress && onTeacherAddPress();
+            }}
           >
             <Ionicons name="add" size={26} color="#FFFFFF" />
           </TouchableOpacity>
@@ -85,17 +96,19 @@ export default function AdminUsersScreen() {
       </View>
 
       <View style={styles.content}>
-        {activeTab === 'Students' ? (
+        {/* Keep both screens mounted to preserve state — just hide the inactive one */}
+        <View style={{ flex: 1, display: activeTab === 'Students' ? 'flex' : 'none' }}>
           <AdminStudentsScreen
-            onRegisterAdd={(fn) => setOnAddPress(() => fn)}
-            onCountChange={(n) => setStudentCount(n)}
+            onRegisterAdd={handleStudentRegisterAdd}
+            onCountChange={handleStudentCountChange}
           />
-        ) : (
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'Teachers' ? 'flex' : 'none' }}>
           <AdminTeachersScreen
-            onRegisterAdd={(fn) => setOnAddPress(() => fn)}
-            onCountChange={(n) => setTeacherCount(n)}
+            onRegisterAdd={handleTeacherRegisterAdd}
+            onCountChange={handleTeacherCountChange}
           />
-        )}
+        </View>
       </View>
     </SafeAreaView>
   );

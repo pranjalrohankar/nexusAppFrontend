@@ -3,8 +3,13 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
+  if (Platform.OS === "web") {
+    return "http://localhost:8080/api";
+  }
+
   const extra = (Constants.expoConfig?.extra ?? {}) as {
     apiUrl?: string;
+    apiUrlWeb?: string;
     apiBaseUrl?: string;
     apiPort?: number | string;
   };
@@ -78,17 +83,17 @@ export function clearToken() {
   } catch {}
 }
 
-function buildHeaders(contentType?: string) {
+function buildHeaders(contentType?: string, skipAuth = false) {
   const token = getToken();
   const h: Record<string, string> = {};
   if (contentType) {
     h["Content-Type"] = contentType;
   }
-  if (token) {
+  if (!skipAuth && token) {
     h["Authorization"] = `Bearer ${token}`;
     const safeToken = token.substring(0, 20).replace(/[\r\n]/g, "");
     console.log("Sending request with token:", safeToken + "...");
-  } else {
+  } else if (!skipAuth) {
     console.warn("No authentication token found!");
   }
   return h;
@@ -119,10 +124,11 @@ async function post(
   path: string,
   body: object,
   contentType = "application/json",
+  skipAuth = false,
 ) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: buildHeaders(contentType),
+    headers: buildHeaders(contentType, skipAuth),
     body: JSON.stringify(body),
   });
   return handleResponse(res);
@@ -183,7 +189,7 @@ export const api = {
     password: string,
     role: string,
     deviceFingerprint?: string,
-  ) => post("/auth/login", { email, password, role, deviceFingerprint }),
+  ) => post("/auth/login", { email, password, role, deviceFingerprint }, "application/json", true),
 
   createUser: (data: object) => post("/admin/users", data),
 

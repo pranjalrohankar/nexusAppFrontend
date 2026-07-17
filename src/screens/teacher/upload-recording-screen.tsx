@@ -1,21 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   TextInput,
   Alert,
   Platform,
   Modal,
   Animated,
+  PanResponder,
+  StatusBar,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Linking from 'expo-linking';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api, getApiBaseUrl } from '@/services/api';
 
@@ -63,128 +68,222 @@ interface ClassRecording {
   uploadedAt?: string;
 }
 
-// Hidden Video that fires onPlaybackStatusUpdate to read durationMillis
-function DurationProbe({
-  uri,
-  onDuration,
-}: {
-  uri: string;
-  onDuration: (d: string) => void;
-}) {
-  const fired = useRef(false);
-  const handleStatus = (status: AVPlaybackStatus) => {
-    if (fired.current) return;
-    if (status.isLoaded && status.durationMillis && status.durationMillis > 0) {
-      fired.current = true;
-      const totalSec = Math.floor(status.durationMillis / 1000);
-      const h = Math.floor(totalSec / 3600).toString().padStart(2, '0');
-      const m = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
-      const s = (totalSec % 60).toString().padStart(2, '0');
-      onDuration(`${h}:${m}:${s}`);
-    }
-  };
+// Duration probe using expo-video
+function DurationProbe({ uri, onDuration }: { uri: string; onDuration: (d: string) => void }) {
+  const player = useVideoPlayer(uri, p => { p.muted = true; });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (player.duration && player.duration > 0) {
+        clearInterval(interval);
+        const totalSec = Math.floor(player.duration);
+        const h = Math.floor(totalSec / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
+        const s = (totalSec % 60).toString().padStart(2, '0');
+        onDuration(`${h}:${m}:${s}`);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [player]);
+
+  return null;
+}
+
+const SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+function formatTime(secs: number) {
+  if (!isFinite(secs) || isNaN(secs)) return '0:00';
+  const m = Math.floor(secs / 60), s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+
+
+// ── Native custom player (Android / iOS) ─────────────────────────────────────
+function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string; onClose: () => void }) {
+  const player = useVideoPlayer(uri, p => { p.play(); });
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [speed, setSpeed] = useState(1.0);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const duration = player.duration ?? 0;
+
+  // Poll player state every 500ms instead of useEvent
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(player.currentTime ?? 0);
+      setIsPlaying(!player.paused);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [player]);
+
+  const resetHideTimer = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setControlsVisible(true);
+    hideTimer.current = setTimeout(() => setControlsVisible(false), 3500);
+  }, []);
+  useEffect(() => { resetHideTimer(); return () => { if (hideTimer.current) clearTimeout(hideTimer.current); }; }, []);
+
+  const togglePlay = () => { isPlaying ? player.pause() : player.play(); resetHideTimer(); };
+  const toggleMute = () => { player.muted = !muted; setMuted(!muted); resetHideTimer(); };
+  const seek = (ratio: number) => { if (duration > 0) { player.currentTime = ratio * duration; resetHideTimer(); } };
+  const setPlaybackSpeed = (s: number) => { player.playbackRate = s; setSpeed(s); setShowSpeedMenu(false); setShowMenu(false); };
+  const handleDownload = () => { setShowMenu(false); Linking.openURL(uri); };
+  const handlePiP = () => { setShowMenu(false); try { (player as any).enterPictureInPicture?.(); } catch {} };
+
+  const barWidth = useRef(0);
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => seek(Math.max(0, Math.min(1, e.nativeEvent.locationX / (barWidth.current || 1)))),
+    onPanResponderMove: (e) => seek(Math.max(0, Math.min(1, e.nativeEvent.locationX / (barWidth.current || 1)))),
+  })).current;
+
+  const progress = duration > 0 ? currentTime / duration : 0;
+
   return (
-    <View
-      style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
-      pointerEvents="none"
-    >
-      <Video
-        source={{ uri }}
-        style={{ width: 1, height: 1 }}
-        shouldPlay={false}
-        isMuted
-        onPlaybackStatusUpdate={handleStatus}
-      />
+    <View style={vm.root}>
+      {/* TOP BAR */}
+      <View style={vm.topBar}>
+        <TouchableOpacity onPress={() => { player.pause(); onClose(); }} style={vm.iconBtn}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={vm.titleText} numberOfLines={1}>{title}</Text>
+      </View>
+      {/* VIDEO */}
+      <Pressable style={vm.videoWrap} onPress={() => { setShowMenu(false); setShowSpeedMenu(false); resetHideTimer(); }}>
+        <VideoView player={player} style={vm.video} contentFit="contain" allowsPictureInPicture nativeControls={false} />
+        {controlsVisible && (
+          <View style={vm.centerWrap} pointerEvents="box-none">
+            <TouchableOpacity style={vm.centerPlay} onPress={togglePlay} activeOpacity={0.8}>
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={44} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </Pressable>
+      {/* BOTTOM BAR */}
+      <View style={vm.bottomBar}>
+        <View style={vm.seekBar} onLayout={e => { barWidth.current = e.nativeEvent.layout.width; }} {...panResponder.panHandlers}>
+          <View style={vm.seekTrack}>
+            <View style={[vm.seekFill, { width: `${progress * 100}%` as any }]} />
+            <View style={[vm.seekThumb, { left: `${progress * 100}%` as any }]} />
+          </View>
+        </View>
+        <View style={vm.timeRow}>
+          <Text style={vm.timeText}>{formatTime(currentTime ?? 0)} / {formatTime(duration)}</Text>
+          <View style={vm.rightIcons}>
+            <TouchableOpacity onPress={toggleMute} style={vm.iconBtn}>
+              <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { try { player.enterFullscreen?.(); } catch {} }} style={vm.iconBtn}>
+              <Ionicons name="expand" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setShowMenu(v => !v); setShowSpeedMenu(false); }} style={vm.iconBtn}>
+              <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+      {/* 3-DOT MENU */}
+      {showMenu && (
+        <View style={vm.menu}>
+          <TouchableOpacity style={vm.menuItem} onPress={handleDownload}>
+            <Ionicons name="download-outline" size={20} color="#1F2937" />
+            <Text style={vm.menuText}>Download</Text>
+          </TouchableOpacity>
+          <View style={vm.menuDivider} />
+          <TouchableOpacity style={vm.menuItem} onPress={() => setShowSpeedMenu(v => !v)}>
+            <Ionicons name="speedometer-outline" size={20} color="#1F2937" />
+            <Text style={vm.menuText}>Playback speed ({speed}x)</Text>
+            <Ionicons name={showSpeedMenu ? 'chevron-down' : 'chevron-forward'} size={16} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
+          {showSpeedMenu && (
+            <View style={vm.speedList}>
+              {SPEEDS.map(s => (
+                <TouchableOpacity key={s} style={vm.speedItem} onPress={() => setPlaybackSpeed(s)}>
+                  <Text style={[vm.speedText, speed === s && vm.speedActive]}>{s}x</Text>
+                  {speed === s && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <View style={vm.menuDivider} />
+          <TouchableOpacity style={vm.menuItem} onPress={handlePiP}>
+            <Ionicons name="tablet-portrait-outline" size={20} color="#1F2937" />
+            <Text style={vm.menuText}>Picture in picture</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
 
-// Full-screen video modal — truly responsive via onLayout
-function VideoModal({
-  visible,
-  uri,
-  title,
-  onClose,
-}: {
-  visible: boolean;
-  uri: string | null;
-  title: string;
-  onClose: () => void;
-}) {
-  const [playerSize, setPlayerSize] = useState({ w: 0, h: 0 });
-
-  // Reset size when modal closes so onLayout fires fresh on reopen
-  const handleClose = () => { setPlayerSize({ w: 0, h: 0 }); onClose(); };
-
+// ── Shared modal wrapper ──────────────────────────────────────────────────────
+function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: string | null; title: string; onClose: () => void }) {
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={handleClose}
-      transparent={false}
-      statusBarTranslucent
-    >
-      <View style={vm.root}>
-        {/* Header */}
-        <View style={vm.header}>
-          <TouchableOpacity onPress={handleClose} style={vm.closeBtn}>
-            <Ionicons name="close" size={24} color="#1E2937" />
-          </TouchableOpacity>
-          <Text style={vm.titleText} numberOfLines={1}>{title}</Text>
-        </View>
-
-        {/* playerArea fills all remaining space; onLayout gives us exact px */}
-        <View
-          style={vm.playerArea}
-          onLayout={(e) => {
-            const { width, height } = e.nativeEvent.layout;
-            if (width > 0 && height > 0) setPlayerSize({ w: width, h: height });
-          }}
-        >
-          {uri && playerSize.w > 0 ? (
-            <Video
-              source={{ uri }}
-              style={{
-                width: playerSize.w,
-                height: playerSize.h,
-                backgroundColor: '#000',
-              }}
-              // videoStyle makes the inner <video>/native layer fill the component box
-              videoStyle={{ width: '100%', height: '100%' } as any}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              onError={() => { Alert.alert('Playback Error', 'Unable to play this video.'); handleClose(); }}
-            />
-          ) : null}
-        </View>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent={false} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {uri && IS_WEB ? (
+          <>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center',
+              paddingHorizontal: 16, paddingVertical: 14,
+              backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+            }}>
+              <TouchableOpacity
+                onPress={onClose}
+                style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}
+              >
+                <Ionicons name="close" size={24} color="#1E2937" />
+              </TouchableOpacity>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1E2937' }} numberOfLines={1}>{title}</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: '#000' }}>
+              <video
+                src={uri}
+                controls
+                autoPlay
+                style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
+              />
+            </View>
+          </>
+        ) : uri ? (
+          <NativeVideoPlayer uri={uri} title={title} onClose={onClose} />
+        ) : null}
       </View>
     </Modal>
   );
 }
 
 const vm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    paddingTop: Platform.OS === 'android' ? 44 : 14,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  closeBtn: {
-    width: 40, height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  titleText: { flex: 1, fontSize: 17, fontWeight: '700', color: '#1E2937' },
-  playerArea: { flex: 1, backgroundColor: '#000' },
+  safeRoot: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: '#000', flexDirection: 'column', justifyContent: 'space-between' },
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#111' },
+  titleText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#fff', marginHorizontal: 8 },
+  iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  videoWrap: { flex: 1, backgroundColor: '#000' },
+  video: { flex: 1 },
+  centerWrap: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  centerPlay: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+  bottomBar: { backgroundColor: '#111', paddingHorizontal: 14, paddingBottom: 16, paddingTop: 8 },
+  seekBar: { height: 32, justifyContent: 'center' },
+  seekTrack: { height: 4, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2 },
+  seekFill: { height: 4, backgroundColor: '#7B2CBF', borderRadius: 2, position: 'absolute', left: 0, top: 0 },
+  seekThumb: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff', position: 'absolute', top: -6, marginLeft: -8 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  timeText: { fontSize: 13, color: '#fff' },
+  rightIcons: { flexDirection: 'row' },
+  menu: { position: 'absolute', right: 12, bottom: 100, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 4, minWidth: 230, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 12 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  menuText: { fontSize: 14, color: '#1F2937', fontWeight: '500' },
+  menuDivider: { height: 1, backgroundColor: '#F3F4F6', marginHorizontal: 8 },
+  speedList: { backgroundColor: '#F9FAFB', marginHorizontal: 8, borderRadius: 8, marginBottom: 4 },
+  speedItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 },
+  speedText: { fontSize: 14, color: '#4B5563' },
+  speedActive: { color: '#7B2CBF', fontWeight: '700' },
 });
 
 export default function UploadRecordingScreen({ onClose }: UploadRecordingScreenProps) {
@@ -301,16 +400,20 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     if (!batch.trim()) return Alert.alert('Error', 'Please select a batch.');
 
     const fileName = selectedFile.name || `recording-${Date.now()}.mp4`;
-    let fileBlob: Blob | null = null;
-    try {
-      fileBlob = await (await fetch(selectedFile.uri)).blob();
-    } catch {
-      Alert.alert('Error', 'Unable to read selected video file.');
-      return;
-    }
-
     const formData = new FormData();
-    if (fileBlob) formData.append('file', fileBlob, fileName);
+
+    if (IS_WEB) {
+      try {
+        const fileBlob = await (await fetch(selectedFile.uri)).blob();
+        formData.append('file', fileBlob, fileName);
+      } catch {
+        Alert.alert('Error', 'Unable to read selected video file.');
+        return;
+      }
+    } else {
+      // On native, append URI directly — React Native FormData handles it
+      formData.append('file', { uri: selectedFile.uri, name: fileName, type: selectedFile.mimeType || 'video/mp4' } as any);
+    }
     formData.append('title', title.trim() || 'Untitled Recording');
     formData.append('description', description.trim());
     formData.append('classDate', classDate.toISOString().slice(0, 10));
@@ -355,25 +458,31 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
   return (
     <SafeAreaView style={s.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       <ToastView />
-      {/* Duration probe — rendered outside scroll so it's always mounted */}
       {probeUri && (
         <DurationProbe
           uri={probeUri}
-          onDuration={(d) => {
-            setDuration(d);
-            setProbeUri(null);
-            setProbeFetching(false);
-          }}
+          onDuration={(d) => { setDuration(d); setProbeUri(null); setProbeFetching(false); }}
         />
       )}
 
       <View style={s.header}>
-        <TouchableOpacity onPress={onClose} style={s.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Upload Recording</Text>
-        <Text style={s.headerSubtitle}>Share class recordings with students</Text>
+        <LinearGradient
+          colors={['rgba(0,0,0,0)','rgba(251,139,36,0.86)','#FB8B24','rgba(251,139,36,0.86)','rgba(0,0,0,0)']}
+          locations={[0, 0.35, 0.5, 0.65, 1]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={s.headerAccentLine}
+        />
+        <View style={s.headerTop}>
+          <TouchableOpacity onPress={onClose} style={s.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={s.headerTitles}>
+            <Text style={s.headerTitle}>Upload Recording</Text>
+            <Text style={s.headerSubtitle}>Share class recordings with students</Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -583,18 +692,25 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 }
 
 const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingTop: Platform.OS === 'android' ? 50 : 16,
+    paddingTop: Platform.OS === 'android' ? 16 : 10,
+    paddingBottom: 18,
   },
-  backButton: { position: 'absolute', top: Platform.OS === 'android' ? 55 : 20, left: 20, zIndex: 10 },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: '#fff', textAlign: 'center' },
-  headerSubtitle: { fontSize: 14, color: '#E9D5FF', textAlign: 'center', marginTop: 4 },
+  headerAccentLine: { height: 4, marginBottom: 14 },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  backButton: { padding: 4, marginRight: 12 },
+  headerTitles: { flex: 1 },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: '#fff' },
+  headerSubtitle: { fontSize: 13, color: '#E9D5FF', marginTop: 3 },
 
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   scrollContent: { padding: 20, paddingBottom: 40 },
   scrollDesktop: { maxWidth: 860, alignSelf: 'center', width: '100%', paddingHorizontal: 40 },
 
