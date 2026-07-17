@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,12 @@ import {
   Platform,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import GenBatchDetails from './gen-batch-details';
+import { api } from '../../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -20,57 +22,49 @@ type SubTabType = 'Ongoing' | 'Upcoming';
 export default function BatchesScreen() {
   const [activeTab, setActiveTab] = useState<SubTabType>('Ongoing');
   const [selectedGenBatch, setSelectedGenBatch] = useState<string | null>(null);
+  const [ongoingBatches, setOngoingBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Ongoing batches data as state
-  const [ongoingBatches, setOngoingBatches] = useState([
-    {
-      id: '1',
-      title: 'Data Science & Machine Learning',
-      duration: '5 Months',
-      isLive: true,
-      student: { name: 'Priya Patel', emoji: '👨‍💻' }, // Squircle emoji avatar
-      teacher: { name: 'Dr. Priya Sharma', emoji: '👨‍💻' }, // Hardcoded developer avatar emoji
-      progress: '8/50',
-      progressPercent: 16,
-      topics: ['Python', 'Pandas', 'NumPy', 'Scikit-learn', 'TensorFlow'],
-    },
-    {
-      id: '2',
-      title: 'Full Stack Web Development',
-      duration: '6 Months',
-      isLive: false,
-      student: { name: 'Rahul Sharma', emoji: '👤' },
-      teacher: { name: 'Rajesh Kumar', emoji: '👨‍💻' },
-      progress: '12/45',
-      progressPercent: 26,
-      topics: ['React.js', 'Node.js', 'MongoDB', 'REST APIs', 'Deployment'],
-      nextClass: 'Today at 7:00 PM',
-    },
-    {
-      id: '5',
-      title: 'Java Full Stack Development',
-      duration: '5 Months',
-      isLive: false,
-      student: { name: 'Kunal Sen', emoji: '👤' },
-      teacher: { name: 'Amit Patel', emoji: '👨‍💻' },
-      progress: '22/52',
-      progressPercent: 42,
-      topics: ['Java Core', 'Spring Boot', 'Hibernate', 'REST APIs', 'React Integration'],
-      nextClass: 'Tomorrow at 8:00 PM',
-    },
-    {
-      id: '6',
-      title: 'Node js for AI & Web Integration',
-      duration: '3 Months',
-      isLive: false,
-      student: { name: 'Asha Rao', emoji: '👩‍💻' },
-      teacher: { name: 'Sanjay Mehta', emoji: '👨‍💻' },
-      progress: '18/30',
-      progressPercent: 60,
-      topics: ['Node.js Core', 'Express APIs', 'Gemini SDK', 'Vector Databases', 'WebSockets'],
-      nextClass: 'Thursday at 6:30 PM',
-    },
-  ]);
+  useEffect(() => {
+    fetchEnrollments();
+  }, []);
+
+  const fetchEnrollments = async () => {
+    try {
+      setLoading(true);
+      const data: any[] = await api.getStudentEnrollments();
+      const mapped = data.map((e: any) => {
+        const start = e.startDate ? new Date(e.startDate) : null;
+        const end = e.endDate ? new Date(e.endDate) : null;
+        let duration = '';
+        if (start && end) {
+          const months = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30));
+          duration = `${months} Month${months !== 1 ? 's' : ''}`;
+        }
+        const days: string[] = e.classDays || [];
+        const nextClass = days.length > 0
+          ? `${days.join(', ')} at ${e.classTimings || 'TBD'}`
+          : e.classTimings || 'TBD';
+        return {
+          id: String(e.id),
+          title: e.courseTitle || '',
+          duration,
+          isLive: false,
+          teacher: { name: e.instructor || 'TBD', emoji: '👨💻' },
+          progress: '0/0',
+          progressPercent: 0,
+          topics: [],
+          nextClass,
+          status: e.status || 'ACTIVE',
+        };
+      });
+      setOngoingBatches(mapped);
+    } catch (err) {
+      console.error('Failed to fetch enrollments:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Gen Batches data
   const genBatches = [
@@ -90,37 +84,10 @@ export default function BatchesScreen() {
     }
   ];
 
-  const handleEnrollSuccess = (batch: any) => {
-    // Avoid double enrollment for same title
-    if (ongoingBatches.some(b => b.title === batch.title)) {
-      setSelectedGenBatch(null);
-      setActiveTab('Ongoing');
-      return;
-    }
-
-    const topicsMap: Record<string, string[]> = {
-      'b1': ['Python', 'Pandas', 'NumPy', 'Scikit-learn', 'TensorFlow'],
-      'b2': ['React.js', 'Node.js', 'MongoDB', 'REST APIs', 'Deployment'],
-      'b3': ['Figma', 'Wireframing', 'UX Research', 'Design Systems', 'Prototyping'],
-      'b4': ['SEO', 'Google Ads', 'Social Media', 'Email Marketing', 'Analytics']
-    };
-
-    const newOngoing = {
-      id: String(Date.now()),
-      title: batch.title,
-      duration: batch.duration,
-      isLive: false,
-      student: { name: 'Priya Patel', emoji: '👩‍💻' },
-      teacher: { name: batch.instructor, emoji: '👨‍💻' },
-      progress: '0/40',
-      progressPercent: 0,
-      topics: topicsMap[batch.id] || ['Core Concepts', 'Projects', 'Assessment'],
-      nextClass: 'Starting soon - ' + batch.startDate,
-    };
-
-    setOngoingBatches(prev => [newOngoing, ...prev]);
+  const handleEnrollSuccess = (_batch: any) => {
     setSelectedGenBatch(null);
     setActiveTab('Ongoing');
+    fetchEnrollments();
   };
 
   if (selectedGenBatch) {
@@ -167,19 +134,19 @@ export default function BatchesScreen() {
           {/* Card 1: Ongoing */}
           <View style={styles.statCard}>
             <Ionicons name="videocam-outline" size={24} color="#7B2CBF" style={styles.statIcon} />
-            <Text style={styles.statValue}>3</Text>
+            <Text style={styles.statValue}>{ongoingBatches.filter(b => b.status === 'ACTIVE').length}</Text>
             <Text style={styles.statLabel}>Ongoing</Text>
           </View>
           {/* Card 2: Completed */}
           <View style={styles.statCard}>
             <Ionicons name="book-outline" size={24} color="#FFB703" style={styles.statIcon} />
-            <Text style={styles.statValue}>3</Text>
+            <Text style={styles.statValue}>{ongoingBatches.filter(b => b.status === 'COMPLETED').length}</Text>
             <Text style={styles.statLabel}>Completed</Text>
           </View>
           {/* Card 3: Live Now */}
           <View style={styles.statCard}>
             <Ionicons name="time-outline" size={24} color="#7B2CBF" style={styles.statIcon} />
-            <Text style={styles.statValue}>1</Text>
+            <Text style={styles.statValue}>{ongoingBatches.filter(b => b.isLive).length}</Text>
             <Text style={styles.statLabel}>Live Now</Text>
           </View>
         </View>
@@ -223,98 +190,106 @@ export default function BatchesScreen() {
         {/* 4. BATCH CARDS LIST */}
         {activeTab === 'Ongoing' ? (
           <View style={styles.listContainer}>
-            {ongoingBatches.map((batch) => (
-              <View key={batch.id} style={styles.batchCard}>
-                {/* Card Header (Purple Area) */}
-                <View style={styles.batchCardHeader}>
-                  <View style={styles.batchHeaderLeft}>
-                    <Text style={styles.batchTitle}>{batch.title}</Text>
-                    <View style={styles.batchDurationRow}>
-                      <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
-                      <Text style={styles.batchDurationText}>{batch.duration}</Text>
-                    </View>
-                  </View>
-                  {batch.isLive && (
-                    <View style={styles.liveNowBadge}>
-                      <Text style={styles.liveNowBadgeText}>● LIVE NOW</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Card Body (White Area) */}
-                <View style={styles.batchCardBody}>
-                  {/* Student & Teacher profiles */}
-                  <View style={styles.profilesRow}>
-                    {/* Student */}
-                    <View style={styles.profileCol}>
-                      <View style={styles.avatarSquircleStudent}>
-                        <Text style={styles.avatarEmoji}>{batch.student.emoji}</Text>
-                      </View>
-                      <View style={styles.profileTextWrapper}>
-                        <Text style={styles.profileLabel}>Student</Text>
-                        <Text style={styles.profileName}>{batch.student.name}</Text>
+            {loading ? (
+              <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 40 }} />
+            ) : ongoingBatches.length === 0 ? (
+              <Text style={styles.emptyText}>No enrolled batches found.</Text>
+            ) : (
+              ongoingBatches.map((batch) => (
+                <View key={batch.id} style={styles.batchCard}>
+                  {/* Card Header (Purple Area) */}
+                  <View style={styles.batchCardHeader}>
+                    <View style={styles.batchHeaderLeft}>
+                      <Text style={styles.batchTitle}>{batch.title}</Text>
+                      <View style={styles.batchDurationRow}>
+                        <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
+                        <Text style={styles.batchDurationText}>{batch.duration}</Text>
                       </View>
                     </View>
-                    {/* Teacher */}
-                    <View style={styles.profileCol}>
-                      <View style={styles.avatarSquircleTeacher}>
-                        <Text style={styles.avatarEmoji}>👨‍💻</Text>
+                    {batch.isLive && (
+                      <View style={styles.liveNowBadge}>
+                        <Text style={styles.liveNowBadgeText}>● LIVE NOW</Text>
                       </View>
-                      <View style={styles.profileTextWrapper}>
-                        <Text style={styles.profileLabel}>Teacher</Text>
-                        <Text style={styles.profileName}>{batch.teacher.name}</Text>
-                      </View>
-                    </View>
+                    )}
                   </View>
 
-                  {/* Progress section */}
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressHeaderRow}>
-                      <View style={styles.progressIconTitle}>
-                        <Ionicons name="book-outline" size={16} color="#7B2CBF" />
-                        <Text style={styles.progressTitle}>Classes Progress</Text>
-                      </View>
-                      <Text style={styles.progressValText}>{batch.progress}</Text>
-                    </View>
-                    <View style={styles.progressBarBg}>
-                      <View style={[styles.progressBarFill, { width: `${batch.progressPercent}%` }]} />
-                    </View>
-                  </View>
-
-                  {/* Topics Covered */}
-                  <View style={styles.topicsSection}>
-                    <Text style={styles.topicsSectionTitle}>Topics Covered</Text>
-                    <View style={styles.topicsRow}>
-                      {batch.topics.map((topic, i) => (
-                        <View key={i} style={styles.topicBadge}>
-                          <Text style={styles.topicBadgeText}>{topic}</Text>
+                  {/* Card Body (White Area) */}
+                  <View style={styles.batchCardBody}>
+                    {/* Teacher profile */}
+                    <View style={styles.profilesRow}>
+                      {/* Student */}
+                      {/* <View style={styles.profileCol}>
+                        <View style={styles.avatarSquircleStudent}>
+                          <Text style={styles.avatarEmoji}>{batch.student.emoji}</Text>
                         </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Footer Actions */}
-                  {batch.isLive ? (
-                    <TouchableOpacity style={styles.joinLiveButton}>
-                      <Ionicons name="play-circle-outline" size={20} color="#FFF" />
-                      <Text style={styles.joinLiveButtonText}>Join Live Class Now</Text>
-                      <Ionicons name="open-outline" size={16} color="#FFF" style={styles.externalIcon} />
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.footerRow}>
-                      <View style={styles.nextClassWrapper}>
-                        <Text style={styles.nextClassLabel}>Next Class</Text>
-                        <Text style={styles.nextClassTime}>{batch.nextClass}</Text>
+                        <View style={styles.profileTextWrapper}>
+                          <Text style={styles.profileLabel}>Student</Text>
+                          <Text style={styles.profileName}>{batch.student.name}</Text>
+                        </View>
+                      </View> */}
+                      {/* Teacher */}
+                      <View style={styles.profileCol}>
+                        <View style={styles.avatarSquircleTeacher}>
+                          <Text style={styles.avatarEmoji}>👨‍💻</Text>
+                        </View>
+                        <View style={styles.profileTextWrapper}>
+                          <Text style={styles.profileLabel}>Teacher</Text>
+                          <Text style={styles.profileName}>{batch.teacher.name}</Text>
+                        </View>
                       </View>
-                      <TouchableOpacity style={styles.joinStandardButton}>
-                        <Ionicons name="videocam" size={16} color="#FFF" style={styles.buttonIcon} />
-                        <Text style={styles.joinStandardButtonText}>Join Class</Text>
-                      </TouchableOpacity>
                     </View>
-                  )}
+
+                    {/* Progress section */}
+                    {/* <View style={styles.progressContainer}>
+                      <View style={styles.progressHeaderRow}>
+                        <View style={styles.progressIconTitle}>
+                          <Ionicons name="book-outline" size={16} color="#7B2CBF" />
+                          <Text style={styles.progressTitle}>Classes Progress</Text>
+                        </View>
+                        <Text style={styles.progressValText}>{batch.progress}</Text>
+                      </View>
+                      <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: `${batch.progressPercent}%` }]} />
+                      </View>
+                    </View> */}
+
+                    {/* Topics Covered */}
+                    {batch.topics.length > 0 && (
+                      <View style={styles.topicsSection}>
+                        <Text style={styles.topicsSectionTitle}>Topics Covered</Text>
+                        <View style={styles.topicsRow}>
+                          {batch.topics.map((topic: string, i: number) => (
+                            <View key={i} style={styles.topicBadge}>
+                              <Text style={styles.topicBadgeText}>{topic}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Footer Actions */}
+                    {batch.isLive ? (
+                      <TouchableOpacity style={styles.joinLiveButton}>
+                        <Ionicons name="play-circle-outline" size={20} color="#FFF" />
+                        <Text style={styles.joinLiveButtonText}>Join Live Class Now</Text>
+                        <Ionicons name="open-outline" size={16} color="#FFF" style={styles.externalIcon} />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.footerRow}>
+                        <View style={styles.nextClassWrapper}>
+                          <Text style={styles.nextClassLabel}>Next Class</Text>
+                          <Text style={styles.nextClassTime}>{batch.nextClass}</Text>
+                        </View>
+                        <TouchableOpacity style={styles.joinStandardButton}>
+                          <Ionicons name="videocam" size={16} color="#FFF" style={styles.buttonIcon} />
+                          <Text style={styles.joinStandardButtonText}>Join Class</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         ) : (
           <View style={styles.listContainer}>
@@ -403,7 +378,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FFB703', // Orange/gold indicator dot
+    backgroundColor: '#FFB703',
   },
   headerTitle: {
     fontSize: 24,
@@ -428,6 +403,12 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 100,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#9CA3AF',
+    marginTop: 40,
+    fontSize: 14,
   },
   // Stats Row
   statsRow: {
@@ -588,7 +569,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#FFE4E6', // Light pink/red background for student
+    backgroundColor: '#FFE4E6',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -596,7 +577,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#FAF0FD', // Light purple background for teacher
+    backgroundColor: '#FAF0FD',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -802,7 +783,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   genBatchBadge: {
-    backgroundColor: '#E0F2FE', // Light blue
+    backgroundColor: '#E0F2FE',
     alignSelf: 'flex-start',
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -810,7 +791,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   genBatchBadgeText: {
-    color: '#0284C7', // Blue text
+    color: '#0284C7',
     fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'lowercase',
