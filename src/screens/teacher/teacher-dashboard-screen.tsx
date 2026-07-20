@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
-  Platform, StatusBar, ActivityIndicator,
+  Platform, StatusBar, ActivityIndicator, Linking, TextInput, Alert, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
 
 interface Props {
@@ -42,15 +43,63 @@ function normDay(d: string): string {
   return DAY_NAMES.find(n => n.toLowerCase().startsWith(s)) ?? d;
 }
 
-export default function TeacherDashboardScreen({ onUploadRecording, onUploadStudyMaterial, userName = '' }: Props) {
+interface Props {
+  userName?: string;
+  onUploadRecording?: () => void;
+  onUploadStudyMaterial?: () => void;
+  onOpenNotifications?: () => void;
+}
+
+export default function TeacherDashboardScreen({ onUploadRecording, onUploadStudyMaterial, onOpenNotifications, userName = '' }: Props) {
   const [displayName, setDisplayName] = useState(userName || 'Teacher');
   const [batches, setBatches] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
   const [courseEnrollments, setCourseEnrollments] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
+  // Google Meet States
+  const [meetLink, setMeetLink] = useState('');
+  const [showMeetModal, setShowMeetModal] = useState(false);
+  const [inputLink, setInputLink] = useState('');
+
+  const loadMeetLink = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('NEXUS_GOOGLE_MEET_LINK');
+      if (saved) {
+        setMeetLink(saved);
+        setInputLink(saved);
+      }
+    } catch (_) {}
+  };
+
+  const saveMeetLink = async () => {
+    try {
+      let url = inputLink.trim();
+      if (url && !/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+      await AsyncStorage.setItem('NEXUS_GOOGLE_MEET_LINK', url);
+      setMeetLink(url);
+      setShowMeetModal(false);
+      Alert.alert('Success', 'Google Meet link updated successfully!');
+    } catch (_) {
+      Alert.alert('Error', 'Failed to save link.');
+    }
+  };
+
+  const openMeetLink = () => {
+    if (!meetLink) {
+      Alert.alert('No Link Set', 'Please set a Google Meet link first.');
+      return;
+    }
+    Linking.openURL(meetLink).catch(() => {
+      Alert.alert('Error', 'Could not open the Google Meet link. Please verify it is a valid URL.');
+    });
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
+    await loadMeetLink();
     try {
       const [profileRes, batchRes] = await Promise.all([
         api.getTeacherProfile().catch(() => null),
@@ -132,6 +181,15 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
           style={styles.headerAccentLine}
         />
+        <View style={styles.headerTopRow}>
+          <Text style={styles.logoText}>
+            NE<Text style={styles.logoTextGold}>X</Text>US
+          </Text>
+          <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
+            <Ionicons name="notifications-outline" size={22} color="#FFF" />
+            <View style={styles.badgeDot} />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.welcomeText}>Welcome {displayName}!</Text>
         <Text style={styles.headerSubtitle}>Here's your teaching schedule for today</Text>
       </View>
@@ -181,6 +239,29 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
             </View>
           </>
         )}
+
+        {/* GOOGLE MEET LINK FOR TEACHERS/ADMINS */}
+        <Text style={styles.sectionTitle}>Classroom Meeting</Text>
+        <View style={styles.meetCard}>
+          <View style={styles.meetHeaderRow}>
+            <View style={styles.meetIconContainer}>
+              <Ionicons name="videocam" size={24} color="#7B2CBF" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.meetTitle}>Live Google Meet Class</Text>
+              <Text style={styles.meetSubtitle} numberOfLines={1}>
+                {meetLink || 'No Meet link configured yet.'}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.meetEditBtn} onPress={() => { setInputLink(meetLink); setShowMeetModal(true); }}>
+              <Ionicons name="pencil" size={16} color="#7B2CBF" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.meetJoinBtn} onPress={openMeetLink}>
+            <Ionicons name="logo-google" size={18} color="#FFF" style={{ marginRight: 6 }} />
+            <Text style={styles.meetJoinBtnText}>Start Live Class</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* QUICK ACTIONS */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -237,12 +318,165 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* EDIT MEET LINK MODAL */}
+      <Modal visible={showMeetModal} transparent animationType="fade" onRequestClose={() => setShowMeetModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Google Meet Link</Text>
+            <Text style={styles.modalDesc}>Paste the Google Meet class URL below so teachers and admins can join/start classes.</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. meet.google.com/abc-defg-hij"
+              placeholderTextColor="#9CA3AF"
+              value={inputLink}
+              onChangeText={setInputLink}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalCancelBtn]} onPress={() => setShowMeetModal(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalSaveBtn]} onPress={saveMeetLink}>
+                <Text style={styles.modalSaveText}>Save Link</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
+
+  meetCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  meetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  meetIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  meetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  meetSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  meetEditBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  meetJoinBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#7B2CBF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  meetJoinBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  modalDesc: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtn: {
+    backgroundColor: '#F3F4F6',
+  },
+  modalSaveBtn: {
+    backgroundColor: '#7B2CBF',
+  },
+  modalCancelText: {
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  modalSaveText: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
 
   header: {
     backgroundColor: '#7B2CBF',
@@ -251,6 +485,40 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   headerAccentLine: { height: 4, marginBottom: 10 },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  logoText: {
+    fontSize: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 1.5,
+  },
+  logoTextGold: {
+    color: '#FFB703',
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFB703',
+  },
   welcomeText: { fontSize: 25, fontWeight: '700', color: '#FFF' },
   headerSubtitle: { fontSize: 14, color: '#E9D5FF', marginTop: 4 },
  scrollView: { flex: 1, backgroundColor: '#FFF' },

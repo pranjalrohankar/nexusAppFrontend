@@ -12,6 +12,7 @@ Animated,
 StatusBar,
 Alert,
 ActivityIndicator,
+Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, setToken } from '../../services/api';
@@ -46,9 +47,16 @@ const [courses, setCourses] = useState<string[]>([]);
 const [agreeTerms, setAgreeTerms] = useState(false);
 const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
 const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
+const [alertModal, setAlertModal] = useState<{ visible: boolean; title: string; message: string; type: 'error' | 'success' | 'info' }>({
+  visible: false, title: '', message: '', type: 'error'
+});
 const [showSourceDrop, setShowSourceDrop] = useState(false);
 const [showCourseDrop, setShowCourseDrop] = useState(false);
 const toastAnim = useRef(new Animated.Value(0)).current;
+
+const showAlertModal = (title: string, message: string, type: 'error' | 'success' | 'info' = 'error') => {
+  setAlertModal({ visible: true, title, message, type });
+};
 
 const showToast = (msg: string, type: 'error' | 'success') => {
   setToast({ msg, type });
@@ -130,7 +138,7 @@ const [loading, setLoading] = useState(false);
 
     if (!email || !password) {
       showToast('Please enter email and password.', 'error');
-      Alert.alert('Error', 'Please enter email and password.');
+      showAlertModal('Required Fields', 'Please enter your email and password to sign in.', 'error');
       return;
     }
     setLoading(true);
@@ -150,17 +158,22 @@ const [loading, setLoading] = useState(false);
         deviceFingerprint = stored;
       } catch {}
       const res = await api.login(email, password, selectedRole, deviceFingerprint ?? undefined);
-      if (res.success) {
+      if (res.success && res.data?.token) {
         setToken(res.data.token);
         onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
       } else {
-        const errorMsg = res.message || 'Invalid credentials';
+        const errorMsg = res.message || 'Invalid ID or Password';
+        const isRoleError = errorMsg.toLowerCase().includes('role');
+        const title = isRoleError ? 'Invalid Role' : 'Invalid Credentials';
         showToast(errorMsg, 'error');
-        Alert.alert('Login Failed', errorMsg);
+        showAlertModal(title, errorMsg, 'error');
       }
-    } catch {
-      showToast('Could not connect to server.', 'error');
-      Alert.alert('Error', 'Could not connect to server.');
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Could not connect to server. Please try again.';
+      const isRoleError = errorMsg.toLowerCase().includes('role');
+      const title = isRoleError ? 'Invalid Role' : 'Login Error';
+      showToast(errorMsg, 'error');
+      showAlertModal(title, errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -266,6 +279,14 @@ styles.card,
 { transform: [{ translateY: contentTranslateY }] }
 ]}
 >
+{/* TOAST inside SIGN_IN card */}
+{toast && (
+  <Animated.View style={[styles.toastBox, toast.type === 'success' ? styles.toastSuccess : styles.toastError, { opacity: toastAnim }]}>
+    <Ionicons name={toast.type === 'success' ? 'checkmark-circle-outline' : 'alert-circle-outline'} size={16} color="#FFF" />
+    <Text style={styles.toastText}>{toast.msg}</Text>
+  </Animated.View>
+)}
+
 {/* Form Container */}
 <View style={styles.formContainer}>
 
@@ -562,6 +583,35 @@ showsVerticalScrollIndicator={false}
 </ScrollView>
 </Animated.View>
 )}
+
+{/* ALERT MODAL POPUP */}
+<Modal
+  visible={alertModal.visible}
+  transparent={true}
+  animationType="fade"
+  onRequestClose={() => setAlertModal(p => ({ ...p, visible: false }))}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.alertModalCard}>
+      <View style={[styles.alertIconCircle, alertModal.type === 'error' ? styles.iconBgError : styles.iconBgSuccess]}>
+        <Ionicons
+          name={alertModal.type === 'error' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+          size={36}
+          color="#FFF"
+        />
+      </View>
+      <Text style={styles.alertTitle}>{alertModal.title}</Text>
+      <Text style={styles.alertMessage}>{alertModal.message}</Text>
+      <TouchableOpacity
+        style={[styles.alertButton, alertModal.type === 'error' ? styles.btnError : styles.btnSuccess]}
+        activeOpacity={0.85}
+        onPress={() => setAlertModal(p => ({ ...p, visible: false }))}
+      >
+        <Text style={styles.alertButtonText}>OK</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
 
 </View>
 </KeyboardAvoidingView>
@@ -969,5 +1019,71 @@ flex: 1,
 color: '#FFF',
 fontSize: 13,
 fontWeight: '600',
+},
+modalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 24,
+},
+alertModalCard: {
+  backgroundColor: '#FFF',
+  borderRadius: 24,
+  padding: 24,
+  width: '100%',
+  maxWidth: 380,
+  alignItems: 'center',
+  elevation: 12,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 10 },
+  shadowOpacity: 0.25,
+  shadowRadius: 20,
+},
+alertIconCircle: {
+  width: 64,
+  height: 64,
+  borderRadius: 32,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 16,
+},
+iconBgError: {
+  backgroundColor: '#EF4444',
+},
+iconBgSuccess: {
+  backgroundColor: '#10B981',
+},
+alertTitle: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#111827',
+  marginBottom: 8,
+  textAlign: 'center',
+},
+alertMessage: {
+  fontSize: 14,
+  color: '#4B5563',
+  textAlign: 'center',
+  lineHeight: 20,
+  marginBottom: 24,
+},
+alertButton: {
+  width: '100%',
+  height: 48,
+  borderRadius: 14,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+btnError: {
+  backgroundColor: '#7B2CBF',
+},
+btnSuccess: {
+  backgroundColor: '#10B981',
+},
+alertButtonText: {
+  color: '#FFF',
+  fontSize: 16,
+  fontWeight: '600',
 },
 });
