@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Platform,
   ScrollView,
@@ -8,11 +8,31 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '../../services/api';
 
 interface NotificationsScreenProps {
   onBack: () => void;
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min${mins !== 1 ? 's' : ''} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days !== 1 ? 's' : ''} ago`;
+}
+
+function getIconForTitle(title: string): { iconName: string; iconColor: string; iconBg: string } {
+  if (title.includes('Material')) return { iconName: 'book', iconColor: '#7B2CBF', iconBg: '#FAF5FF' };
+  if (title.includes('Class') || title.includes('Live')) return { iconName: 'videocam', iconColor: '#EF4444', iconBg: '#FEE2E2' };
+  if (title.includes('Reminder')) return { iconName: 'calendar', iconColor: '#10B981', iconBg: '#ECFDF5' };
+  return { iconName: 'notifications', iconColor: '#FF7A00', iconBg: '#FFF7ED' };
 }
 
 export default function NotificationsScreen({ onBack }: NotificationsScreenProps) {
@@ -20,60 +40,45 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [achievementsEnabled, setAchievementsEnabled] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Sample notifications list
-  const notifications = [
-    {
-      id: '1',
-      title: 'Live Class Starting Soon',
-      description: 'Data Science & ML class starts in 15 minutes',
-      time: '5 min ago',
-      iconName: 'videocam',
-      iconColor: '#EF4444',
-      iconBg: '#FEE2E2',
-      isUnread: true,
-    },
-    {
-      id: '2',
-      title: 'New Course Material',
-      description: 'Full Stack Development - Module 3 uploaded',
-      time: '1 hour ago',
-      iconName: 'book',
-      iconColor: '#7B2CBF',
-      iconBg: '#FAF5FF',
-      isUnread: true,
-    },
-    {
-      id: '3',
-      title: 'Achievement Unlocked!',
-      description: 'You completed 10 classes this month',
-      time: '2 hours ago',
-      iconName: 'trophy',
-      iconColor: '#FF7A00',
-      iconBg: '#FFF7ED',
-      isUnread: true,
-    },
-    {
-      id: '4',
-      title: 'New Message from Instructor',
-      description: 'Please complete your assignments by Friday.',
-      time: '3 hours ago',
-      iconName: 'chatbubble-ellipses',
-      iconColor: '#3B82F6',
-      iconBg: '#EFF6FF',
-      isUnread: false,
-    },
-    {
-      id: '5',
-      title: 'Class Reminder',
-      description: 'UI/UX Design class tomorrow at 6:00 PM',
-      time: '1 day ago',
-      iconName: 'calendar',
-      iconColor: '#10B981',
-      iconBg: '#ECFDF5',
-      isUnread: false,
-    },
-  ];
+  const fetchAll = useCallback(async () => {
+    try {
+      const [notifsData, upcomingData] = await Promise.all([
+        api.getStudentNotifications().catch(() => []),
+        api.getStudentUpcomingClasses().catch(() => []),
+      ]);
+
+      const apiNotifs: any[] = Array.isArray(notifsData) ? notifsData : [];
+
+      // Build class reminder notifications from upcoming classes (not stored in DB)
+      const classNotifs: any[] = ((upcomingData as any[]) ?? []).map((c: any, i: number) => ({
+        id: `class-${i}`,
+        title: c.isToday ? 'Live Class Starting Soon' : 'Class Reminder',
+        message: c.isToday
+          ? `${c.course} class is today at ${c.classTimings}`
+          : `${c.course} class tomorrow at ${c.classTimings}`,
+        createdAt: new Date().toISOString(),
+        seen: false,
+        isLocal: true,
+      }));
+
+      setNotifications([...classNotifs, ...apiNotifs]);
+    } catch (_) {
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+    intervalRef.current = setInterval(fetchAll, 30000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchAll]);
+
+  const unreadCount = notifications.filter(n => !n.seen).length;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -85,7 +90,7 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Notifications</Text>
           <View style={styles.badgeContainer}>
-            <Text style={styles.badgeText}>3 New</Text>
+            <Text style={styles.badgeText}>{unreadCount > 0 ? `${unreadCount} New` : 'All Read'}</Text>
           </View>
         </View>
       </View>
@@ -174,23 +179,38 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
         <Text style={styles.sectionHeader}>Recent</Text>
 
         {/* 4. NOTIFICATIONS LIST */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 20 }} />
+        ) : notifications.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Ionicons name="notifications-off-outline" size={40} color="#D1D5DB" />
+            <Text style={{ fontSize: 13, color: '#9CA3AF', marginTop: 12 }}>No notifications yet</Text>
+          </View>
+        ) : (
         <View style={styles.notificationsList}>
-          {notifications.map((item) => (
-            <View key={item.id} style={[styles.notificationCard, item.isUnread && styles.unreadBorder]}>
+          {notifications.map((item) => {
+            const { iconName, iconColor, iconBg } = getIconForTitle(item.title ?? '');
+            const isUnread = !item.seen;
+            return (
+            <View key={String(item.id)} style={[styles.notificationCard, isUnread && styles.unreadBorder]}>
               <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: item.iconBg }]}>
-                  <Ionicons name={item.iconName as any} size={18} color={item.iconColor} />
+                <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
+                  <Ionicons name={iconName as any} size={18} color={iconColor} />
                 </View>
                 <View style={styles.titleContainer}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardDescription}>{item.description}</Text>
+                  <Text style={styles.cardDescription}>{item.message}</Text>
                 </View>
-                {item.isUnread && <View style={styles.unreadDot} />}
+                {isUnread && <View style={styles.unreadDot} />}
               </View>
-              <Text style={styles.cardTime}>{item.time}</Text>
+              <Text style={styles.cardTime}>
+                {item.isLocal ? 'Today' : item.createdAt ? relativeTime(item.createdAt) : ''}
+              </Text>
             </View>
-          ))}
+            );
+          })}
         </View>
+        )}
 
         {/* Bottom Spacer */}
         <View style={styles.bottomSpacer} />
