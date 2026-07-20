@@ -107,9 +107,14 @@ async function handleResponse(res: Response) {
       );
     }
     const text = await res.text();
-    // amazonq-ignore-next-line
     console.error("API Error:", res.status, text);
-    throw new Error(`HTTP ${res.status}: ${text}`);
+    try {
+      const json = JSON.parse(text);
+      if (json && json.message) {
+        return { success: false, message: json.message, status: res.status };
+      }
+    } catch {}
+    return { success: false, message: text || `HTTP ${res.status}`, status: res.status };
   }
   if (res.status === 204)
     return { success: true, message: "Operation successful" };

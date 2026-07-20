@@ -35,7 +35,11 @@ interface Student {
   onlineStatus?: 'online' | 'offline' | 'always_online';
 }
 
-export default function TeacherClassesScreen() {
+interface TeacherClassesScreenProps {
+  onOpenNotifications?: () => void;
+}
+
+export default function TeacherClassesScreen({ onOpenNotifications }: TeacherClassesScreenProps) {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'UPCOMING' | 'COMPLETED'>('ACTIVE');
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -328,6 +332,15 @@ export default function TeacherClassesScreen() {
           end={{ x: 1, y: 0 }}
           style={styles.headerAccentLine}
         />
+        <View style={styles.headerTopRow}>
+          <Text style={styles.logoText}>
+            NE<Text style={styles.logoTextGold}>X</Text>US
+          </Text>
+          <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
+            <Ionicons name="notifications-outline" size={22} color="#FFF" />
+            <View style={styles.badgeDot} />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.headerTitle}>My Classes</Text>
         <Text style={styles.headerSubtitle}>Manage your courses and Google Meet links.</Text>
       </View>
@@ -477,6 +490,40 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   headerAccentLine: { height: 3, borderRadius: 2, marginBottom: 6 },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  logoText: {
+    fontSize: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 1.5,
+  },
+  logoTextGold: {
+    color: '#FFB703',
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFB703',
+  },
   backBtn: { alignItems: 'center', justifyContent: 'center', padding: 4 },
   backBtnText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
   headerTitle: {

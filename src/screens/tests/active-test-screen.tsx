@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,16 +7,30 @@ import {
   ScrollView,
   Platform,
   Alert,
+  TextInput,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { parseMcqsFromText } from '@/utils/pdf-mcq-parser';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+
+const TEST_SUBMISSIONS_KEY = 'NEXUS_TEST_SUBMISSIONS';
 
 interface ActiveTestScreenProps {
   testInfo: {
+    id?: string;
     title: string;
-    questions: string;
-    duration: string;
-    passScore: string;
+    questions?: string;
+    duration?: string;
+    passScore?: string;
+    totalMarks?: number;
+    testType?: 'MCQ' | 'PDF';
+    pdfFileUri?: string;
+    pdfFileName?: string;
+    pdfInstructions?: string;
   };
   onClose: () => void;
 }
@@ -33,132 +47,69 @@ interface Question {
   correctOption: 'A' | 'B' | 'C' | 'D';
 }
 
-const mockQuestions: Question[] = [
-  {
-    id: 1,
-    text: 'Which file extension is used for Java files?',
-    options: {
-      A: '.js',
-      B: '.jav',
-      C: '.java',
-      D: '.class',
-    },
-    correctOption: 'C',
-  },
-  {
-    id: 2,
-    text: 'What is the default value of a boolean variable in Java?',
-    options: {
-      A: 'true',
-      B: 'false',
-      C: 'null',
-      D: '0',
-    },
-    correctOption: 'B',
-  },
-  {
-    id: 3,
-    text: 'Which keyword is used to create a class in Java?',
-    options: {
-      A: 'class',
-      B: 'Class',
-      C: 'define',
-      D: 'create',
-    },
-    correctOption: 'A',
-  },
-  {
-    id: 4,
-    text: 'What is the size of int data type in Java?',
-    options: {
-      A: '8 bits',
-      B: '16 bits',
-      C: '32 bits',
-      D: '84 bits',
-    },
-    correctOption: 'C',
-  },
-  {
-    id: 5,
-    text: 'Which method is the entry point of a Java program?',
-    options: {
-      A: 'start()',
-      B: 'main()',
-      C: 'run()',
-      D: 'execute()',
-    },
-    correctOption: 'B',
-  },
-  {
-    id: 6,
-    text: 'Which of the following is not a Java feature?',
-    options: {
-      A: 'Dynamic',
-      B: 'Architecture Neutral',
-      C: 'Use of pointers',
-      D: 'Object Oriented',
-    },
-    correctOption: 'C',
-  },
-  {
-    id: 7,
-    text: 'What is the default value of String variable in Java?',
-    options: {
-      A: '""',
-      B: 'null',
-      C: 'undefined',
-      D: 'not defined',
-    },
-    correctOption: 'B',
-  },
-  {
-    id: 8,
-    text: 'Which package contains the Random class in Java?',
-    options: {
-      A: 'java.util',
-      B: 'java.lang',
-      C: 'java.io',
-      D: 'java.awt',
-    },
-    correctOption: 'A',
-  },
-  {
-    id: 9,
-    text: 'An interface in Java contains only static constants and _____?',
-    options: {
-      A: 'concrete methods',
-      B: 'abstract methods',
-      C: 'non-static methods',
-      D: 'constructors',
-    },
-    correctOption: 'B',
-  },
-  {
-    id: 10,
-    text: 'Which keyword is used to inherit a class in Java?',
-    options: {
-      A: 'implements',
-      B: 'extends',
-      C: 'inherits',
-      D: 'exports',
-    },
-    correctOption: 'B',
-  },
-];
-
 export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreenProps) {
+  // Parse Duration (default 45 mins), Pass Score (default 75%), Total Marks (default 100)
+  const durationMins = parseInt(String(testInfo.duration || '45').replace(/\D/g, ''), 10) || 45;
+  const passScorePercent = parseFloat(String(testInfo.passScore || '75').replace(/[^\d\.]/g, '')) || 75;
+  const totalMarks = testInfo.totalMarks || 100;
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, 'A' | 'B' | 'C' | 'D'>>({});
-  const [flagged, setFlagged] = useState<Record<number, boolean>>({});
-  const [secondsLeft, setSecondsLeft] = useState(1530); // 25 mins and 30 secs
+  const answersRef = useRef(answers);
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
-  // Timer Effect
+  const [flagged, setFlagged] = useState<Record<number, boolean>>({});
+  const [secondsLeft, setSecondsLeft] = useState(durationMins * 60);
+
+  // Anti-Cheating & Camera Proctoring State
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const videoRef = useRef<any>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Request Camera Access
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        streamRef.current = stream;
+        setCameraActive(true);
+        setCameraError(null);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.warn('Camera permission denied:', err);
+        setCameraActive(false);
+        setCameraError('Camera access required for proctored exam.');
+      }
+    } else {
+      // Non-web or native fallback
+      setCameraActive(true);
+    }
+  };
+
+  useEffect(() => {
+    requestCameraPermission();
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
+
+  // Timer Effect (Auto-Submit on Expire)
   useEffect(() => {
     const timer = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmitTest(true); // Auto-submit when timer hits 0
+          handleSubmitTest(true, 'Duration Expired');
           return 0;
         }
         return prev - 1;
@@ -168,13 +119,86 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
     return () => clearInterval(timer);
   }, []);
 
+  const violationsRef = useRef(0);
+
+  const handleProctorViolation = (reason: string) => {
+    violationsRef.current += 1;
+    const count = violationsRef.current;
+
+    if (count >= 2) {
+      if (Platform.OS !== 'web') {
+        Alert.alert(
+          '🚨 EXAM AUTO-SUBMITTED (2/2 Violations Detected)!',
+          `You exceeded the maximum allowed proctoring attempts (${reason}).\nYour test has been automatically submitted.`
+        );
+      }
+      handleSubmitTest(true, `Proctoring Violation (2 attempts exceeded: ${reason})`);
+    } else {
+      if (Platform.OS === 'web') {
+        try { window.alert(`⚠️ PROCTORING WARNING (Attempt 1/2)!\n\nSwitching tabs, leaving the window, or focus loss is strictly forbidden during the exam.\n\nYou have 1 warning remaining. A 2nd attempt will automatically submit your exam.`); } catch (_) { }
+      } else {
+        Alert.alert(
+          '⚠️ PROCTORING WARNING (Attempt 1/2)!',
+          'Switching tabs, leaving the window, or focus loss is strictly forbidden during the exam.\n\nYou have 1 warning remaining. A 2nd attempt will automatically submit your exam.'
+        );
+      }
+    }
+  };
+
+  // Anti-Cheating: Copy/Paste & Tab Switch Monitoring
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const preventCopy = (e: Event) => {
+      e.preventDefault();
+      if (Platform.OS === 'web') {
+        try { window.alert('⚠️ Copying or selecting text is strictly prohibited during the exam.'); } catch (_) { }
+      } else {
+        Alert.alert('Prohibited', '⚠️ Copying or selecting text is strictly prohibited during the exam.');
+      }
+      return false;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleProctorViolation('Tab Switch');
+      }
+    };
+
+    const handleWindowBlur = () => {
+      handleProctorViolation('Window Focus Loss');
+    };
+
+    document.addEventListener('copy', preventCopy);
+    document.addEventListener('cut', preventCopy);
+    document.addEventListener('contextmenu', preventCopy);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('copy', preventCopy);
+      document.removeEventListener('cut', preventCopy);
+      document.removeEventListener('contextmenu', preventCopy);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, []);
+
   const formatTime = (totalSeconds: number) => {
-    const mins = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
     const secs = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const currentQuestion = mockQuestions[currentIdx];
+  const questionsList: Question[] = (testInfo as any).questions && Array.isArray((testInfo as any).questions) && (testInfo as any).questions.length > 0
+    ? (testInfo as any).questions
+    : (parseMcqsFromText('', testInfo.pdfFileName || testInfo.title) as any);
+
+  const currentQuestion = questionsList[currentIdx] || questionsList[0];
   const isAnswered = answers[currentIdx] !== undefined;
   const isFlagged = flagged[currentIdx] === true;
 
@@ -193,7 +217,7 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
   };
 
   const handleNext = () => {
-    if (currentIdx < mockQuestions.length - 1) {
+    if (currentIdx < questionsList.length - 1) {
       setCurrentIdx((prev) => prev + 1);
     }
   };
@@ -204,23 +228,77 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
     }
   };
 
-  const handleSubmitTest = (autoSubmit = false) => {
-    // Calculate grade
+  const handleManualSubmit = () => {
+    const answeredCount = Object.keys(answers).length;
+    const unansweredCount = questionsList.length - answeredCount;
+
+    if (Platform.OS === 'web') {
+      const msg = unansweredCount > 0 
+        ? `You still have ${unansweredCount} unanswered questions.\nAre you sure you want to submit?`
+        : 'Are you sure you want to submit your test?';
+      if (window.confirm(msg)) {
+        handleSubmitTest(false);
+      }
+    } else {
+      Alert.alert(
+        'Submit Test',
+        unansweredCount > 0 
+          ? `You still have ${unansweredCount} unanswered questions.\nAre you sure you want to submit?`
+          : 'Are you sure you want to submit your test?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Submit', style: 'destructive', onPress: () => handleSubmitTest(false) }
+        ]
+      );
+    }
+  };
+
+  const handleSubmitTest = async (autoSubmit = false, reason = '') => {
     let score = 0;
-    mockQuestions.forEach((q, idx) => {
-      if (answers[idx] === q.correctOption) {
+    const currentAnswers = answersRef.current;
+    questionsList.forEach((q, idx) => {
+      if (currentAnswers[idx] === q.correctOption) {
         score += 1;
       }
     });
 
-    const percentScore = (score / mockQuestions.length) * 100;
-    const requiredPassPercent = parseFloat(testInfo.passScore);
-    const passed = percentScore >= requiredPassPercent;
+    const percentScore = Math.round((score / questionsList.length) * 100);
+    const passed = percentScore >= passScorePercent;
+    const obtainedMarks = Math.round((score / questionsList.length) * totalMarks);
 
-    const alertTitle = autoSubmit ? 'Time is Up!' : 'Test Completed';
-    const alertMsg = `You scored ${score}/${mockQuestions.length} (${percentScore}%).\n` +
-      `Required Passing Score: ${testInfo.passScore}.\n\n` +
+    try {
+      const newSub = {
+        id: `sub-${Date.now()}`,
+        testId: testInfo.id || `test-${Date.now()}`,
+        testTitle: testInfo.title,
+        studentName: 'Student User',
+        studentEmail: 'student@nexus.com',
+        submittedAt: new Date().toLocaleString(),
+        status: 'GRADED',
+        obtainedMarks: obtainedMarks,
+        totalMarks: totalMarks,
+        feedback: autoSubmit
+          ? `Auto-submitted (${reason}): ${score}/${questionsList.length} correct (${percentScore}%).`
+          : `Evaluated: ${score}/${questionsList.length} correct (${percentScore}%).`,
+      };
+
+      const existingSubsStr = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
+      const existingSubs = existingSubsStr ? JSON.parse(existingSubsStr) : [];
+      const updatedSubs = [newSub, ...existingSubs];
+      await AsyncStorage.setItem(TEST_SUBMISSIONS_KEY, JSON.stringify(updatedSubs));
+    } catch (_) { }
+
+    const alertTitle = autoSubmit ? `Test Auto-Submitted (${reason})` : 'Test Completed';
+    const alertMsg = `You scored ${score}/${questionsList.length} correct (${percentScore}%).\n` +
+      `Obtained Marks: ${obtainedMarks} / ${totalMarks}\n` +
+      `Pass Score Required: ${passScorePercent}%\n\n` +
       `Status: ${passed ? 'PASSED 🎉' : 'FAILED ❌'}`;
+
+    if (Platform.OS === 'web' && autoSubmit) {
+      try { window.alert(`${alertTitle}\n\n${alertMsg}`); } catch (_) { }
+      onClose();
+      return;
+    }
 
     Alert.alert(alertTitle, alertMsg, [
       { text: 'View Results', onPress: onClose },
@@ -237,16 +315,72 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
   const totalAnswered = Object.keys(answers).length;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* 1. HEADER BANNER */}
+    <SafeAreaView style={[styles.safeArea, { userSelect: 'none', WebkitUserSelect: 'none' } as any]} edges={['top']}>
+      {/* CAMERA ACCESS BLOCKING OVERLAY IF CAMERA NOT GRANTED */}
+      {!cameraActive && (
+        <View style={styles.cameraBlockedOverlay}>
+          <View style={styles.cameraBlockedCard}>
+            <Ionicons name="videocam-off" size={48} color="#EF4444" />
+            <Text style={styles.cameraBlockedTitle}>Camera Access Required</Text>
+            <Text style={styles.cameraBlockedDesc}>
+              This is a proctored exam. Compulsory webcam access is required to take this test.
+            </Text>
+            {cameraError ? <Text style={styles.cameraErrorText}>{cameraError}</Text> : null}
+            <TouchableOpacity style={styles.retryCameraBtn} onPress={requestCameraPermission}>
+              <Ionicons name="camera" size={18} color="#FFF" />
+              <Text style={styles.retryCameraBtnText}>Allow Camera Access & Start Exam</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* FLOATING WEBCAM PROCTORING FEED */}
+      {cameraActive && Platform.OS === 'web' && (
+        <View style={styles.webcamFloatingBox}>
+          <video
+            ref={(ref) => {
+              videoRef.current = ref;
+              if (ref && streamRef.current && !ref.srcObject) {
+                ref.srcObject = streamRef.current;
+              }
+            }}
+            autoPlay
+            playsInline
+            muted
+            style={{ width: 130, height: 95, borderRadius: 8, objectFit: 'cover' }}
+          />
+          <View style={styles.proctorBadge}>
+            <View style={styles.proctorDot} />
+            <Text style={styles.proctorText}>PROCTORING ACTIVE</Text>
+          </View>
+        </View>
+      )}
+
+      {/* 1. HEADER BANNER WITH TEST METADATA */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.exitButton} onPress={handleExitPress}>
-          <Ionicons name="arrow-back" size={16} color="#FFF" style={styles.backIcon} />
-          <Text style={styles.exitButtonText}>Exit Test</Text>
-        </TouchableOpacity>
-        
-        {/* Timer */}
-        <View style={styles.timerBox}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}>
+          <Ionicons name="lock-closed" size={14} color="#FFF" />
+          <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 }}>PROCTORED EXAM</Text>
+        </View>
+
+        {/* TEST METADATA CHIPS */}
+        <View style={styles.metaChipsRow}>
+          <View style={styles.metaChip}>
+            <Ionicons name="time-outline" size={14} color="#FDE68A" />
+            <Text style={styles.metaChipText}>Duration: {durationMins} mins</Text>
+          </View>
+          <View style={styles.metaChip}>
+            <Ionicons name="ribbon-outline" size={14} color="#86EFAC" />
+            <Text style={styles.metaChipText}>Pass: {passScorePercent}%</Text>
+          </View>
+          <View style={styles.metaChip}>
+            <Ionicons name="school-outline" size={14} color="#C4B5FD" />
+            <Text style={styles.metaChipText}>Total: {totalMarks} Marks</Text>
+          </View>
+        </View>
+
+        {/* TIMER COUNTDOWN */}
+        <View style={[styles.timerBox, secondsLeft <= 300 && { backgroundColor: '#DC2626' }]}>
           <Ionicons name="time" size={16} color="#FFF" />
           <Text style={styles.timerText}>{formatTime(secondsLeft)}</Text>
         </View>
@@ -254,13 +388,13 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
 
       {/* Progress header details */}
       <View style={styles.progressRow}>
-        <Text style={styles.progressTitle}>Question {currentIdx + 1} of {mockQuestions.length}</Text>
+        <Text style={styles.progressTitle}>Question {currentIdx + 1} of {questionsList.length}</Text>
         <Text style={styles.answeredCountText}>{totalAnswered} Answered</Text>
       </View>
 
       {/* Horizontal progress bar */}
       <View style={styles.headerProgressBarBg}>
-        <View style={[styles.headerProgressBarFill, { width: `${((currentIdx + 1) / mockQuestions.length) * 100}%` }]} />
+        <View style={[styles.headerProgressBarFill, { width: `${((currentIdx + 1) / questionsList.length) * 100}%` }]} />
       </View>
 
       <ScrollView
@@ -283,143 +417,132 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
 
             {/* Flag */}
             <TouchableOpacity onPress={toggleFlag} style={styles.flagButton} activeOpacity={0.7}>
-              <Ionicons 
-                name={isFlagged ? "flag" : "flag-outline"} 
-                size={18} 
-                color={isFlagged ? "#FF7A00" : "#D1D5DB"} 
+              <Ionicons
+                name={isFlagged ? "flag" : "flag-outline"}
+                size={18}
+                color={isFlagged ? "#FF7A00" : "#D1D5DB"}
               />
             </TouchableOpacity>
           </View>
 
           {/* Question Text */}
-          <Text style={styles.questionText}>{currentQuestion.text}</Text>
+          <Text style={styles.questionTitle}>Question {currentIdx + 1}</Text>
+          <Text style={styles.questionBody}>
+            {typeof currentQuestion?.text === 'string'
+              ? currentQuestion.text
+              : typeof currentQuestion?.text === 'object' && currentQuestion.text !== null
+                ? (currentQuestion.text as any).text || (currentQuestion.text as any).title || String(currentQuestion.text)
+                : String(currentQuestion?.text || `Question ${currentIdx + 1}`)}
+          </Text>
 
           {/* Options */}
-          <View style={styles.optionsContainer}>
-            {(Object.keys(currentQuestion.options) as ('A' | 'B' | 'C' | 'D')[]).map((key) => {
-              const value = currentQuestion.options[key];
-              const isSelected = answers[currentIdx] === key;
+          <View style={styles.optionsList}>
+            {(['A', 'B', 'C', 'D'] as const).map((opt) => {
+              const rawOpt = currentQuestion?.options ? currentQuestion.options[opt] : '';
+              const optText = typeof rawOpt === 'string'
+                ? rawOpt
+                : typeof rawOpt === 'object' && rawOpt !== null
+                  ? (rawOpt as any).text || (rawOpt as any).value || (rawOpt as any).label || String(rawOpt)
+                  : String(rawOpt || `Option ${opt}`);
+              const isSelected = answers[currentIdx] === opt;
               return (
                 <TouchableOpacity
-                  key={key}
+                  key={opt}
                   style={[styles.optionCard, isSelected && styles.optionCardSelected]}
-                  onPress={() => handleSelectOption(key)}
+                  onPress={() => handleSelectOption(opt)}
                   activeOpacity={0.8}
                 >
-                  <View style={[styles.optionIndexCircle, isSelected && styles.optionIndexCircleSelected]}>
-                    <Text style={[styles.optionIndexText, isSelected && styles.optionIndexTextSelected]}>
-                      {key}
-                    </Text>
+                  <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
+                    <Text style={[styles.radioLetter, isSelected && styles.radioLetterSelected]}>{opt}</Text>
                   </View>
-                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-                    {value}
-                  </Text>
-                  {isSelected && (
-                    <View style={styles.optionCheckCircle}>
-                      <Ionicons name="checkmark" size={12} color="#7B2CBF" />
-                    </View>
-                  )}
+                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{optText}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-        </View>
 
-        {/* 3. NAVIGATION BUTTONS */}
-        <View style={styles.navigationRow}>
-          <TouchableOpacity
-            style={[styles.navBtn, styles.prevBtn, currentIdx === 0 && styles.disabledBtn]}
-            onPress={handlePrevious}
-            disabled={currentIdx === 0}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="arrow-back" size={16} color={currentIdx === 0 ? "#9CA3AF" : "#4B5563"} />
-            <Text style={[styles.prevBtnText, currentIdx === 0 && styles.disabledBtnText]}>Previous</Text>
-          </TouchableOpacity>
-
-          {currentIdx === mockQuestions.length - 1 ? (
+          {/* Previous / Next buttons */}
+          <View style={styles.cardNavRow}>
             <TouchableOpacity
-              style={[styles.navBtn, styles.submitBtn]}
-              onPress={() => handleSubmitTest(false)}
-              activeOpacity={0.8}
+              style={[styles.navBtn, currentIdx === 0 && styles.navBtnDisabled]}
+              onPress={handlePrevious}
+              disabled={currentIdx === 0}
             >
-              <Text style={styles.submitBtnText}>Submit Test</Text>
-              <Ionicons name="checkmark-done" size={16} color="#FFF" />
+              <Ionicons name="arrow-back" size={16} color={currentIdx === 0 ? "#9CA3AF" : "#4B5563"} />
+              <Text style={[styles.navBtnText, currentIdx === 0 && styles.navBtnTextDisabled]}>Previous</Text>
             </TouchableOpacity>
-          ) : (
+
             <TouchableOpacity
-              style={[styles.navBtn, styles.nextBtn]}
+              style={[styles.navBtn, styles.navBtnNext, currentIdx === questionsList.length - 1 && styles.navBtnDisabled]}
               onPress={handleNext}
-              activeOpacity={0.8}
+              disabled={currentIdx === questionsList.length - 1}
             >
-              <Text style={styles.nextBtnText}>Save & Next</Text>
-              <Ionicons name="arrow-forward" size={16} color="#FFF" />
+              <Text style={[styles.navBtnText, styles.navBtnTextNext, currentIdx === questionsList.length - 1 && styles.navBtnTextDisabled]}>Next</Text>
+              <Ionicons name="arrow-forward" size={16} color={currentIdx === questionsList.length - 1 ? "#9CA3AF" : "#FFF"} />
             </TouchableOpacity>
-          )}
+          </View>
         </View>
 
-        {/* 4. QUESTION NAVIGATOR */}
-        <Text style={styles.navigatorTitle}>Question Navigator</Text>
-        <View style={styles.navigatorCard}>
-          <View style={styles.gridContainer}>
-            {mockQuestions.map((q, idx) => {
-              const qAnswered = answers[idx] !== undefined;
-              const qFlagged = flagged[idx] === true;
-              const isCurrent = idx === currentIdx;
+        {/* 3. QUESTION PALETTE GRID */}
+        <View style={styles.paletteContainer}>
+          <Text style={styles.paletteTitle}>Question Palette ({questionsList.length} MCQs)</Text>
+          <View style={styles.paletteGrid}>
+            {questionsList.map((q, idx) => {
+              const isAns = answers[idx] !== undefined;
+              const isCurr = idx === currentIdx;
+              const isFlg = flagged[idx] === true;
 
-              // Determine style
-              let cellStyle: any = styles.gridCellNotAnswered;
-              let textStyle: any = styles.gridCellTextNotAnswered;
+              let btnStyle: any = styles.paletteBtn;
+              let textStyle: any = styles.paletteBtnText;
 
-              if (qAnswered) {
-                cellStyle = styles.gridCellAnswered;
-                textStyle = styles.gridCellTextAnswered;
-              } else if (qFlagged) {
-                cellStyle = styles.gridCellFlagged;
-                textStyle = styles.gridCellTextFlagged;
-              }
-
-              if (isCurrent) {
-                cellStyle = styles.gridCellCurrent;
-                textStyle = styles.gridCellTextCurrent;
+              if (isCurr) {
+                btnStyle = [styles.paletteBtn, styles.paletteBtnCurrent];
+                textStyle = [styles.paletteBtnText, styles.paletteBtnTextCurrent];
+              } else if (isFlg) {
+                btnStyle = [styles.paletteBtn, styles.paletteBtnFlagged];
+                textStyle = [styles.paletteBtnText, styles.paletteBtnTextFlagged];
+              } else if (isAns) {
+                btnStyle = [styles.paletteBtn, styles.paletteBtnAnswered];
+                textStyle = [styles.paletteBtnText, styles.paletteBtnTextAnswered];
               }
 
               return (
                 <TouchableOpacity
-                  key={idx}
-                  style={[styles.gridCell, cellStyle]}
+                  key={q.id || idx}
+                  style={btnStyle}
                   onPress={() => setCurrentIdx(idx)}
                 >
-                  <Text style={[styles.gridCellText, textStyle]}>{idx + 1}</Text>
+                  <Text style={textStyle}>{idx + 1}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          {/* Legend */}
+          {/* Palette Legend */}
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendIndicator, { backgroundColor: '#7B2CBF' }]} />
-              <Text style={styles.legendLabel}>Current</Text>
+              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+              <Text style={styles.legendText}>Answered</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendIndicator, { backgroundColor: '#10B981' }]} />
-              <Text style={styles.legendLabel}>Answered</Text>
+              <View style={[styles.legendDot, { backgroundColor: '#FF7A00' }]} />
+              <Text style={styles.legendText}>Flagged</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendIndicator, { backgroundColor: '#FF7A00' }]} />
-              <Text style={styles.legendLabel}>Flagged</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendIndicator, { backgroundColor: '#E5E7EB' }]} />
-              <Text style={styles.legendLabel}>Not Answered</Text>
+              <View style={[styles.legendDot, { backgroundColor: '#E5E7EB' }]} />
+              <Text style={styles.legendText}>Not Answered</Text>
             </View>
           </View>
         </View>
-
-        {/* Bottom Spacer */}
-        <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* 4. BOTTOM ACTION BAR */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity style={styles.submitTestButton} onPress={handleManualSubmit}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+          <Text style={styles.submitTestButtonText}>Submit Test</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -427,104 +550,140 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#7B2CBF',
+    backgroundColor: '#F8FAFC',
+    ...(Platform.OS === 'web' ? {
+      position: 'fixed' as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: '100vw' as any,
+      height: '100vh' as any,
+      zIndex: 999999,
+    } : {}),
   },
   header: {
-    backgroundColor: '#7B2CBF',
-    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
     justifyContent: 'space-between',
+    backgroundColor: '#7B2CBF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   exitButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   backIcon: {
     marginRight: 4,
   },
   exitButtonText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  metaChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  metaChipText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '600',
   },
   timerBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     gap: 6,
   },
   timerText: {
     color: '#FFFFFF',
+    fontWeight: '700',
     fontSize: 14,
-    fontWeight: 'bold',
   },
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#7B2CBF',
+    paddingTop: 12,
+    paddingBottom: 6,
   },
   progressTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
   },
   answeredCountText: {
-    color: '#E9D5FF',
     fontSize: 12,
-    fontWeight: '500',
+    color: '#64748B',
+    fontWeight: '600',
   },
   headerProgressBarBg: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 20,
+    borderRadius: 2,
+    marginBottom: 10,
+    overflow: 'hidden',
   },
   headerProgressBarFill: {
     height: '100%',
-    backgroundColor: '#FFB703', // Yellow progress bar
+    backgroundColor: '#7B2CBF',
+    borderRadius: 2,
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
-  bottomSpacer: {
-    height: 120, // Padding to avoid overlap with bottom navigation capsule
-  },
-  // Question detail card
   questionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 3,
-    marginBottom: 20,
+    elevation: 2,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
     gap: 6,
   },
   badgeNumberCircle: {
@@ -540,216 +699,299 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   statusBadgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
+    fontSize: 12,
+    fontWeight: '600',
   },
   flagButton: {
-    padding: 4,
+    padding: 6,
   },
-  questionText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  questionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7B2CBF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  questionBody: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  optionsContainer: {
-    gap: 12,
+  optionsList: {
+    gap: 10,
+    marginBottom: 20,
   },
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    position: 'relative',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
   },
   optionCardSelected: {
+    backgroundColor: '#FAF5FF',
     borderColor: '#7B2CBF',
-    borderWidth: 1.5,
-    backgroundColor: '#F9F5FF',
   },
-  optionIndexCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#F9FAFB',
+  radioCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    backgroundColor: '#FFF',
   },
-  optionIndexCircleSelected: {
+  radioCircleSelected: {
     backgroundColor: '#7B2CBF',
     borderColor: '#7B2CBF',
   },
-  optionIndexText: {
+  radioLetter: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: '#4B5563',
+    fontWeight: '700',
+    color: '#64748B',
   },
-  optionIndexTextSelected: {
+  radioLetterSelected: {
     color: '#FFFFFF',
   },
   optionText: {
-    fontSize: 14,
-    color: '#4B5563',
-    fontWeight: '500',
     flex: 1,
+    fontSize: 14,
+    color: '#334155',
+    fontWeight: '500',
   },
   optionTextSelected: {
     color: '#7B2CBF',
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
-  optionCheckCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#7B2CBF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Navigation Buttons
-  navigationRow: {
+  cardNavRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    marginBottom: 28,
   },
   navBtn: {
     flexDirection: 'row',
-    height: 46,
-    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  prevBtn: {
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#CBD5E1',
+    gap: 6,
   },
-  prevBtnText: {
-    color: '#4B5563',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  nextBtn: {
+  navBtnNext: {
     backgroundColor: '#7B2CBF',
+    borderColor: '#7B2CBF',
   },
-  nextBtnText: {
+  navBtnDisabled: {
+    opacity: 0.5,
+  },
+  navBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  navBtnTextNext: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
-  submitBtn: {
-    backgroundColor: '#10B981',
+  navBtnTextDisabled: {
+    color: '#94A3B8',
   },
-  submitBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+  paletteContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  disabledBtn: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
-  },
-  disabledBtnText: {
-    color: '#9CA3AF',
-  },
-  // Question Navigator
-  navigatorTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  paletteTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
     marginBottom: 12,
   },
-  navigatorCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  gridContainer: {
+  paletteGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 16,
   },
-  gridCell: {
-    width: '17%', // ~5 columns per row with spacing
-    aspectRatio: 1,
-    borderRadius: 12,
+  paletteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  gridCellText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  gridCellNotAnswered: {
-    backgroundColor: '#F3F4F6',
-  },
-  gridCellTextNotAnswered: {
-    color: '#4B5563',
-  },
-  gridCellAnswered: {
-    backgroundColor: '#ECFDF5',
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: '#E2E8F0',
   },
-  gridCellTextAnswered: {
-    color: '#10B981',
-  },
-  gridCellFlagged: {
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1,
-    borderColor: '#FFD7A3',
-  },
-  gridCellTextFlagged: {
-    color: '#FF7A00',
-  },
-  gridCellCurrent: {
+  paletteBtnCurrent: {
     backgroundColor: '#7B2CBF',
+    borderColor: '#7B2CBF',
   },
-  gridCellTextCurrent: {
+  paletteBtnAnswered: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  paletteBtnFlagged: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FF7A00',
+  },
+  paletteBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  paletteBtnTextCurrent: {
     color: '#FFFFFF',
+    fontWeight: '700',
   },
-  // Legend
+  paletteBtnTextAnswered: {
+    color: '#10B981',
+    fontWeight: '700',
+  },
+  paletteBtnTextFlagged: {
+    color: '#FF7A00',
+    fontWeight: '700',
+  },
   legendRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 16,
-    gap: 8,
+    borderTopColor: '#F1F5F9',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  legendIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  legendLabel: {
+  legendText: {
     fontSize: 11,
-    color: '#6B7280',
+    color: '#64748B',
     fontWeight: '500',
+  },
+  bottomBar: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  submitTestButton: {
+    backgroundColor: '#16A34A',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  submitTestButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  cameraBlockedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  cameraBlockedCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    maxWidth: 420,
+    width: '100%',
+    textAlign: 'center',
+  },
+  cameraBlockedTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  cameraBlockedDesc: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  cameraErrorText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  retryCameraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7B2CBF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  retryCameraBtnText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  webcamFloatingBox: {
+    position: 'absolute',
+    top: 70,
+    right: 20,
+    zIndex: 999,
+    backgroundColor: '#000',
+    borderRadius: 10,
+    padding: 4,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  proctorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  proctorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EF4444',
+  },
+  proctorText: {
+    color: '#EF4444',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
 });

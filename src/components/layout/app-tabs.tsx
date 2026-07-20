@@ -8,6 +8,7 @@ import HomeScreen from '@/screens/home/home-screen';
 import ProfileScreen from '@/screens/profile/profile-screen';
 import StudyMaterialsScreen from '@/screens/teacher/study-materials-screen';
 import TeacherAlertsScreen from '@/screens/teacher/teacher-alerts-screen';
+import TeacherAssessmentsScreen from '@/screens/teacher/teacher-assessments-screen';
 import TeacherClassesScreen from '@/screens/teacher/teacher-classes-screen';
 import TeacherDashboardScreen from '@/screens/teacher/teacher-dashboard-screen';
 import TeacherScheduleScreen from '@/screens/teacher/teacher-schedule-screen';
@@ -79,12 +80,12 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
   const [showStudyMaterials, setShowStudyMaterials] = useState(false);
 
   const [profileSubView, setProfileSubView] = useState<ProfileSubView>('profile');
+  const [returnTabIndex, setReturnTabIndex] = useState<number | null>(null);
   const [tabKeys, setTabKeys] = useState<Record<number, number>>({
     0: 0,
     1: 0,
     2: 0,
     3: 0,
-    4: 0,
   });
 
   // Pre-fetch all admin data immediately on login so screens load instantly
@@ -129,7 +130,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
           { name: 'Dashboard', iconActive: 'home', iconInactive: 'home-outline' },
           { name: 'Classes', iconActive: 'book', iconInactive: 'book-outline' },
           { name: 'Schedule', iconActive: 'calendar', iconInactive: 'calendar-outline' },
-          { name: 'Alerts', iconActive: 'notifications', iconInactive: 'notifications-outline' },
+          { name: 'Tests', iconActive: 'clipboard', iconInactive: 'clipboard-outline' },
           { name: 'Profile', iconActive: 'person', iconInactive: 'person-outline' },
         ];
       case 'admin':
@@ -147,14 +148,31 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
           { name: 'Batch', iconActive: 'reader', iconInactive: 'reader-outline' },
           { name: 'Test', iconActive: 'clipboard', iconInactive: 'clipboard-outline' },
           { name: 'Profile', iconActive: 'person', iconInactive: 'person-outline' },
-          { name: 'Courses', iconActive: 'book', iconInactive: 'book-outline' },
         ];
     }
   };
 
   const tabs = getTabsConfig();
 
+  const handleOpenNotifications = (fromTabIndex: number) => {
+    setReturnTabIndex(fromTabIndex);
+    setActiveIndex(userRole === 'teacher' ? 4 : 3);
+    setProfileSubView('notifications');
+  };
+
+  const handleProfileSubViewChange = (subView: ProfileSubView) => {
+    if (subView === 'profile' && returnTabIndex !== null) {
+      const target = returnTabIndex;
+      setReturnTabIndex(null);
+      setProfileSubView('profile');
+      setActiveIndex(target);
+    } else {
+      setProfileSubView(subView);
+    }
+  };
+
   const handleTabPress = (idx: number, tabName: string) => {
+    setReturnTabIndex(null);
     if (showUploadRecording) {
       setShowUploadRecording(false);
     }
@@ -186,16 +204,17 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
         case 0: return <TeacherDashboardScreen userName={userName}
           onUploadRecording={() => setShowUploadRecording(true)}
           onUploadStudyMaterial={() => setShowStudyMaterials(true)}
+          onOpenNotifications={() => handleOpenNotifications(0)}
         />;
-        case 1: return <TeacherClassesScreen />;
+        case 1: return <TeacherClassesScreen onOpenNotifications={() => handleOpenNotifications(1)} />;
         case 2: return <TeacherScheduleScreen />;
-        case 3: return <TeacherAlertsScreen />;
+        case 3: return <TeacherAssessmentsScreen />;
         case 4:
           return (
             <ProfileScreen
               onLogout={onLogout}
               currentSubView={profileSubView}
-              onChangeSubView={setProfileSubView}
+              onChangeSubView={handleProfileSubViewChange}
               userRole={userRole}
               userName={userName}
               userEmail={userEmail}
@@ -232,13 +251,16 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
             <HomeScreen
               key={tabKeys[0]}
               userName={userName}
-              onOpenNotifications={() => {
-                setActiveIndex(3); // profile index
-                setProfileSubView('notifications');
-              }}
+              onOpenNotifications={() => handleOpenNotifications(0)}
             />
           );
-        case 1: return <BatchesScreen key={tabKeys[1]} />;
+        case 1:
+          return (
+            <BatchesScreen
+              key={tabKeys[1]}
+              onOpenNotifications={() => handleOpenNotifications(1)}
+            />
+          );
         case 2: return <TestsScreen key={tabKeys[2]} />;
         case 3:
           return (
@@ -246,21 +268,17 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
               key={tabKeys[3]}
               onLogout={onLogout}
               currentSubView={profileSubView}
-              onChangeSubView={setProfileSubView}
+              onChangeSubView={handleProfileSubViewChange}
               userRole={userRole}
               userName={userName}
               userEmail={userEmail}
             />
           );
-        case 4: return <CoursesScreen key={tabKeys[4]} />;
         default:
           return (
             <HomeScreen
               userName={userName}
-              onOpenNotifications={() => {
-                setActiveIndex(3);
-                setProfileSubView('notifications');
-              }}
+              onOpenNotifications={() => handleOpenNotifications(0)}
             />
           );
       }
