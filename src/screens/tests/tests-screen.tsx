@@ -17,7 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ActiveTestScreen from './active-test-screen';
 import { api, getApiBaseUrl, loadToken } from '@/services/api';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { parseMcqsFromText } from '@/utils/pdf-mcq-parser';
+
 type SubTabType = 'MCQ' | 'StudyMaterial';
+
+const PUBLISHED_TESTS_KEY = 'NEXUS_PUBLISHED_TESTS';
+const TEST_SUBMISSIONS_KEY = 'NEXUS_TEST_SUBMISSIONS';
 
 interface Enrollment {
   id: number;
@@ -45,18 +51,15 @@ export default function TestsScreen() {
   const [activeTab, setActiveTab] = useState<SubTabType>('MCQ');
   const [selectedCourseForMaterials, setSelectedCourseForMaterials] = useState<string | null>(null);
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
-  const [activeTest, setActiveTest] = useState<{
-    title: string;
-    questions: string;
-    duration: string;
-    passScore: string;
-  } | null>(null);
+  const [activeTest, setActiveTest] = useState<any>(null);
 
   // Real data
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [allMaterials, setAllMaterials] = useState<RealMaterial[]>([]);
   const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
   const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [publishedTests, setPublishedTests] = useState<any[]>([]);
+  const [userSubmissions, setUserSubmissions] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     await loadToken();
@@ -78,12 +81,24 @@ export default function TestsScreen() {
     } finally {
       setMaterialsLoading(false);
     }
+    try {
+      const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
+      if (storedTests) {
+        const parsed = JSON.parse(storedTests);
+        if (Array.isArray(parsed)) setPublishedTests(parsed);
+      }
+      const storedSubs = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
+      if (storedSubs) {
+        const parsed = JSON.parse(storedSubs);
+        if (Array.isArray(parsed)) setUserSubmissions(parsed);
+      }
+    } catch (_) {}
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (activeTest !== null) {
-    return <ActiveTestScreen testInfo={activeTest} onClose={() => setActiveTest(null)} />;
+    return <ActiveTestScreen testInfo={activeTest} onClose={() => { setActiveTest(null); fetchData(); }} />;
   }
 
   // Helper: icon config per file type
@@ -215,6 +230,38 @@ export default function TestsScreen() {
       })
     : [];
 
+  const handleDeleteTest = async (testId: string) => {
+    const confirmDelete = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
+        if (stored) {
+          const testsArr = JSON.parse(stored);
+          const updatedArr = testsArr.filter((t: any) => t.id !== testId);
+          await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(updatedArr));
+          setPublishedTests(updatedArr);
+          Alert.alert('Success', 'Test deleted successfully');
+        }
+      } catch (err) {
+        console.error('Failed to delete test:', err);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this test?')) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Test',
+        'Are you sure you want to delete this test?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+        ]
+      );
+    }
+  };
+
   const handleBackAction = () => {
     if (activeTab === 'StudyMaterial') {
       setSelectedCourseForMaterials(null);
@@ -304,69 +351,136 @@ export default function TestsScreen() {
 
         {/* 3. DYNAMIC CONTENT VIEW */}
         {activeTab === 'MCQ' ? (
-          // MCQ TEST FLOW
+          // MCQ & PDF TEST FLOW
           <View style={styles.listContainer}>
-            {mcqTests.map((test) => (
-              <View 
-                key={test.id} 
-                style={[
-                  styles.testCard,
-                  test.id === '3' && { borderWidth: 2, borderColor: '#7B2CBF', shadowColor: '#7B2CBF', shadowOpacity: 0.1 }
-                ]}
-              >
-                {/* Header Section */}
-                <View style={styles.cardHeader}>
-                  <View style={[styles.cardHeaderIconContainer, { backgroundColor: test.iconBg }]}>
-                    <Ionicons name={test.icon as any} size={24} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.cardHeaderTitleWrapper}>
-                    <Text style={styles.cardHeaderTitle}>{test.title}</Text>
-                    <Text style={styles.cardHeaderCategory}>{test.category}</Text>
-                  </View>
-                  <View style={[styles.levelBadge, { backgroundColor: test.badgeBg, borderColor: test.badgeColor }]}>
-                    <Text style={[styles.levelBadgeText, { color: test.badgeColor }]}>{test.badge}</Text>
-                  </View>
-                </View>
+            {(() => {
+              const allTestList = [
+                ...publishedTests.map(pt => ({
+                  id: pt.id,
+                  title: pt.title,
+                  category: pt.category,
+                  badge: pt.testType === 'PDF' ? 'PDF Exam' : 'Active',
+                  badgeColor: pt.testType === 'PDF' ? '#DC2626' : '#7B2CBF',
+                  badgeBg: pt.testType === 'PDF' ? '#FEE2E2' : '#FAF0FD',
+                  icon: pt.testType === 'PDF' ? 'document-text-outline' : 'clipboard-outline',
+                  iconBg: pt.testType === 'PDF' ? '#EF4444' : '#7B2CBF',
+                  questionsCountLabel: String(pt.questionsCount || 'PDF Exam'),
+                  duration: pt.duration || '45 mins',
+                  passScore: pt.passScore || '75%',
+                  attempts: '1',
+                  testType: pt.testType || 'PDF',
+                  pdfFileUri: pt.pdfFileUri,
+                  pdfFileName: pt.pdfFileName,
+                  pdfInstructions: pt.pdfInstructions,
+                  totalMarks: pt.totalMarks || 100,
+                  questions: (pt.questions && Array.isArray(pt.questions) && pt.questions.length > 0)
+                    ? pt.questions
+                    : parseMcqsFromText('', pt.pdfFileName || pt.title),
+                })),
+                ...mcqTests
+                  .filter(m => !publishedTests.some(p => p.id === m.id))
+                  .map(m => ({ ...m, questions: parseMcqsFromText('', m.title) })),
+              ];
 
-                {/* Stats Row */}
-                <View style={styles.statsRow}>
-                  <View style={styles.statBadgePurple}>
-                    <Ionicons name="document-text-outline" size={13} color="#7B2CBF" />
-                    <Text style={styles.statLabelText}>Questions</Text>
-                    <Text style={styles.statValText}>{test.questions}</Text>
-                  </View>
-                  <View style={styles.statBadgeOrange}>
-                    <Ionicons name="time-outline" size={13} color="#EA580C" />
-                    <Text style={styles.statLabelText}>Duration</Text>
-                    <Text style={styles.statValText}>{test.duration}</Text>
-                  </View>
-                  <View style={styles.statBadgeGreen}>
-                    <Ionicons name="ribbon-outline" size={13} color="#16A34A" />
-                    <Text style={styles.statLabelText}>Pass Score</Text>
-                    <Text style={styles.statValText}>{test.passScore}</Text>
-                  </View>
-                </View>
+              return allTestList.map((test) => {
+                const sub = userSubmissions.find(s => s.testId === test.id || s.testTitle === test.title);
+                return (
+                  <View 
+                    key={test.id} 
+                    style={[
+                      styles.testCard,
+                      (test as any).testType === 'PDF' && { borderWidth: 2, borderColor: '#EF4444' }
+                    ]}
+                  >
+                    {/* Header Section */}
+                    <View style={styles.cardHeader}>
+                      <View style={[styles.cardHeaderIconContainer, { backgroundColor: test.iconBg }]}>
+                        <Ionicons name={test.icon as any} size={24} color="#FFFFFF" />
+                      </View>
+                      <View style={styles.cardHeaderTitleWrapper}>
+                        <Text style={styles.cardHeaderTitle}>{test.title}</Text>
+                        <Text style={styles.cardHeaderCategory}>{test.category}</Text>
+                      </View>
+                      <View style={[styles.levelBadge, { backgroundColor: test.badgeBg, borderColor: test.badgeColor }]}>
+                        <Text style={[styles.levelBadgeText, { color: test.badgeColor }]}>{test.badge}</Text>
+                      </View>
+                    </View>
 
-                {/* Attempts bar */}
-                <View style={styles.attemptsBar}>
-                  <View style={styles.attemptsLeft}>
-                    <Ionicons name="stats-chart" size={14} color="#7B2CBF" />
-                    <Text style={styles.attemptsLabel}>Previous Attempts:</Text>
-                  </View>
-                  <Text style={styles.attemptsValue}>{test.attempts}</Text>
-                </View>
+                    {/* Stats Row */}
+                    <View style={styles.statsRow}>
+                      <View style={styles.statBadgePurple}>
+                        <Ionicons name="document-text-outline" size={13} color="#7B2CBF" />
+                        <Text style={styles.statLabelText}>Type</Text>
+                        <Text style={styles.statValText}>
+                          {typeof (test as any).questionsCountLabel === 'string' && (test as any).questionsCountLabel
+                            ? (test as any).questionsCountLabel
+                            : typeof test.questions === 'string' || typeof test.questions === 'number'
+                            ? String(test.questions)
+                            : Array.isArray(test.questions)
+                            ? `${test.questions.length} MCQs`
+                            : '20 MCQs'}
+                        </Text>
+                      </View>
+                      <View style={styles.statBadgeOrange}>
+                        <Ionicons name="time-outline" size={13} color="#EA580C" />
+                        <Text style={styles.statLabelText}>Duration</Text>
+                        <Text style={styles.statValText}>{test.duration}</Text>
+                      </View>
+                      <View style={styles.statBadgeGreen}>
+                        <Ionicons name="ribbon-outline" size={13} color="#16A34A" />
+                        <Text style={styles.statLabelText}>Total Marks</Text>
+                        <Text style={styles.statValText}>{(test as any).totalMarks || 100}</Text>
+                      </View>
+                    </View>
 
-                {/* Start Test Button */}
-                <TouchableOpacity 
-                  style={styles.startTestButton}
-                  onPress={() => setActiveTest(test)}
-                >
-                  <Ionicons name="play" size={14} color="#FFFFFF" style={styles.playIcon} />
-                  <Text style={styles.startTestButtonText}>Start Test</Text>
-                  <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            ))}
+                    {/* Submission / Grade Status Banner */}
+                    {sub ? (
+                      (() => {
+                        const marksVal = typeof sub.obtainedMarks === 'number' ? sub.obtainedMarks : parseInt(String(sub.obtainedMarks || 0), 10) || 0;
+                        const totalVal = typeof sub.totalMarks === 'number' ? sub.totalMarks : parseInt(String(sub.totalMarks || 100), 10) || 100;
+                        const feedbackVal = typeof sub.feedback === 'string' ? sub.feedback : '';
+                        const isGraded = sub.status === 'GRADED';
+
+                        return (
+                          <View style={[
+                            { borderRadius: 12, padding: 12, marginVertical: 10, borderWidth: 1 },
+                            isGraded ? { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' } : { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }
+                          ]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Ionicons
+                                name={isGraded ? "checkmark-circle" : "time-outline"}
+                                size={18}
+                                color={isGraded ? "#15803D" : "#B45309"}
+                              />
+                              <Text style={{ fontSize: 13, fontWeight: 'bold', color: isGraded ? "#15803D" : "#B45309" }}>
+                                {isGraded
+                                  ? `Score: ${marksVal} / ${totalVal} Marks (${Math.round((marksVal / totalVal) * 100)}%)`
+                                  : 'Test Submitted - Pending Evaluation'}
+                              </Text>
+                            </View>
+                            {feedbackVal ? (
+                              <Text style={{ fontSize: 12, color: '#374151', marginTop: 4, fontStyle: 'italic' }}>
+                                Teacher Feedback: "{feedbackVal}"
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                      })()
+                    ) : null}
+
+                    {/* Start Test Button */}
+                    <TouchableOpacity 
+                      style={[styles.startTestButton, sub && { backgroundColor: '#4B5563' }]}
+                      onPress={() => setActiveTest(test)}
+                    >
+                      <Ionicons name="play" size={14} color="#FFFFFF" style={styles.playIcon} />
+                      <Text style={styles.startTestButtonText}>{sub ? 'Retake Test' : 'Start Test'}</Text>
+                      <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              });
+            })()}
           </View>
         ) : (
           // STUDY MATERIAL FLOW

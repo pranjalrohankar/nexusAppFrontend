@@ -328,7 +328,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
         }
         showToast('Instructor removed successfully.', 'success');
       } else {
-        showToast(res.message || 'Failed to delete teacher.', 'error');
+        showToast((res as any)?.message || 'Failed to delete teacher.', 'error');
       }
     } catch {
       showToast('Could not connect to server.', 'error');

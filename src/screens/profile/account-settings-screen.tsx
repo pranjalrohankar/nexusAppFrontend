@@ -174,7 +174,7 @@ export default function AccountSettingsScreen({
         setProfile((prev: any) => ({ ...prev, name: name.trim(), phone, city, state }));
         showToast('Profile updated successfully!', 'success');
       } else if (userRole === 'teacher') {
-        await (api as any).updateTeacherProfile({ name, phone, city, state });
+        await (api as any).updateTeacherProfile({ name, phone, city, state, profileImage: photoUri });
         showToast('Profile updated successfully!', 'success');
         setTimeout(() => onBack(), 1600);
       }

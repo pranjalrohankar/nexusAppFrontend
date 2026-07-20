@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar,
+  Linking, TextInput, Alert, Modal, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../components/layout/app-tabs';
 import AdminEnquiriesScreen from './admin-enquiries-screen';
@@ -20,6 +22,46 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   const lastEnqCountRef = useRef(adminDataCache.enquiries.length);
   const dashDataRef = useRef<any>(adminDataCache.dashboard);
 
+  // Google Meet States
+  const [meetLink, setMeetLink] = useState('');
+  const [showMeetModal, setShowMeetModal] = useState(false);
+  const [inputLink, setInputLink] = useState('');
+
+  const loadMeetLink = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('NEXUS_GOOGLE_MEET_LINK');
+      if (saved) {
+        setMeetLink(saved);
+        setInputLink(saved);
+      }
+    } catch (_) {}
+  };
+
+  const saveMeetLink = async () => {
+    try {
+      let url = inputLink.trim();
+      if (url && !/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+      await AsyncStorage.setItem('NEXUS_GOOGLE_MEET_LINK', url);
+      setMeetLink(url);
+      setShowMeetModal(false);
+      Alert.alert('Success', 'Google Meet link updated successfully!');
+    } catch (_) {
+      Alert.alert('Error', 'Failed to save link.');
+    }
+  };
+
+  const openMeetLink = () => {
+    if (!meetLink) {
+      Alert.alert('No Link Set', 'Please set a Google Meet link first.');
+      return;
+    }
+    Linking.openURL(meetLink).catch(() => {
+      Alert.alert('Error', 'Could not open the Google Meet link. Please verify it is a valid URL.');
+    });
+  };
+
   const fetchEnquiries = () => {
     api.getEnquiries()
       .then((res: any) => {
@@ -32,6 +74,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   };
 
   useEffect(() => {
+    loadMeetLink();
     Promise.all([
       api.getDashboard().catch(() => null),
       api.getEnquiries().catch(() => null),
@@ -184,6 +227,29 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
           ))}
         </View>
 
+        {/* GOOGLE MEET LINK FOR TEACHERS/ADMINS */}
+        <Text style={styles.sectionTitle}>Classroom Meeting</Text>
+        <View style={styles.meetCard}>
+          <View style={styles.meetHeaderRow}>
+            <View style={styles.meetIconContainer}>
+              <Ionicons name="videocam" size={24} color="#7B2CBF" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.meetTitle}>Live Google Meet Class</Text>
+              <Text style={styles.meetSubtitle} numberOfLines={1}>
+                {meetLink || 'No Meet link configured yet.'}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.meetEditBtn} onPress={() => { setInputLink(meetLink); setShowMeetModal(true); }}>
+              <Ionicons name="pencil" size={16} color="#7B2CBF" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.meetJoinBtn} onPress={openMeetLink}>
+            <Ionicons name="logo-google" size={18} color="#FFF" style={{ marginRight: 6 }} />
+            <Text style={styles.meetJoinBtnText}>Start/Join Live Class</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* RECENT ENROLLMENTS */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Recent Enrollments</Text>
@@ -266,9 +332,47 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             ))
           )}
         </LinearGradient>
-
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* EDIT MEET LINK MODAL */}
+      <Modal visible={showMeetModal} transparent animationType="fade" onRequestClose={() => setShowMeetModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Google Meet Link</Text>
+            <Text style={styles.modalDesc}>Paste the Google Meet class URL below so teachers and admins can join/start classes.</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. meet.google.com/abc-defg-hij"
+              placeholderTextColor="#9CA3AF"
+              value={inputLink}
+              onChangeText={setInputLink}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalCancelBtn]} onPress={() => setShowMeetModal(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalSaveBtn]} onPress={saveMeetLink}>
+                <Text style={styles.modalSaveText}>Save Link</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {showEnquiries && (
+        <AdminEnquiriesScreen
+          enquiries={enquiries}
+          onClose={() => setShowEnquiries(false)}
+          onEnquiriesUpdate={(updated) => {
+            adminDataCache.enquiries = updated;
+            setEnquiries(updated);
+            lastEnqCountRef.current = updated.length;
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -285,9 +389,135 @@ const styles = StyleSheet.create({
   iconContainer: { position: 'relative', width: 46, height: 46, justifyContent: 'center', alignItems: 'center' },
   badge: { position: 'absolute', top: 4, right: 4, backgroundColor: '#EF4444', minWidth: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3, borderWidth: 2, borderColor: '#7B2CBF' },
   badgeCount: { color: '#FFF', fontSize: 9, fontWeight: 'bold' },
-  scrollView: { flex: 1, backgroundColor: '#F9FAFB' },
-  scrollContent: { padding: 20 },
-  bottomSpacer: { height: 100 },
+  scrollView: { flex: 1, backgroundColor: '#F3F4F6' },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
+
+  meetCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  meetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  meetIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  meetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  meetSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  meetEditBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  meetJoinBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#7B2CBF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  meetJoinBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  modalDesc: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtn: {
+    backgroundColor: '#F3F4F6',
+  },
+  modalSaveBtn: {
+    backgroundColor: '#7B2CBF',
+  },
+  modalCancelText: {
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  modalSaveText: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginBottom: 24 },
   metricCard: { width: '48%', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },

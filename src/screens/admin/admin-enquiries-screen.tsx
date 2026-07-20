@@ -68,7 +68,7 @@ function EnquiryDetail({
   return (
     <SafeAreaView style={det.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
-      {/* Header */}}
+      {/* Header */}
       <View style={det.header}>
         <LinearGradient colors={GRADIENT_COLORS} locations={GRADIENT_LOCS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={det.accentLine} />
         <View style={det.headerRow}>
