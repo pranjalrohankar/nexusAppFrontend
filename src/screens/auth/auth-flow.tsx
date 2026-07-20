@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
 StyleSheet,
 Text,
@@ -15,6 +15,7 @@ ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, setToken } from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ScreenType = 'LOGO' | 'SPLASH' | 'SIGN_IN' | 'SIGN_UP';
 
@@ -123,40 +124,47 @@ return () => clearTimeout(timer);
 const [loading, setLoading] = useState(false);
 
 // Handle SignIn action
-const handleSignInSubmit = async () => {
-if (!signInEmail || !signInPassword) {
-Alert.alert('Error', 'Please enter email and password.');
-return;
-}
-setLoading(true);
-try {
-// Get or create a persistent device fingerprint
-let deviceFingerprint: string | null = null;
-try {
-  const DEVICE_ID_KEY = 'nexus_device_id';
-  let stored = Platform.OS === 'web'
-    ? localStorage.getItem(DEVICE_ID_KEY)
-    : await AsyncStorage.getItem(DEVICE_ID_KEY);
-  if (!stored) {
-    stored = 'dev-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
-    if (Platform.OS === 'web') localStorage.setItem(DEVICE_ID_KEY, stored);
-    else await AsyncStorage.setItem(DEVICE_ID_KEY, stored);
-  }
-  deviceFingerprint = stored;
-} catch {}
-const res = await api.login(signInEmail.trim(), signInPassword.trim(), selectedRole, deviceFingerprint ?? undefined);
-if (res.success) {
-setToken(res.data.token);
-onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
-} else {
-Alert.alert('Login Failed', res.message || 'Invalid credentials');
-}
-} catch {
-Alert.alert('Error', 'Could not connect to server.');
-} finally {
-setLoading(false);
-}
-};
+  const handleSignInSubmit = async () => {
+    const email = signInEmail.trim();
+    const password = signInPassword.trim();
+
+    if (!email || !password) {
+      showToast('Please enter email and password.', 'error');
+      Alert.alert('Error', 'Please enter email and password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      // Get or create a persistent device fingerprint
+      let deviceFingerprint: string | null = null;
+      try {
+        const DEVICE_ID_KEY = 'nexus_device_id';
+        let stored = Platform.OS === 'web'
+          ? localStorage.getItem(DEVICE_ID_KEY)
+          : await AsyncStorage.getItem(DEVICE_ID_KEY);
+        if (!stored) {
+          stored = 'dev-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
+          if (Platform.OS === 'web') localStorage.setItem(DEVICE_ID_KEY, stored);
+          else await AsyncStorage.setItem(DEVICE_ID_KEY, stored);
+        }
+        deviceFingerprint = stored;
+      } catch {}
+      const res = await api.login(email, password, selectedRole, deviceFingerprint ?? undefined);
+      if (res.success) {
+        setToken(res.data.token);
+        onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
+      } else {
+        const errorMsg = res.message || 'Invalid credentials';
+        showToast(errorMsg, 'error');
+        Alert.alert('Login Failed', errorMsg);
+      }
+    } catch {
+      showToast('Could not connect to server.', 'error');
+      Alert.alert('Error', 'Could not connect to server.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
 // Handle SignUp action (enquiry only, no login)
 const handleSignUpSubmit = async () => {
