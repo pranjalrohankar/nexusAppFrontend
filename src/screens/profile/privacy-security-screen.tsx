@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import TermsConditionsScreen from './terms-conditions-screen';
+import PrivacyPolicyScreen from './privacy-policy-screen';
 import {
-  Alert,
   StyleSheet,
   Text,
   View,
@@ -22,6 +23,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
   const [profileVisible, setProfileVisible] = useState(true);
   const [activityVisible, setActivityVisible] = useState(true);
   const [dataCollectionEnabled, setDataCollectionEnabled] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
     api.getPrivacySettings()
@@ -36,6 +39,9 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
     setActivityVisible(value);
     api.updatePrivacySettings({ activityStatusEnabled: value }).catch(() => {});
   };
+
+  if (showPrivacy) return <PrivacyPolicyScreen onBack={() => setShowPrivacy(false)} />;
+  if (showTerms) return <TermsConditionsScreen onBack={() => setShowTerms(false)} />;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -138,7 +144,7 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             securely. We never share your information with third parties without your consent.
           </Text>
           <TouchableOpacity style={styles.outlineButton} activeOpacity={0.8}
-            onPress={() => Alert.alert('Privacy Policy', 'Our full privacy policy is available at nexusctc.com/privacy')}>
+            onPress={() => setShowPrivacy(true)}>
             <Text style={styles.outlineButtonText}>Read Full Privacy Policy</Text>
           </TouchableOpacity>
         </View>
@@ -151,7 +157,7 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             guidelines.
           </Text>
           <TouchableOpacity style={styles.outlineButton} activeOpacity={0.8}
-            onPress={() => Alert.alert('Terms of Service', 'Our full terms of service are available at nexusctc.com/terms')}>
+            onPress={() => setShowTerms(true)}>
             <Text style={styles.outlineButtonText}>Read Terms of Service</Text>
           </TouchableOpacity>
         </View>
