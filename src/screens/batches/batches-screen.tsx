@@ -9,9 +9,12 @@ import {
   Dimensions,
   StatusBar,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import GenBatchDetails from './gen-batch-details';
 import { api } from '../../services/api';
 
@@ -19,15 +22,38 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type SubTabType = 'Ongoing' | 'Upcoming';
 
-export default function BatchesScreen() {
+interface BatchesScreenProps {
+  onOpenNotifications?: () => void;
+}
+
+export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProps) {
   const [activeTab, setActiveTab] = useState<SubTabType>('Ongoing');
   const [selectedGenBatch, setSelectedGenBatch] = useState<string | null>(null);
   const [ongoingBatches, setOngoingBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teacherPhotos, setTeacherPhotos] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchEnrollments();
+    loadTeacherPhotos();
   }, []);
+
+  const loadTeacherPhotos = async () => {
+    try {
+      const res: any = await api.getTeachers();
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      const photos: Record<string, string> = {};
+      list.forEach((t: any) => {
+        const photo = t.profileImage || t.photo || t.avatar;
+        if (t.name && photo) {
+          photos[t.name.trim().toLowerCase()] = photo;
+        }
+      });
+      const userPhoto = await AsyncStorage.getItem('user_profile_photo');
+      if (userPhoto) photos['user'] = userPhoto;
+      setTeacherPhotos(photos);
+    } catch (_) {}
+  };
 
   const fetchEnrollments = async () => {
     try {
@@ -105,15 +131,25 @@ export default function BatchesScreen() {
       {/* 1. HEADER */}
       <View style={styles.header}>
         <View style={{ width: '100%', maxWidth: Platform.OS === 'web' ? 800 : undefined, alignSelf: 'center' }}>
+          {/* Accent line FIRST — above NEXUS title, same as home */}
+          <LinearGradient
+            colors={[
+              'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+              'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+              'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+              'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+              'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+            ]}
+            locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={styles.headerAccentLine}
+          />
           <View style={styles.headerTopRow}>
             <Text style={styles.logoText}>
               NE<Text style={styles.logoTextGold}>X</Text>US
             </Text>
             <View style={styles.headerIcons}>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="book-outline" size={22} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton}>
+              <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
                 <Ionicons name="notifications-outline" size={22} color="#FFF" />
                 <View style={styles.badgeDot} />
               </TouchableOpacity>
@@ -139,7 +175,7 @@ export default function BatchesScreen() {
           </View>
           {/* Card 2: Completed */}
           <View style={styles.statCard}>
-            <Ionicons name="book-outline" size={24} color="#FFB703" style={styles.statIcon} />
+            <Ionicons name="checkmark-circle-outline" size={24} color="#FFB703" style={styles.statIcon} />
             <Text style={styles.statValue}>{ongoingBatches.filter(b => b.status === 'COMPLETED').length}</Text>
             <Text style={styles.statLabel}>Completed</Text>
           </View>
@@ -230,7 +266,14 @@ export default function BatchesScreen() {
                       {/* Teacher */}
                       <View style={styles.profileCol}>
                         <View style={styles.avatarSquircleTeacher}>
-                          <Text style={styles.avatarEmoji}>👨‍💻</Text>
+                          {teacherPhotos[batch.teacher.name.trim().toLowerCase()] || teacherPhotos['user'] ? (
+                            <Image
+                              source={{ uri: teacherPhotos[batch.teacher.name.trim().toLowerCase()] || teacherPhotos['user'] }}
+                              style={styles.teacherAvatarImg}
+                            />
+                          ) : (
+                            <Text style={styles.avatarEmoji}>👨‍💻</Text>
+                          )}
                         </View>
                         <View style={styles.profileTextWrapper}>
                           <Text style={styles.profileLabel}>Teacher</Text>
@@ -341,6 +384,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 16,
     paddingBottom: 20,
+  },
+  headerAccentLine: {
+    height: 4,
+    marginBottom: 10,
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -580,6 +627,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF0FD',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  teacherAvatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
   },
   avatarEmoji: {
     fontSize: 22,
