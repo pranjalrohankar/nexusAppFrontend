@@ -378,8 +378,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     }
   };
 
-  const coursesCount = students.reduce((sum, s) => sum + (s.coursesCount || 0), 0);
-
+  const coursesCount = courses.length;
   return (
     <View style={styles.safeArea}>
       {toast && (
@@ -746,7 +745,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                         <View style={[
                           styles.existingEnrollmentBadge,
                           enr.paymentStatus === 'Paid' ? styles.badgePaid :
-                          enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
+                            enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
                         ]}>
                           <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
                         </View>
