@@ -289,4 +289,10 @@ export const api = {
   getTeacherNotifications: () => get('/notifications/teacher'),
   markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
   markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
+
+  // Student marks & course data for teachers
+  getStudentsByCourse: (courseTitle: string) =>
+    get(`/enrollments/course?courseTitle=${encodeURIComponent(courseTitle)}`),
+  getStudentMarks: (studentId: number | string) =>
+    get(`/test-attempts/student/${studentId}`),
 };
