@@ -13,6 +13,7 @@ import TeacherClassesScreen from '@/screens/teacher/teacher-classes-screen';
 import TeacherDashboardScreen from '@/screens/teacher/teacher-dashboard-screen';
 import TeacherScheduleScreen from '@/screens/teacher/teacher-schedule-screen';
 import UploadRecordingScreen from '@/screens/teacher/upload-recording-screen';
+import StudentMarkInfoScreen from '@/screens/teacher/Student-MarkInfo-screen';
 import TestsScreen from '@/screens/tests/tests-screen';
 import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
@@ -78,6 +79,7 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
   const [activeIndex, setActiveIndex] = useState(0);
   const [showUploadRecording, setShowUploadRecording] = useState(false);
   const [showStudyMaterials, setShowStudyMaterials] = useState(false);
+  const [showStudentMarkInfo, setShowStudentMarkInfo] = useState(false);
 
   const [profileSubView, setProfileSubView] = useState<ProfileSubView>('profile');
   const [returnTabIndex, setReturnTabIndex] = useState<number | null>(null);
@@ -179,6 +181,9 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
     if (showStudyMaterials) {
       setShowStudyMaterials(false);
     }
+    if (showStudentMarkInfo) {
+      setShowStudentMarkInfo(false);
+    }
 
     if (idx === activeIndex) {
       setTabKeys(prev => ({ ...prev, [idx]: prev[idx] + 1 }));
@@ -200,11 +205,17 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
       if (showStudyMaterials) {
         return <StudyMaterialsScreen onClose={() => setShowStudyMaterials(false)} />;
       }
+
+      if (showStudentMarkInfo) {
+        return <StudentMarkInfoScreen onBack={() => setShowStudentMarkInfo(false)} />;
+      }
+
       switch (activeIndex) {
         case 0: return <TeacherDashboardScreen userName={userName}
           onUploadRecording={() => setShowUploadRecording(true)}
           onUploadStudyMaterial={() => setShowStudyMaterials(true)}
           onOpenNotifications={() => handleOpenNotifications(0)}
+          onViewStudentMarks={() => setShowStudentMarkInfo(true)}
         />;
         case 1: return <TeacherClassesScreen onOpenNotifications={() => handleOpenNotifications(1)} />;
         case 2: return <TeacherScheduleScreen />;

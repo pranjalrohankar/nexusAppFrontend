@@ -9,12 +9,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
 
-interface Props {
-  onUploadRecording?: () => void;
-  onUploadStudyMaterial?: () => void;
-  userName?: string;
-}
-
 const ACCENT_COLORS: any = [
   'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
   'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
@@ -48,9 +42,10 @@ interface Props {
   onUploadRecording?: () => void;
   onUploadStudyMaterial?: () => void;
   onOpenNotifications?: () => void;
+  onViewStudentMarks?: () => void;
 }
 
-export default function TeacherDashboardScreen({ onUploadRecording, onUploadStudyMaterial, onOpenNotifications, userName = '' }: Props) {
+export default function TeacherDashboardScreen({ onUploadRecording, onUploadStudyMaterial, onOpenNotifications, onViewStudentMarks, userName = '' }: Props) {
   const [displayName, setDisplayName] = useState(userName || 'Teacher');
   const [batches, setBatches] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
@@ -201,15 +196,29 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
           <ActivityIndicator size="large" color="#7B2CBF" style={{ marginVertical: 32 }} />
         ) : (
           <View style={styles.statsGrid}>
-            {stats.map((s, i) => (
-              <View key={i} style={styles.statCard}>
-                <View style={[styles.statIcon, { backgroundColor: s.iconBg }]}>
-                  <Ionicons name={s.icon as any} size={20} color="#FFF" />
-                </View>
-                <Text style={styles.statValue}>{s.val}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
-              </View>
-            ))}
+            {stats.map((s, i) => {
+              const isTotalStudents = s.label === 'Total Students';
+              const CardWrapper = isTotalStudents ? TouchableOpacity : View;
+              return (
+                <CardWrapper
+                  key={i}
+                  style={styles.statCard}
+                  onPress={isTotalStudents ? onViewStudentMarks : undefined}
+                  activeOpacity={isTotalStudents ? 0.7 : 1}
+                >
+                  <View style={[styles.statIcon, { backgroundColor: s.iconBg }]}>
+                    <Ionicons name={s.icon as any} size={20} color="#FFF" />
+                  </View>
+                  <Text style={styles.statValue}>{s.val}</Text>
+                  <Text style={styles.statLabel}>{s.label}</Text>
+                  {isTotalStudents && (
+                    <View style={styles.clickableIndicator}>
+                      <Ionicons name="chevron-forward" size={14} color="#7B2CBF" />
+                    </View>
+                  )}
+                </CardWrapper>
+              );
+            })}
           </View>
         )}
 
@@ -537,6 +546,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#F1F5F9',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1, shadowRadius: 12, elevation: 5,
+    position: 'relative',
   },
   statIcon: {
     width: 40, height: 40, borderRadius: 10,
@@ -610,4 +620,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, borderRadius: 20,
   },
   enrollBadgeText: { fontSize: 12, fontWeight: '700', color: '#7B2CBF' },
+
+  clickableIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
