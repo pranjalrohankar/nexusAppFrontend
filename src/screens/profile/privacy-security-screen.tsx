@@ -189,8 +189,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
   },
   backButton: {
     padding: 4,
@@ -203,13 +201,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFF',
   },
   scrollContent: {
     padding: 20,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
   },
   bottomSpacer: {
     height: 100,

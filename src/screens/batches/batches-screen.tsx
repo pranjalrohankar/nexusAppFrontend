@@ -130,7 +130,7 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* 1. HEADER */}
       <View style={styles.header}>
-        <View style={{ width: '100%', maxWidth: Platform.OS === 'web' ? 800 : undefined, alignSelf: 'center' }}>
+        <View style={{ width: '100%', paddingHorizontal: 4 }}>
           {/* Accent line FIRST — above NEXUS title, same as home */}
           <LinearGradient
             colors={[
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#7B2CBF',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 20,
   },
   headerAccentLine: {
@@ -440,13 +440,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFF',
   },
   scrollContent: {
-    padding: 16,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
+    padding: 20,
   },
   bottomSpacer: {
     height: 100,

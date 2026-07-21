@@ -420,6 +420,7 @@ disabled={loading}
 </TouchableOpacity>
 
 {/* Footer */}
+{selectedRole === 'student' && (
 <View style={styles.footerRow}>
 <Text style={styles.footerText}>
 Want to start learning?{' '}
@@ -431,21 +432,10 @@ Enquiry Form
 </Text>
 </Text>
 </View>
+)}
 
 </View>
 </Animated.View>
-
-{/* Demo Credentials Box */}
-<View style={styles.demoBox}>
-<Ionicons name="information-circle-outline" size={14} color="#FFB703" />
-<Text style={styles.demoBoxText}>
-{selectedRole === 'teacher'
-? 'Demo: priya.sharma@nexus.com / teacher123'
-: selectedRole === 'admin'
-? 'Demo: admin@nexus.com / admin123'
-: 'Demo: student@nexus.com / student123'}
-</Text>
-</View>
 
 <View style={styles.footerSpacer} />
 </ScrollView>
