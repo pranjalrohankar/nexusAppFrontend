@@ -275,7 +275,7 @@ export default function TestsScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. HEADER */}
       <View style={styles.header}>
-        <View style={{ width: '100%', maxWidth: Platform.OS === 'web' ? 800 : undefined, alignSelf: 'center' }}>
+        <View style={{ width: '100%', paddingHorizontal: 4 }}>
           <View style={styles.headerTopRow}>
             {isDetailActive ? (
               <TouchableOpacity style={styles.backButton} onPress={handleBackAction}>
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#7B2CBF',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 20,
   },
   headerTopRow: {
@@ -691,14 +691,11 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFF',
   },
   scrollContent: {
-    padding: 16,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
-    paddingBottom: 100, // Ensure content doesn't cover tab bar
+    padding: 20,
+    paddingBottom: 100,
   },
   bottomSpacer: {
     height: 80,

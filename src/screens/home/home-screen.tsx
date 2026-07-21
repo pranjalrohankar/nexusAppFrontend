@@ -1042,13 +1042,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // Light content background
+    backgroundColor: '#FFF',
   },
   scrollContent: {
-    padding: 16,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
+    padding: 20,
   },
   bottomSpacer: {
     height: 100, // Safe padding for bottom tabs
@@ -1061,10 +1058,7 @@ const styles = StyleSheet.create({
   },
   headerAccentLine: { height: 4, marginBottom: 10 },
   headerInner: {
-    paddingHorizontal: 16,
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
-    width: '100%',
+    paddingHorizontal: 20,
   },
   logoRow: {
     flexDirection: 'row',
