@@ -630,13 +630,10 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#F9FAFB', // Light gray main screen background
+    backgroundColor: '#FFF',
   },
   scrollContent: {
     paddingBottom: 26,
-    width: '100%',
-    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
-    alignSelf: 'center',
   },
   bottomSpacer: {
     height: 100, // Enough spacing to not be covered by floating tab bar

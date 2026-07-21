@@ -246,12 +246,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   backBtn: { padding: 4 },
   headerTitle: { color: '#FFF', fontSize: 24, fontWeight: '700' },
-  scroll: { flex: 1, backgroundColor: '#F9FAFB' },
+  scroll: { flex: 1, backgroundColor: '#FFF' },
   scrollContent: {
     padding: 20,
-    width: '100%',
-    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
-    alignSelf: 'center',
   },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },

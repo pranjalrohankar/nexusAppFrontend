@@ -334,8 +334,8 @@ export default function AccountSettingsScreen({
           {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
         </TouchableOpacity>
 
-        {/* Delete Account — teacher/admin only */}
-        {userRole !== 'student' && (
+        {/* Delete Account — admin only */}
+        {userRole === 'admin' && (
           <TouchableOpacity
             style={styles.deleteBtn}
             activeOpacity={0.8}
@@ -371,10 +371,7 @@ const styles = StyleSheet.create({
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
   scroll: { flex: 1, backgroundColor: '#F5F5F5' },
   scrollContent: {
-    paddingHorizontal: 16, paddingTop: 0, paddingBottom: 40,
-    width: '100%',
-    maxWidth: (Platform.OS as string) === 'web' ? 800 : undefined,
-    alignSelf: 'center',
+    paddingHorizontal: 20, paddingTop: 0, paddingBottom: 40,
   },
   avatarCard: {
     backgroundColor: '#FFF', borderRadius: 20, alignItems: 'center',

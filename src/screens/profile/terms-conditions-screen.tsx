@@ -174,12 +174,9 @@ const styles = StyleSheet.create({
   backButton: { padding: 4, marginRight: 14 },
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
-  scroll: { flex: 1, backgroundColor: '#F9FAFB' },
+  scroll: { flex: 1, backgroundColor: '#FFF' },
   scrollContent: {
-    padding: 16,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 800 : undefined,
-    alignSelf: 'center',
+    padding: 20,
   },
   introCard: {
     flexDirection: 'row',
