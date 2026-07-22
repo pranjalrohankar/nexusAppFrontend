@@ -69,9 +69,9 @@ export default function TeacherAssessmentsScreen() {
   const [showCreateWizard, setShowCreateWizard] = useState(false);
 
   const defaultTests: Test[] = [
-    { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 30, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    { id: '2', title: 'React Advanced Patterns Test', questionsCount: 40, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 25, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
+    // { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 30, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
+    // { id: '2', title: 'React Advanced Patterns Test', questionsCount: 40, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
+    // { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 25, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
   ];
 
   const [tests, setTests] = useState<Test[]>(defaultTests);
