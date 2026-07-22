@@ -20,9 +20,7 @@ interface PrivacySecurityScreenProps {
 }
 
 export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenProps) {
-  const [profileVisible, setProfileVisible] = useState(true);
   const [activityVisible, setActivityVisible] = useState(true);
-  const [dataCollectionEnabled, setDataCollectionEnabled] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
@@ -81,26 +79,8 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
         {/* 3. PRIVACY SETTINGS */}
         <Text style={styles.sectionHeader}>Privacy Settings</Text>
         <View style={styles.cardContainer}>
-          {/* Profile Visibility */}
-          <View style={styles.rowItem}>
-            <View style={[styles.iconContainer, { backgroundColor: '#FAF5FF' }]}>
-              <Ionicons name="eye-outline" size={18} color="#7B2CBF" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.itemTitle}>Profile Visibility</Text>
-              <Text style={styles.itemSubtitle}>Show profile to other students</Text>
-            </View>
-            <Switch
-              value={profileVisible}
-              onValueChange={setProfileVisible}
-              trackColor={{ false: '#D1D5DB', true: '#C084FC' }}
-              thumbColor={profileVisible ? '#7B2CBF' : '#F3F4F6'}
-              ios_backgroundColor="#E5E7EB"
-            />
-          </View>
-
           {/* Activity Status */}
-          <View style={styles.rowItem}>
+          <View style={[styles.rowItem, { borderBottomWidth: 0 }]}>
             <View style={[styles.iconContainer, { backgroundColor: '#EFF6FF' }]}>
               <Ionicons name="time-outline" size={18} color="#3B82F6" />
             </View>
@@ -117,23 +97,7 @@ export default function PrivacySecurityScreen({ onBack }: PrivacySecurityScreenP
             />
           </View>
 
-          {/* Data Collection */}
-          <View style={[styles.rowItem, { borderBottomWidth: 0 }]}>
-            <View style={[styles.iconContainer, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="analytics-outline" size={18} color="#FF7A00" />
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.itemTitle}>Data Collection</Text>
-              <Text style={styles.itemSubtitle}>Allow analytics data</Text>
-            </View>
-            <Switch
-              value={dataCollectionEnabled}
-              onValueChange={setDataCollectionEnabled}
-              trackColor={{ false: '#D1D5DB', true: '#C084FC' }}
-              thumbColor={dataCollectionEnabled ? '#7B2CBF' : '#F3F4F6'}
-              ios_backgroundColor="#E5E7EB"
-            />
-          </View>
+
         </View>
 
         {/* 4. PRIVACY POLICY BLOCK */}

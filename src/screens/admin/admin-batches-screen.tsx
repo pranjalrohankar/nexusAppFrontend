@@ -21,6 +21,8 @@ interface Batch {
   classDays: ClassDay[];
   status: BatchStatus;
   studentsCount?: number;
+  duration?: string;
+  classTimings?: string;
   courseTimings?: string;
   googleMeetLink?: string;
   meetLink?: string;
@@ -52,8 +54,10 @@ export default function AdminBatchesScreen() {
   const [formBatchName, setFormBatchName] = useState('');
   const [formCourse, setFormCourse] = useState('');
   const [formInstructor, setFormInstructor] = useState('');
+  const [formDuration, setFormDuration] = useState('');
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
+  const [formClassTime, setFormClassTime] = useState('');
   const [formStatus, setFormStatus] = useState<BatchStatus>('UPCOMING');
   const [formClassDays, setFormClassDays] = useState<ClassDay[]>([]);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
@@ -121,8 +125,10 @@ export default function AdminBatchesScreen() {
     setFormBatchName('');
     setFormCourse('');
     setFormInstructor('');
+    setFormDuration('');
     setFormStartDate('');
     setFormEndDate('');
+    setFormClassTime('');
     setFormStatus('UPCOMING');
     setFormClassDays([]);
     setModalVisible(true);
@@ -133,8 +139,10 @@ export default function AdminBatchesScreen() {
     setFormBatchName(batch.batchName);
     setFormCourse(batch.selectCourse);
     setFormInstructor(batch.instructor);
+    setFormDuration(batch.duration || '');
     setFormStartDate(batch.startDate);
     setFormEndDate(batch.endDate);
+    setFormClassTime(batch.classTimings || batch.courseTimings || '');
     setFormStatus(batch.status);
     setFormClassDays(batch.classDays || []);
     setModalVisible(true);
@@ -151,9 +159,12 @@ export default function AdminBatchesScreen() {
         batchName: formBatchName,
         selectCourse: formCourse,
         instructor: formInstructor,
+        duration: formDuration,
         startDate: formStartDate,
         endDate: formEndDate,
         classDays: formClassDays,
+        classTimings: formClassTime,
+        courseTimings: formClassTime,
         status: formStatus,
       };
       console.log('Saving batch:', payload);
@@ -378,7 +389,7 @@ export default function AdminBatchesScreen() {
                     <View style={styles.infoRow}>
                       <Ionicons name="time-outline" size={14} color="#6B7280" />
                       <Text style={styles.infoText}>
-                        {selectedCourse?.classTimings || batch.courseTimings || '—'}
+                        {batch.classTimings || batch.courseTimings || selectedCourse?.classTimings || '—'}
                       </Text>
                     </View>
                     <View style={styles.infoRow}>
@@ -535,7 +546,17 @@ export default function AdminBatchesScreen() {
                 </View>
               )}
 
-              <Text style={styles.sectionTitle}>SCHEDULE</Text>
+              <Text style={styles.sectionTitle}>DURATION & SCHEDULE</Text>
+
+              <Text style={styles.fieldLabel}>Duration *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 3 Months"
+                value={formDuration}
+                onChangeText={setFormDuration}
+                placeholderTextColor="#9CA3AF"
+              />
+
               <View style={styles.dateRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>Start Date *</Text>
@@ -548,7 +569,7 @@ export default function AdminBatchesScreen() {
                   />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.fieldLabel}>End Date *</Text>
+                  <Text style={styles.fieldLabel}>End Date</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="YYYY-MM-DD"
@@ -567,6 +588,15 @@ export default function AdminBatchesScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={styles.fieldLabel}>Class Time *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 8:00 PM - 10:00 PM"
+                value={formClassTime}
+                onChangeText={setFormClassTime}
+                placeholderTextColor="#9CA3AF"
+              />
 
               <Text style={styles.sectionTitle}>STATUS</Text>
               <Text style={styles.fieldLabel}>Status</Text>

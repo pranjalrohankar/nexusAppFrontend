@@ -19,7 +19,7 @@ const ACCENT_COLORS: any = [
   'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
   'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
 ];
-const ACCENT_LOCS: any = [0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1];
+const ACCENT_LOCS: any = [0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1];
 
 function initials(name: string = '') {
   const parts = name.trim().split(' ').filter(Boolean);
@@ -135,9 +135,9 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <Ionicons name="chevron-back" size={22} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.logoText}>
+          {/* <Text style={styles.logoText}>
             NE<Text style={styles.logoTextGold}>X</Text>US
-          </Text>
+          </Text> */}
           <View style={{ width: 36 }} />
         </View>
         <Text style={styles.welcomeText}>Student Marks</Text>
@@ -167,7 +167,7 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.tabsRow}
-        style={{ flexGrow: 0 }}
+        style={styles.tabsScrollView}
       >
         {['All', ...courses.map((c: any) => c.title)].map((title, i) => {
           const active = selectedCourse === title;
@@ -277,7 +277,9 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
+  // CHANGED: page background is now white instead of purple.
+  // Only the header below stays purple.
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
 
   header: {
     backgroundColor: '#7B2CBF',
@@ -316,9 +318,18 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: '#1F2937' },
 
-  tabsRow: { paddingHorizontal: 20, paddingVertical: 14, gap: 8 },
+  tabsScrollView: { flexGrow: 0, flexShrink: 0, height: 56, zIndex: 1 },
+  tabsRow: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 8,
+    alignItems: 'center',
+  },
   tabChip: {
-    paddingHorizontal: 16, paddingVertical: 8,
+    paddingHorizontal: 16,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20, backgroundColor: '#F3F4F6',
     marginRight: 8,
   },
@@ -326,7 +337,7 @@ const styles = StyleSheet.create({
   tabChipText: { fontSize: 13, fontWeight: '600', color: '#4B5563' },
   tabChipTextActive: { color: '#FFF' },
 
-  studentGrid: { paddingHorizontal: 20, paddingBottom: 40, gap: 12 },
+  studentGrid: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 40, gap: 12 },
   studentCard: {
     flex: 1,
     backgroundColor: '#FFF',

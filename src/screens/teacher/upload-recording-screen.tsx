@@ -59,7 +59,7 @@ interface UploadRecordingScreenProps {
 }
 
 interface ClassRecording {
-  id: number;
+  id: number | string;
   title: string;
   classDate?: string;
   duration?: string;
@@ -115,7 +115,7 @@ function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(player.currentTime ?? 0);
-      setIsPlaying(!player.paused);
+      setIsPlaying(player.playing);
     }, 500);
     return () => clearInterval(interval);
   }, [player]);
@@ -178,7 +178,7 @@ function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string
             <TouchableOpacity onPress={toggleMute} style={vm.iconBtn}>
               <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { try { player.enterFullscreen?.(); } catch {} }} style={vm.iconBtn}>
+            <TouchableOpacity onPress={() => { try { (player as any).enterFullscreen?.(); } catch {} }} style={vm.iconBtn}>
               <Ionicons name="expand" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { setShowMenu(v => !v); setShowSpeedMenu(false); }} style={vm.iconBtn}>
@@ -371,9 +371,9 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     }
   };
 
-  const getStreamUrl = (id: number) => `${API_BASE}/api/recordings/stream/${id}`;
+  const getStreamUrl = (id: number | string) => api.getRecordingStreamUrl(id);
 
-  const handleDelete = (id: number, recTitle: string) => {
+  const handleDelete = (id: number | string, recTitle: string) => {
     const doDelete = async () => {
       try {
         await api.deleteClassRecording(id);

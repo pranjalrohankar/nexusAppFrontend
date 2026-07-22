@@ -547,100 +547,19 @@ export default function AdminCoursesScreen() {
                 />
               </View>
 
-              {/* Duration & Schedule */}
-              <Text style={styles.formSectionTitle}>Duration & Schedule</Text>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Duration *</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formDuration}
-                  onChangeText={setFormDuration}
-                  placeholder="e.g. 3 Months"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.fieldLabel}>Start Date *</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formStartDate}
-                    onChangeText={setFormStartDate}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.fieldLabel}>End Date</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formEndDate}
-                    onChangeText={setFormEndDate}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Class Days *</Text>
-                <View style={styles.daysRow}>
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                    <TouchableOpacity 
-                      key={day} 
-                      style={[styles.dayChip, formClassDays.includes(day) && styles.dayChipActive]} 
-                      onPress={() => {
-                        setFormClassDays(prev => 
-                          prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
-                        );
-                      }}
-                    >
-                      <Text style={[styles.dayChipText, formClassDays.includes(day) && styles.dayChipTextActive]}>
-                        {day}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Class Time *</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formClassTime}
-                  onChangeText={setFormClassTime}
-                  placeholder="e.g. 8:00 PM - 10:00 PM"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
               {/* Additional Details */}
               <Text style={styles.formSectionTitle}>Additional Details</Text>
 
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.fieldLabel}>Duration</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formDuration}
-                    onChangeText={setFormDuration}
-                    placeholder="e.g. 3 months"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.fieldLabel}>Total Sessions</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formTotalSessions}
-                    onChangeText={setFormTotalSessions}
-                    keyboardType="number-pad"
-                    placeholder="48"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Total Sessions</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={formTotalSessions}
+                  onChangeText={setFormTotalSessions}
+                  keyboardType="number-pad"
+                  placeholder="48"
+                  placeholderTextColor="#9CA3AF"
+                />
               </View>
 
               <View style={styles.formGroup}>
