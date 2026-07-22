@@ -122,14 +122,19 @@ export default function TestsScreen() {
 
   const handleOpenMaterial = async (item: RealMaterial) => {
     try {
-      const url = item.fileUrl
-        ? item.fileUrl.startsWith('http') ? item.fileUrl : `${API_BASE}${item.fileUrl}`
-        : null;
+      const url = item.id
+        ? api.getMaterialDownloadUrl(item.id)
+        : (item.fileUrl ? (item.fileUrl.startsWith('http') ? item.fileUrl : `${getApiBaseUrl().replace('/api', '')}${item.fileUrl}`) : null);
       if (!url) { Alert.alert('Unavailable', 'No file available.'); return; }
       if (Platform.OS === 'web') {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error();
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = item.fileName || 'file';
+        a.href = blobUrl; a.download = item.fileName || 'file';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
         return;
       }
       await Linking.openURL(url);

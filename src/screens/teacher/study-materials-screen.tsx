@@ -114,7 +114,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         course: item.course || '',
         batch: item.batch || '',
         fileName: item.fileName || 'file',
-        fileUri: item.id ? `${API_BASE_URL}/api/materials/download/${item.id}` : '',
+        fileUri: item.id ? api.getMaterialDownloadUrl(item.id) : '',
         downloads: item.downloads || 0,
       }));
       setMaterials(mapped);
@@ -184,7 +184,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         course: res?.course || course.trim(),
         batch: res?.batch || batch.trim(),
         fileName: res?.fileName || selectedFile.name || 'material',
-        fileUri: res?.id ? `${API_BASE_URL}/api/materials/download/${res.id}` : '',
+        fileUri: res?.id ? api.getMaterialDownloadUrl(res.id) : '',
         downloads: 0,
       }, ...prev]);
       loadMaterials().catch(() => { });
@@ -215,10 +215,11 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   };
 
   const handleOpenMaterial = async (item: Material) => {
-    if (!item.fileUri) return Alert.alert('Error', 'No file available.');
+    const downloadUrl = item.id ? api.getMaterialDownloadUrl(item.id) : item.fileUri;
+    if (!downloadUrl) return Alert.alert('Error', 'No file available.');
     try {
       if (Platform.OS === 'web') {
-        const res = await fetch(item.fileUri);
+        const res = await fetch(downloadUrl);
         if (!res.ok) throw new Error();
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -227,7 +228,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
         document.body.appendChild(link); link.click();
         document.body.removeChild(link); URL.revokeObjectURL(url);
       } else {
-        await Linking.openURL(item.fileUri);
+        await Linking.openURL(downloadUrl);
       }
     } catch {
       Alert.alert('Error', 'Failed to open file');

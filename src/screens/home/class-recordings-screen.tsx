@@ -20,15 +20,15 @@ import { api, getApiBaseUrl } from '@/services/api';
 
 const IS_WEB = Platform.OS === 'web';
 
-// Always resolve fresh so mobile gets correct host, not stale localhost
-const getStreamUrl = (id: number) => `${getApiBaseUrl().replace('/api', '')}/api/recordings/stream/${id}`;
+// Always resolve fresh so mobile/web gets correct host, not stale localhost
+const getStreamUrl = (id: number | string) => api.getRecordingStreamUrl(id);
 
 interface ClassRecordingsScreenProps {
   onBack: () => void;
 }
 
 interface RecordingItem {
-  id: number;
+  id: number | string;
   title: string;
   course: string;
   batch: string;
@@ -65,7 +65,7 @@ function MobileVideoPlayer({ uri, title, onClose }: { uri: string; title: string
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(player.currentTime ?? 0);
-      setIsPlaying(!player.paused);
+      setIsPlaying(player.playing);
     }, 500);
     return () => clearInterval(interval);
   }, [player]);
@@ -151,7 +151,7 @@ function MobileVideoPlayer({ uri, title, onClose }: { uri: string; title: string
             <TouchableOpacity onPress={toggleMute} style={vm.iconBtn}>
               <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { try { player.enterFullscreen?.(); } catch {} }} style={vm.iconBtn}>
+            <TouchableOpacity onPress={() => { try { (player as any).enterFullscreen?.(); } catch {} }} style={vm.iconBtn}>
               <Ionicons name="expand" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { setShowMenu(v => !v); setShowSpeedMenu(false); }} style={vm.iconBtn}>

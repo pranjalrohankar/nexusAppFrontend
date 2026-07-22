@@ -4,6 +4,10 @@ import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
   if (Platform.OS === "web") {
+    if (typeof window !== "undefined" && window.location && window.location.hostname) {
+      const host = window.location.hostname;
+      return `http://${host}:8080/api`;
+    }
     return "http://localhost:8080/api";
   }
 
@@ -32,6 +36,19 @@ export function getApiBaseUrl() {
   }
 
   return "http://localhost:8080/api";
+}
+
+export function resolveDynamicFileUrl(urlOrPath: string): string {
+  if (!urlOrPath) return '';
+  if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://') || urlOrPath.startsWith('data:') || urlOrPath.startsWith('blob:')) {
+    const activeApiBase = getApiBaseUrl().replace('/api', '');
+    return urlOrPath
+      .replace(/http:\/\/localhost:8080/g, activeApiBase)
+      .replace(/http:\/\/10\.0\.2\.2:8080/g, activeApiBase);
+  }
+  const cleanPath = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`;
+  const base = getApiBaseUrl().replace(/\/api$/, '');
+  return `${base}${cleanPath}`;
 }
 
 const BASE_URL = getApiBaseUrl();
@@ -260,7 +277,7 @@ export const api = {
   getClassRecordings: () => get("/recordings"),
   uploadClassRecording: (data: FormData) =>
     postFormData("/recordings/upload", data),
-  getRecordingStreamUrl: (id: number) => `${BASE_URL}/recordings/stream/${id}`,
+  getRecordingStreamUrl: (id: number | string) => `${getApiBaseUrl()}/recordings/stream/${id}`,
   deleteClassRecording: (id: number | string) => del(`/recordings/${id}`),
 
   getLoginHistory: (userId: number | string) =>
