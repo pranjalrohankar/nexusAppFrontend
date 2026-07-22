@@ -82,7 +82,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 
   const [students, setStudents] = useState<Student[]>(() => {
     const cached = adminDataCache.students;
-    return cached.length > 0 ? cached.slice().reverse() : [];
+    return cached.length > 0 ? cached.slice().sort((a: any, b: any) => b.id - a.id) : [];
   });
   const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
   const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string }[]>([]);
@@ -124,7 +124,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     try {
       const res = await api.getStudents();
       if (res.success) {
-        const list = res.data.slice().reverse();
+        const list = res.data.slice().sort((a: Student, b: Student) => b.id - a.id);
         adminDataCache.students = res.data;
         setStudents(list);
         if (onCountChange) onCountChange(list.length);

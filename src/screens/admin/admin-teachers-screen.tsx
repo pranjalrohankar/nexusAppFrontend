@@ -75,7 +75,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
 
   const [teachers, setTeachers] = useState<Teacher[]>(() => {
     const cached = adminDataCache.teachers;
-    return cached.length > 0 ? mapTeachers(cached).slice().reverse() : [];
+    return cached.length > 0 ? mapTeachers(cached).slice().sort((a, b) => Number(b.id) - Number(a.id)) : [];
   });
   const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
   // Start loading=true always so we always fetch fresh data on mount
@@ -110,7 +110,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           : [];
       console.log('[fetchTeachers] mapped raw count:', raw.length, 'first item:', raw[0]);
       adminDataCache.teachers = raw;
-      const list = mapTeachers(raw).slice().reverse();
+      const list = mapTeachers(raw).slice().sort((a, b) => Number(b.id) - Number(a.id));
       console.log('[fetchTeachers] final list count:', list.length);
       setTeachers(list);
       if (onCountChange) onCountChange(list.length);
@@ -266,22 +266,30 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
         console.log('[createTeacher] API response:', JSON.stringify(res));
 
         if (res.success) {
-          // Step 2: Assign courses via the teacher-specific endpoint so the
-          // backend uses course-assignment logic, not student-enrollment logic.
-          // createUser returns data = plain userId (a number), not an object
-          const newTeacherId = typeof res.data === 'object'
-            ? (res.data?.teacherId ?? res.data?.id ?? res.data?.userId)
-            : res.data; // plain number — this is the user id, need teacher id below
-          if (selectedCourseIds.length > 0 && newTeacherId) {
-            await Promise.all(
-              selectedCourseIds.map(courseId =>
-                api.assignCourse(newTeacherId, courseId).catch((err: any) => {
-                  // Log but don't block — teacher is created; courses can be
-                  // assigned later via the Edit modal.
-                  console.warn(`assignCourse(${newTeacherId}, ${courseId}) failed:`, err);
-                })
-              )
-            );
+          // Step 2: Resolve the real Teacher ID by fetching the updated teacher list.
+          // createUser returns the User ID, but assignCourse needs the Teacher ID.
+          if (selectedCourseIds.length > 0) {
+            try {
+              const teachersRes = await api.getTeachers();
+              const raw: any[] = Array.isArray(teachersRes)
+                ? teachersRes
+                : Array.isArray(teachersRes?.data) ? teachersRes.data : [];
+              const match = raw.find(
+                (t: any) => (t.email || '').toLowerCase() === formEmail.trim().toLowerCase()
+              );
+              const newTeacherId = match?.teacherId ?? match?.id;
+              if (newTeacherId) {
+                await Promise.all(
+                  selectedCourseIds.map(courseId =>
+                    api.assignCourse(newTeacherId, courseId).catch((err: any) => {
+                      console.warn(`assignCourse(${newTeacherId}, ${courseId}) failed:`, err);
+                    })
+                  )
+                );
+              }
+            } catch (err) {
+              console.warn('Could not resolve teacher ID for course assignment:', err);
+            }
           }
 
           await fetchTeachers();
