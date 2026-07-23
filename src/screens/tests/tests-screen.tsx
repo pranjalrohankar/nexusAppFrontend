@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ActiveTestScreen from './active-test-screen';
+import CourseTopicsScreen from './Course-topics-screen';
 import { api, getApiBaseUrl, loadToken } from '@/services/api';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -38,6 +39,7 @@ interface RealMaterial {
   description: string;
   course: string;
   batch: string;
+  topic: string;
   fileType: string;
   fileName: string;
   fileUrl: string;
@@ -274,7 +276,26 @@ export default function TestsScreen() {
     }
   };
 
-  const isDetailActive = activeTab === 'StudyMaterial' && selectedCourseForMaterials !== null;
+  const isDetailActive = false;
+
+  // ── When a course is selected → show CourseTopicsScreen (topics → materials) ──
+  if (activeTab === 'StudyMaterial' && selectedCourseForMaterials !== null) {
+    const courseMaterials = allMaterials.filter(m => {
+      const mat = (m.course ?? '').toLowerCase().trim();
+      const sel = selectedCourseForMaterials.toLowerCase().trim();
+      return mat === sel || mat.includes(sel) || sel.includes(mat);
+    });
+    return (
+      <CourseTopicsScreen
+        courseTitle={selectedCourseForMaterials}
+        materials={courseMaterials as any}
+        onBack={() => {
+          setSelectedCourseForMaterials(null);
+          setMaterialSearchQuery('');
+        }}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -488,137 +509,40 @@ export default function TestsScreen() {
             })()}
           </View>
         ) : (
-          // STUDY MATERIAL FLOW
-          selectedCourseForMaterials === null ? (
-            // Course List — from real enrollments
-            <View style={styles.listContainer}>
-              {enrollmentsLoading ? (
-                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                  <ActivityIndicator size="large" color="#7B2CBF" />
-                  <Text style={styles.noDataText}>Loading your courses...</Text>
-                </View>
-              ) : enrollments.length === 0 ? (
-                <Text style={styles.noDataText}>You are not enrolled in any courses yet.</Text>
-              ) : (
-                enrollments.map((enr) => (
-                  <TouchableOpacity
-                    key={enr.id}
-                    style={styles.courseCard}
-                    onPress={() => setSelectedCourseForMaterials(enr.courseTitle)}
-                    activeOpacity={0.9}
-                  >
-                    <View style={styles.courseInfo}>
-                      <Text style={styles.courseTitle}>{enr.courseTitle}</Text>
-                      {enr.enrollmentDate ? (
-                        <View style={styles.courseScheduleRow}>
-                          <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
-                          <Text style={styles.courseScheduleText}>Enrolled: {enr.enrollmentDate}</Text>
-                        </View>
-                      ) : null}
-                      {/* <Text style={styles.courseInstructorLabel}>
-                        Status: <Text style={{ fontWeight: 'bold', color: '#FFF' }}>{enr.paymentStatus || '—'}</Text>
-                      </Text> */}
-                    </View>
-                    <View style={styles.courseArrowBtn}>
-                      <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                    </View>
-                  </TouchableOpacity>
-                ))
-              )}
-            </View>
-          ) : (
-            // Material list for selected course
-            <View style={styles.listContainer}>
-              <View style={styles.searchWrapper}>
-                <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search materials..."
-                  placeholderTextColor="#9CA3AF"
-                  value={materialSearchQuery}
-                  onChangeText={setMaterialSearchQuery}
-                />
+          // STUDY MATERIAL FLOW — only course list shown here;
+          // tapping a course renders CourseTopicsScreen (above, before this return)
+          <View style={styles.listContainer}>
+            {enrollmentsLoading ? (
+              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                <ActivityIndicator size="large" color="#7B2CBF" />
+                <Text style={styles.noDataText}>Loading your courses...</Text>
               </View>
-
-              {materialsLoading ? (
-                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                  <ActivityIndicator size="large" color="#7B2CBF" />
-                  <Text style={styles.noDataText}>Loading materials...</Text>
-                </View>
-              ) : currentMaterialsList.length === 0 ? (
-                <Text style={styles.noDataText}>
-                  {materialSearchQuery ? 'No materials match your search.' : 'No study materials uploaded for this course yet.'}
-                </Text>
-              ) : (
-                currentMaterialsList.map((material) => {
-                  const fi = getFileIcon(material.fileType);
-                  const img = isImage(material.fileType, material.fileName);
-                  const imgUrl = material.fileUrl
-                    ? material.fileUrl.startsWith('http') ? material.fileUrl : `${API_BASE}${material.fileUrl}`
-                    : null;
-                  return (
-                    <View key={material.id} style={styles.materialCard}>
-                      {/* Image preview for IMAGE files */}
-                      {img && imgUrl ? (
-                        <Image
-                          source={{ uri: imgUrl }}
-                          style={{ width: '100%', height: 160, borderRadius: 12, marginBottom: 14 }}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-
-                      {/* Header Row */}
-                      <View style={styles.materialHeader}>
-                        <View style={[styles.materialIconContainer, { backgroundColor: fi.bg }]}>
-                          <Ionicons name={fi.icon as any} size={24} color={fi.color} />
-                        </View>
-                        <View style={styles.materialTitleWrapper}>
-                          <Text style={styles.materialTitle}>{material.title}</Text>
-                          {material.description ? (
-                            <Text style={styles.materialAuthor} numberOfLines={2}>{material.description}</Text>
-                          ) : null}
-                          <View style={styles.materialTagRow}>
-                            <Ionicons name="folder-outline" size={12} color="#7B2CBF" />
-                            <Text style={styles.materialTagText}>{material.batch || material.course}</Text>
-                          </View>
-                        </View>
+            ) : enrollments.length === 0 ? (
+              <Text style={styles.noDataText}>You are not enrolled in any courses yet.</Text>
+            ) : (
+              enrollments.map((enr) => (
+                <TouchableOpacity
+                  key={enr.id}
+                  style={styles.courseCard}
+                  onPress={() => setSelectedCourseForMaterials(enr.courseTitle)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.courseInfo}>
+                    <Text style={styles.courseTitle}>{enr.courseTitle}</Text>
+                    {enr.enrollmentDate ? (
+                      <View style={styles.courseScheduleRow}>
+                        <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
+                        <Text style={styles.courseScheduleText}>Enrolled: {enr.enrollmentDate}</Text>
                       </View>
-
-                      {/* Metadata Row */}
-                      <View style={styles.materialMetaRow}>
-                        {material.uploadedByEmail ? (
-                          <Text style={styles.materialMetaText}>{material.uploadedByEmail}</Text>
-                        ) : null}
-                        {material.uploadedByEmail && material.uploadedAt ? (
-                          <Text style={styles.materialMetaText}>|</Text>
-                        ) : null}
-                        {material.uploadedAt ? (
-                          <>
-                            <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
-                            <Text style={styles.materialMetaText}>
-                              {new Date(material.uploadedAt).toLocaleDateString()}
-                            </Text>
-                          </>
-                        ) : null}
-                        <Text style={styles.materialMetaText}>|</Text>
-                        <Ionicons name="document-outline" size={12} color="#9CA3AF" />
-                        <Text style={styles.materialMetaText}>{material.fileType?.toUpperCase() || 'FILE'}</Text>
-                      </View>
-
-                      {/* Open / Download Button */}
-                      <TouchableOpacity
-                        style={styles.downloadButton}
-                        onPress={() => handleOpenMaterial(material)}
-                      >
-                        <Ionicons name={img ? 'eye-outline' : 'cloud-download-outline'} size={18} color="#FFFFFF" />
-                        <Text style={styles.downloadButtonText}>{img ? 'View Image' : 'Open / Download'}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          )
+                    ) : null}
+                  </View>
+                  <View style={styles.courseArrowBtn}>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
         )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
