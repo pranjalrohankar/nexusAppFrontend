@@ -235,8 +235,16 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
     [...enquiries].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
   );
 
+  const handleMarkAllRead = () => {
+    const unread = localEnquiries.filter(e => !e.isRead);
+    if (unread.length === 0) return;
+    unread.forEach(e => api.markEnquiryRead(e.id).catch(() => {}));
+    const updated = localEnquiries.map(e => ({ ...e, isRead: true }));
+    setLocalEnquiries(updated);
+    onEnquiriesUpdate(updated);
+  };
+
   const handleRead = (id: number) => {
-    const updated = localEnquiries.map(e => e.id === id ? { ...e, isRead: true } : e);
     setLocalEnquiries(updated);
     onEnquiriesUpdate(updated);
   };
@@ -269,8 +277,9 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
             <Ionicons name="arrow-back" size={20} color="#FFF" />
           </TouchableOpacity>
           <Text style={eq.headerTitle}>Enquiries</Text>
-          <TouchableOpacity style={eq.filterBtn}>
-            <Ionicons name="filter" size={18} color="#FFF" />
+          <TouchableOpacity style={eq.markAllBtn} onPress={handleMarkAllRead}>
+            <Ionicons name="checkmark-done-outline" size={15} color="#7B2CBF" />
+            <Text style={eq.markAllText}>Read All</Text>
           </TouchableOpacity>
         </View>
         <View style={eq.searchBar}>
@@ -352,7 +361,8 @@ const eq = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   backBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { flex: 1, fontSize: 26, fontWeight: '700', color: '#FFF' },
-  filterBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  markAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  markAllText: { fontSize: 12, fontWeight: '700', color: '#7B2CBF' },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, paddingHorizontal: 14, height: 46, gap: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#1F2937' },
   list: { flex: 1, backgroundColor: '#F3F4F6' },

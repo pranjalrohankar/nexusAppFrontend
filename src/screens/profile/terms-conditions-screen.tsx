@@ -102,7 +102,7 @@ export default function TermsConditionsScreen({ onBack }: Props) {
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTitle}>Terms & Conditions</Text>
-            <Text style={styles.headerSub}>Last updated: June 11, 2026</Text>
+
           </View>
         </View>
       </View>

@@ -85,7 +85,7 @@ export default function PrivacyPolicyScreen({ onBack }: Props) {
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTitle}>Privacy Policy</Text>
-            <Text style={styles.headerSub}>Last updated: June 11, 2026</Text>
+
           </View>
         </View>
       </View>

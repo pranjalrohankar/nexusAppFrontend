@@ -252,23 +252,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   <View style={[styles.skillsBadge, { backgroundColor: '#E0F2FE' }]}><Text style={[styles.skillsBadgeText, { color: '#0369A1' }]}>Operations</Text></View>
                   <View style={[styles.skillsBadge, { backgroundColor: '#F3E8FF' }]}><Text style={[styles.skillsBadgeText, { color: '#7B2CBF' }]}>Database</Text></View>
                 </>
-              ) : (
-                studentEnrollments.length > 0
-                  ? studentEnrollments.slice(0, 3).map((e, i) => {
-                      const colors = [
-                        { bg: '#F3E8FF', text: '#7B2CBF' },
-                        { bg: '#ECFDF5', text: '#10B981' },
-                        { bg: '#FFF7ED', text: '#EA580C' },
-                      ];
-                      const c = colors[i % colors.length];
-                      return (
-                        <View key={i} style={[styles.skillsBadge, { backgroundColor: c.bg }]}>
-                          <Text style={[styles.skillsBadgeText, { color: c.text }]}>{e.courseTitle}</Text>
-                        </View>
-                      );
-                    })
-                  : null
-              )}
+              ) : null}
             </View>
 
             {/* Stats Badges Row */}
@@ -344,13 +328,6 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                     </View>
                     <Text style={styles.statCount}>{studentEnrollments.filter((e: any) => e.status === 'COMPLETED').length}</Text>
                     <Text style={styles.statLabel}>Completed</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <View style={[styles.statIconContainer, { backgroundColor: '#8B5CF6' }]}>
-                      <Ionicons name="medal-outline" size={18} color="#FFF" />
-                    </View>
-                    <Text style={styles.statCount}>{studentEnrollments.filter((e: any) => e.paymentStatus === 'Paid').length}</Text>
-                    <Text style={styles.statLabel}>Certificates</Text>
                   </View>
                   <View style={styles.statItem}>
                     <View style={[styles.statIconContainer, { backgroundColor: '#FF7A00' }]}>
