@@ -53,19 +53,65 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
       const apiNotifs: any[] = Array.isArray(notifsData) ? notifsData : [];
 
-      // Build class reminder notifications from upcoming classes (not stored in DB)
-      const classNotifs: any[] = ((upcomingData as any[]) ?? []).map((c: any, i: number) => ({
-        id: `class-${i}`,
-        title: c.isToday ? 'Live Class Starting Soon' : 'Class Reminder',
-        message: c.isToday
-          ? `${c.course} class is today at ${c.classTimings}`
-          : `${c.course} class tomorrow at ${c.classTimings}`,
-        createdAt: new Date().toISOString(),
-        seen: false,
-        isLocal: true,
-      }));
+      // ── Parse "6:00 PM", "10:30 AM" etc. into today's Date ──────────────
+      const parseClassTime = (timingStr: string): Date | null => {
+        if (!timingStr) return null;
+        // Handle ranges like "6:00 PM - 8:00 PM" — take start time
+        const startPart = timingStr.split('-')[0].trim();
+        const match = startPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (!match) return null;
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const meridiem = match[3].toUpperCase();
+        if (meridiem === 'PM' && hours !== 12) hours += 12;
+        if (meridiem === 'AM' && hours === 12) hours = 0;
+        const d = new Date();
+        d.setHours(hours, minutes, 0, 0);
+        return d;
+      };
 
-      setNotifications([...classNotifs, ...apiNotifs]);
+      const now = new Date();
+
+      // ── Build class notifications — only show if class starts within 30 min ──
+      // One single card even if multiple courses have class at similar times
+      const imminentClasses = ((upcomingData as any[]) ?? []).filter((c: any) => {
+        if (!c.isToday) return false; // skip tomorrow's classes
+        const classTime = parseClassTime(c.classTimings ?? '');
+        if (!classTime) return false;
+        const diffMins = (classTime.getTime() - now.getTime()) / 60000;
+        // Show if class starts between -5 min (already started) and +30 min (about to start)
+        return diffMins >= -5 && diffMins <= 30;
+      });
+
+      const classNotifs: any[] = imminentClasses.length > 0
+        ? [{
+            id: 'class-live',
+            title: 'Live Class Starting Soon',
+            message: imminentClasses.length === 1
+              ? `${imminentClasses[0].course} class starts at ${imminentClasses[0].classTimings}`
+              : `${imminentClasses.length} classes starting soon`,
+            createdAt: new Date().toISOString(),
+            seen: false,
+            isLocal: true,
+          }]
+        : [];
+
+      // ── Deduplicate apiNotifs by title + message ─────────────────────────
+      const seenApiKeys = new Set<string>();
+      const dedupedApiNotifs = apiNotifs.filter(n => {
+        const key = `${n.title ?? ''}||${n.message ?? ''}`;
+        if (seenApiKeys.has(key)) return false;
+        seenApiKeys.add(key);
+        return true;
+      });
+
+      // Remove the "Live Class" local card if the same message is already in apiNotifs
+      const apiKeys = new Set(dedupedApiNotifs.map((n: any) => `${n.title ?? ''}||${n.message ?? ''}`));
+      const filteredClassNotifs = classNotifs.filter(
+        n => !apiKeys.has(`${n.title}||${n.message}`)
+      );
+
+      setNotifications([...filteredClassNotifs, ...dedupedApiNotifs]);
     } catch (_) {
     } finally {
       setLoading(false);
@@ -204,7 +250,7 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
                 {isUnread && <View style={styles.unreadDot} />}
               </View>
               <Text style={styles.cardTime}>
-                {item.isLocal ? 'Today' : item.createdAt ? relativeTime(item.createdAt) : ''}
+                {item.isLocal ? 'Just now' : item.createdAt ? relativeTime(item.createdAt) : ''}
               </Text>
             </View>
             );
