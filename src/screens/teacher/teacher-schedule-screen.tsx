@@ -28,10 +28,13 @@ function normDay(d: string): string {
 function getWeekRange(weekOffset: number) {
   const today = new Date();
   const day = today.getDay();
+  const dayOffset = day === 0 ? 6 : day - 1;
   const monday = new Date(today);
-  monday.setDate(today.getDate() - day + 1 + weekOffset * 7);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(today.getDate() - dayOffset + weekOffset * 7);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
   return { monday, sunday };
 }
 
@@ -77,12 +80,12 @@ export default function TeacherScheduleScreen() {
 
   // Build timetable from real batch data — filter by selected week
   const timetable: DayAgenda[] = DAY_NAMES.map(day => {
+    const parseLocal = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
     const classes: ClassItem[] = batches
       .filter(b => {
         if (!Array.isArray(b.classDays) || !b.classDays.some((d: string) => normDay(d) === day)) return false;
-        // Check if selected week overlaps with batch start/end dates
-        const bStart = b.startDate ? new Date(b.startDate) : null;
-        const bEnd = b.endDate ? new Date(b.endDate) : null;
+        const bStart = b.startDate ? parseLocal(b.startDate) : null;
+        const bEnd = b.endDate ? parseLocal(b.endDate) : null;
         if (bStart && sunday < bStart) return false;
         if (bEnd && monday > bEnd) return false;
         return true;

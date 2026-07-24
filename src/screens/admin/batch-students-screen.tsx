@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Animated, Platform, StatusBar, Linking, Alert
+  TextInput, ActivityIndicator, Animated, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -216,28 +216,6 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
               <Text style={styles.metaText}>{batch.courseTimings}</Text>
             </View>
           )}
-        </View>
-
-        {/* Google Meet Link Action Banner */}
-        <View style={styles.meetBanner}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 }}>
-            <Ionicons name="videocam" size={16} color="#FFB703" style={{ marginRight: 6 }} />
-            <Text style={styles.meetBannerText} numberOfLines={1}>
-              {batch.googleMeetLink || batch.meetLink || 'https://meet.google.com/miq-hydh-kkf'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.joinClassBtn}
-            onPress={() => {
-              const link = batch.googleMeetLink || batch.meetLink || 'https://meet.google.com/miq-hydh-kkf';
-              Linking.openURL(link).catch(() => {
-                Alert.alert('Error', 'Could not open meeting link. Make sure it is a valid URL.');
-              });
-            }}
-          >
-            <Ionicons name="logo-google" size={14} color="#7B2CBF" style={{ marginRight: 4 }} />
-            <Text style={styles.joinClassBtnText}>Join Class</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Search bar */}
@@ -581,34 +559,5 @@ const styles = StyleSheet.create({
   },
   removeBtnText: { fontSize: 12, fontWeight: 'bold', color: '#EF4444' },
 
-  meetBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  meetBannerText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  joinClassBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  joinClassBtnText: {
-    color: '#7B2CBF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
+
 });
