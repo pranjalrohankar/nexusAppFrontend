@@ -36,6 +36,7 @@ interface Course {
   whatYouWillLearn?: string;
   googleMeetLink?: string;
   totalSessions?: number;
+
 }
 
 interface Teacher {
@@ -91,36 +92,61 @@ export default function AdminCoursesScreen() {
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      const [courseRes, teacherRes] = await Promise.all([
+      const [courseRes, teacherRes, batchRes] = await Promise.all([
         api.getAllCourses(),
-        api.getTeachers()
+        api.getTeachers(),
+        api.getBatches(),
       ]);
-      
+
       const list = courseRes?.data ?? courseRes?.content ?? courseRes ?? [];
       const teacherList = teacherRes?.success ? teacherRes.data : [];
-      
+      const allBatches: any[] = Array.isArray(batchRes) ? batchRes : [];
+
       setTeachers(teacherList.map((t: any) => ({ id: t.teacherId || t.id, name: t.name })));
-      
-      const mapped = list.map((c: any) => ({
-        id: String(c.id),
-        title: c.title,
-        category: c.category ?? '',
-        instructor: c.instructor ?? 'TBD',
-        duration: c.duration ?? '',
-        studentsCount: c.studentsCount ?? c.enrollmentCount ?? 0,
-        maxCapacity: c.maxCapacity ?? 50,
-        startDate: c.startDate ?? '',
-        endDate: c.endDate ?? '',
-        classTimings: c.classTimings ?? '',
-        classDays: c.classDays ?? '',
-        price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
-        status: c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming',
-        description: c.description ?? '',
-        syllabusTopics: c.syllabusTopics ?? '',
-        whatYouWillLearn: c.whatYouWillLearn ?? '',
-        googleMeetLink: c.googleMeetLink ?? '',
-        totalSessions: c.totalSessions ?? 0,
-      }));
+
+      const batchStatusLabel = (s: string): 'Active' | 'Upcoming' | 'Completed' =>
+        s === 'ACTIVE' ? 'Active' : s === 'COMPLETED' ? 'Completed' : 'Upcoming';
+
+      const mapped = list.map((c: any) => {
+        // Find batches for this course; prefer ACTIVE, else UPCOMING, else first
+        const linked = allBatches.filter((b: any) =>
+          (b.selectCourse ?? '').toLowerCase() === (c.title ?? '').toLowerCase()
+        );
+        const batch =
+          linked.find((b: any) => b.status === 'ACTIVE') ??
+          linked.find((b: any) => b.status === 'UPCOMING') ??
+          linked[0] ?? null;
+
+        // Status: use batch status if a batch exists, else fall back to course status
+        const status: 'Active' | 'Upcoming' | 'Completed' = batch
+          ? batchStatusLabel(batch.status)
+          : c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming';
+
+        return {
+          id: String(c.id),
+          title: c.title,
+          category: c.category ?? '',
+          instructor: c.instructor ?? 'TBD',
+          duration: c.duration ?? '',
+          studentsCount: c.studentsCount ?? c.enrollmentCount ?? 0,
+          maxCapacity: c.maxCapacity ?? 50,
+          startDate: c.startDate ?? '',
+          endDate: c.endDate ?? '',
+          classTimings: c.classTimings ?? '',
+          classDays: c.classDays ?? '',
+          price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
+          status,
+          description: c.description ?? '',
+          syllabusTopics: c.syllabusTopics ?? '',
+          whatYouWillLearn: c.whatYouWillLearn ?? '',
+          googleMeetLink: c.googleMeetLink ?? '',
+          totalSessions: c.totalSessions ?? 0,
+            duration: batch?.duration || c.duration || '',
+          startDate: batch?.startDate || c.startDate || '',
+          endDate: batch?.endDate || c.endDate || '',
+          classTimings: batch?.classTimings || batch?.courseTimings || c.classTimings || '',
+        };
+      });
       setCourses(mapped.slice().reverse());
     } catch (err) {
       console.log('Failed to fetch courses', err);
@@ -394,7 +420,7 @@ export default function AdminCoursesScreen() {
                     </View>
                     <View style={styles.detailItem}>
                       <Ionicons name="calendar-outline" size={13} color="#6B7280" />
-                      <Text style={styles.detailVal}>{item.startDate}</Text>
+                      <Text style={styles.detailVal}>{item.startDate ? (() => { const [y,m,d] = item.startDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })() : ''}</Text>
                     </View>
                   </View>
 
@@ -936,6 +962,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#7B2CBF',
   },
+
   cardActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
