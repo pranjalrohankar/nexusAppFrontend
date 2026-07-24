@@ -131,7 +131,6 @@ return () => clearTimeout(timer);
 
 const [loading, setLoading] = useState(false);
 
-// Handle SignIn action
   const handleSignInSubmit = async () => {
     const email = signInEmail.trim();
     const password = signInPassword.trim();
@@ -157,23 +156,42 @@ const [loading, setLoading] = useState(false);
         }
         deviceFingerprint = stored;
       } catch {}
-      const res = await api.login(email, password, selectedRole, deviceFingerprint ?? undefined);
-      if (res.success && res.data?.token) {
-        setToken(res.data.token);
-        onSignIn(selectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
+
+      // Auto-detect role: try each role until one succeeds
+      const rolesToTry: ('student' | 'teacher' | 'admin')[] = ['student', 'teacher', 'admin'];
+      let successRes: any = null;
+      let detectedRole: 'student' | 'teacher' | 'admin' = 'student';
+
+      for (const role of rolesToTry) {
+        try {
+          const res = await api.login(email, password, role, deviceFingerprint ?? undefined);
+          if (res.success && res.data?.token) {
+            successRes = res;
+            // Use role from backend response if available, otherwise use the tried role
+            const backendRole = (res.data?.role ?? '').toUpperCase();
+            detectedRole = backendRole === 'TEACHER' ? 'teacher'
+              : backendRole === 'ADMIN' ? 'admin'
+              : backendRole === 'STUDENT' ? 'student'
+              : role;
+            break;
+          }
+        } catch {
+          // this role didn't match, try next
+        }
+      }
+
+      if (successRes) {
+        setToken(successRes.data.token);
+        onSignIn(detectedRole, successRes.data.name ?? '', successRes.data.email ?? '', successRes.data.userId, successRes.data.lastLogin);
       } else {
-        const errorMsg = res.message || 'Invalid ID or Password';
-        const isRoleError = errorMsg.toLowerCase().includes('role');
-        const title = isRoleError ? 'Invalid Role' : 'Invalid Credentials';
+        const errorMsg = 'Invalid email or password. Please try again.';
         showToast(errorMsg, 'error');
-        showAlertModal(title, errorMsg, 'error');
+        showAlertModal('Invalid Credentials', errorMsg, 'error');
       }
     } catch (err: any) {
       const errorMsg = err?.message || 'Could not connect to server. Please try again.';
-      const isRoleError = errorMsg.toLowerCase().includes('role');
-      const title = isRoleError ? 'Invalid Role' : 'Login Error';
       showToast(errorMsg, 'error');
-      showAlertModal(title, errorMsg, 'error');
+      showAlertModal('Login Error', errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -232,12 +250,27 @@ return (
 <Text style={[styles.logoText, isSmall && styles.logoTextSmall]}>
 NE<Text style={styles.logoTextGold}>X</Text>US
 </Text>
-<Text style={[styles.logoSubtext, isSmall && styles.logoSubtextSmall]}>
+{/* <Text style={[styles.logoSubtext, isSmall && styles.logoSubtextSmall]}>
 {selectedRole === 'teacher' ? 'TEACHER PORTAL' : selectedRole === 'admin' ? 'ADMIN CONSOLE' : 'CORPORATE TRAINING CENTER LLP'}
-</Text>
+</Text> */}
 </View>
 );
 };
+
+
+// // Custom Logo Component
+// const Logo = ({ size = 'large' }: { size?: 'small' | 'large' }) => {
+// const isSmall = size === 'small';
+// return (
+// <View style={[styles.logoContainer, isSmall && styles.logoContainerSmall]}>
+//   <RNImage
+//     source={require('../../../assets/images/nexusctc.png')}
+//     style={isSmall ? styles.logoImageSmall : styles.logoImageLarge}
+//     resizeMode="contain"
+//   />
+// </View>
+// );
+// };
 
 return (
 <KeyboardAvoidingView
@@ -291,7 +324,7 @@ styles.card,
 <View style={styles.formContainer}>
 
 {/* Form Header */}
-<View style={styles.cardHeader}>
+{/* <View style={styles.cardHeader}>
 <View style={styles.signInBadgeCircle}>
 <Ionicons
 name={
@@ -309,12 +342,11 @@ color="#7B2CBF"
 {selectedRole === 'teacher' ? 'Teacher Sign In' : selectedRole === 'admin' ? 'Admin Sign In' : 'Student Sign In'}
 </Text>
 <Text style={styles.cardSubtitle}>Welcome back! Please sign in to continue.</Text>
-</View>
+</View> */}
 
-{/* Role Selector Container */}
-<View style={styles.roleSelectorContainer}>
-<Text style={styles.roleSelectorLabel}>I am signing in as:</Text>
-<View style={styles.roleSelectorPills}>
+
+
+{/* <View style={styles.roleSelectorPills}>
 {(['student', 'teacher', 'admin'] as const).map((role) => {
 const isActive = selectedRole === role;
 return (
@@ -346,8 +378,7 @@ isActive && styles.rolePillTextActive
 </TouchableOpacity>
 );
 })}
-</View>
-</View>
+</View> */}
 
 {/* Email Input */}
 <View style={styles.inputGroup}>
@@ -391,6 +422,7 @@ color="#9CA3AF"
 </TouchableOpacity>
 </View>
 </View>
+
 
 {/* Remember Me & Forgot Password */}
 <View style={styles.rowBetween}>
