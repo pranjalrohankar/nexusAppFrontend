@@ -46,7 +46,20 @@ export function resolveDynamicFileUrl(urlOrPath: string): string {
       .replace(/http:\/\/localhost:8080/g, activeApiBase)
       .replace(/http:\/\/10\.0\.2\.2:8080/g, activeApiBase);
   }
-  const cleanPath = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`;
+
+  const normalized = urlOrPath.replace(/\\/g, '/');
+  if (normalized.includes('uploads/materials/')) {
+    const filename = normalized.split('uploads/materials/').pop();
+    const base = getApiBaseUrl().replace(/\/api$/, '');
+    return `${base}/uploads/materials/${filename}`;
+  }
+  if (normalized.includes('uploads/recordings/')) {
+    const filename = normalized.split('uploads/recordings/').pop();
+    const base = getApiBaseUrl().replace(/\/api$/, '');
+    return `${base}/uploads/recordings/${filename}`;
+  }
+
+  const cleanPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
   const base = getApiBaseUrl().replace(/\/api$/, '');
   return `${base}${cleanPath}`;
 }
