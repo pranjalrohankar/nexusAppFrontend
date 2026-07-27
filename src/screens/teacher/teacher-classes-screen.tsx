@@ -81,7 +81,13 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
     try {
       const res = await api.getMyBatches();
       if (res.success && Array.isArray(res.data)) {
-        setBatches(res.data);
+        setBatches(res.data.map((b: any) => ({
+          ...b,
+          duration: b.duration || '',
+          startDate: b.startDate || '',
+          endDate: b.endDate || '',
+          classTimings: b.classTimings || b.courseTimings || '',
+        })));
       }
     } catch (e) {
       console.error('Failed to load batches', e);
@@ -397,12 +403,10 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                     <Ionicons name="people-outline" size={13} color="#7B2CBF" />
                     <Text style={styles.chipText}>{item.studentsCount} students</Text>
                   </View>
-                  {item.duration ? (
-                    <View style={styles.chip}>
-                      <Ionicons name="time-outline" size={13} color="#7B2CBF" />
-                      <Text style={styles.chipText}>{item.duration}</Text>
-                    </View>
-                  ) : null}
+                  <View style={styles.chip}>
+                    <Ionicons name="time-outline" size={13} color="#7B2CBF" />
+                    <Text style={styles.chipText}>{item.duration || '—'}</Text>
+                  </View>
                 </View>
 
                 {/* Schedule box */}
@@ -412,6 +416,12 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                     {item.classDays && item.classDays.length > 0 ? formatDays(item.classDays) : '—'}
                     {item.classTimings ? ` · ${item.classTimings}` : ''}
                   </Text>
+                  {item.startDate ? (
+                    <Text style={[styles.scheduleValue, { marginTop: 3, color: '#6B7280', fontWeight: '500' }]}>
+                      {(() => { const [y,m,d] = item.startDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })()}
+                      {item.endDate ? ` → ${(() => { const [y,m,d] = item.endDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })()}` : ''}
+                    </Text>
+                  ) : null}
                 </View>
 
                 {/* Progress bar */}

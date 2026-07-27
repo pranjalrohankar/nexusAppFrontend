@@ -291,8 +291,15 @@ export const api = {
   getStudentProfile: () => get('/student/profile'),
   updateStudentProfile: (data: object) => put('/student/profile', data),
   sendStudentSupportMessage: (data: object) => post('/student/support-message', data),
-  getStudentEnrollments: () => get('/student/enrollments'),
-  getStudentMaterials: () => get('/student/materials'),
+  getStudentEnrollments: async () => {
+    const res = await get('/student/enrollments');
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getStudentMaterials: async () => {
+    const res = await get('/student/materials');
+    // backend returns a plain array or { data: [...] }
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
   getStudentRecordings: () => get('/student/recordings'),
   getStudentUpcomingClasses: () => get('/student/upcoming-classes'),
   getStudentNotifications: () => get('/notifications/student'),

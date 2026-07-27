@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated, StatusBar, Linking, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -417,21 +417,10 @@ export default function AdminBatchesScreen() {
                     <Ionicons name="trash-outline" size={15} color="#EF4444" />
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.joinMeetBtn}
-                    onPress={() => {
-                      const link = batch.googleMeetLink || batch.meetLink || selectedCourse?.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf';
-                      Linking.openURL(link).catch(() => Alert.alert('Error', 'Could not open meeting link.'));
-                    }}
-                  >
-                    <Ionicons name="videocam" size={14} color="#10B981" />
-                    <Text style={styles.joinMeetBtnText}>Join Class</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
                     style={styles.viewStudentsBtn}
                     onPress={() => setViewingBatch({
                       ...batch,
                       courseTimings: selectedCourse?.classTimings || batch.courseTimings || '',
-                      googleMeetLink: batch.googleMeetLink || batch.meetLink || selectedCourse?.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf',
                     })}
                   >
                     <Text style={styles.viewStudentsBtnText}>Students</Text>
@@ -742,8 +731,6 @@ const styles = StyleSheet.create({
   editBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3E8FF', paddingVertical: 10, borderRadius: 10, gap: 6 },
   editBtnText: { fontSize: 13, fontWeight: 'bold', color: '#7B2CBF' },
   deleteBtn: { width: 40, height: 40, backgroundColor: '#FEE2E2', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  joinMeetBtn: { flex: 1.2, flexDirection: 'row', backgroundColor: '#ECFDF5', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#A7F3D0' },
-  joinMeetBtnText: { fontSize: 12, fontWeight: 'bold', color: '#059669' },
   viewStudentsBtn: { flex: 1.2, flexDirection: 'row', backgroundColor: '#7B2CBF', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 4 },
   viewStudentsBtnText: { fontSize: 13, fontWeight: 'bold', color: '#FFF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
