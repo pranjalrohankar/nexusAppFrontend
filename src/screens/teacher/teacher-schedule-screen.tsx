@@ -68,8 +68,9 @@ export default function TeacherScheduleScreen() {
     try {
       const res = await api.getMyBatches();
       const raw = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      console.log('MY_BATCHES_RAW', JSON.stringify(raw));
       setBatches(raw);
-    } catch {}
+    } catch (e) { console.log('MY_BATCHES_ERR', e); }
     finally { setLoading(false); }
   }, []);
 
@@ -78,32 +79,41 @@ export default function TeacherScheduleScreen() {
   const { monday, sunday } = getWeekRange(weekOffset);
   const todayName = DAY_NAMES[new Date().getDay()];
 
+  // Parse LocalDate from backend — can be "2026-07-20" string or [2026,7,20] array
+  const parseLocal = (s: any): Date | null => {
+    if (!s) return null;
+    if (Array.isArray(s)) return new Date(s[0], s[1] - 1, s[2]);
+    const parts = String(s).split('-').map(Number);
+    if (parts.length === 3) return new Date(parts[0], parts[1] - 1, parts[2]);
+    return null;
+  };
+
   // Build timetable from real batch data — filter by selected week
   const timetable: DayAgenda[] = DAY_NAMES.map(day => {
-    const parseLocal = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
     const classes: ClassItem[] = batches
       .filter(b => {
-        if (!Array.isArray(b.classDays) || !b.classDays.some((d: string) => normDay(d) === day)) return false;
-        const bStart = b.startDate ? parseLocal(b.startDate) : null;
-        const bEnd = b.endDate ? parseLocal(b.endDate) : null;
+        const days = Array.isArray(b.classDays) ? b.classDays : [];
+        if (days.length === 0) return false;
+        if (!days.some((d: string) => normDay(String(d)) === day)) return false;
+        const bStart = parseLocal(b.startDate);
+        const bEnd = parseLocal(b.endDate);
         if (bStart && sunday < bStart) return false;
         if (bEnd && monday > bEnd) return false;
         return true;
       })
       .map(b => ({
-        courseTitle: b.selectCourse,
-        batchName: b.batchName,
+        courseTitle: b.selectCourse ?? b.courseName ?? '—',
+        batchName: b.batchName ?? '—',
         time: b.classTimings ?? '—',
-        studentsCount: b.studentsCount ?? 0,
-        meetLink: b.googleMeetLink ?? '',
+        studentsCount: b.studentsCount ?? b.studentCount ?? 0,
+        meetLink: b.googleMeetLink ?? b.meetLink ?? '',
       }));
     return { dayName: day, isToday: day === todayName && weekOffset === 0, classes };
   });
 
-  // Summary stats
+  // Summary stats — based on week-filtered timetable
   const totalClasses = timetable.reduce((s, d) => s + d.classes.length, 0);
-  const uniqueCourses = new Set(batches.map(b => b.selectCourse)).size;
-  // Estimate hours: count classes * avg 1.5h
+  const uniqueCourses = new Set(timetable.flatMap(d => d.classes.map(c => c.courseTitle))).size;
   const totalHours = Math.round(totalClasses * 1.5);
 
   // Reorder: start from Monday

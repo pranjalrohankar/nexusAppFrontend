@@ -267,7 +267,8 @@ export const api = {
       `/teachers/my-courses-batches${course ? `?course=${encodeURIComponent(course)}` : ""}`,
     ),
 
-  getStudyMaterials: () => get("/materials"),
+  updateCourseMeetLink: (id: number | string, googleMeetLink: string) =>
+    put(`/courses/${id}/meet-link`, { googleMeetLink }),
   getStudyMaterialsByCourse: (course: string) =>
     get(`/materials/by-course?course=${encodeURIComponent(course)}`),
   uploadStudyMaterial: (data: FormData) =>
