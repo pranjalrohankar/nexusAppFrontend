@@ -103,7 +103,7 @@ export default function AdminBatchesScreen() {
   const PAGE_SIZE = 5;
 
   const filteredBatches = [...batches]
-    .sort((a, b) => new Date(b.startDate ?? 0).getTime() - new Date(a.startDate ?? 0).getTime())
+    .sort((a, b) => b.id - a.id)
     .filter(b => {
       const matchesSearch = b.batchName.toLowerCase().includes(searchQuery.toLowerCase()) || b.selectCourse.toLowerCase().includes(searchQuery.toLowerCase());
       if (filterTab === 'All') return matchesSearch;
