@@ -147,7 +147,7 @@ export default function AdminCoursesScreen() {
           classTimings: batch?.classTimings || batch?.courseTimings || c.classTimings || '',
         };
       });
-      setCourses(mapped.slice().reverse());
+      setCourses(mapped.sort((a: any, b: any) => Number(b.id) - Number(a.id)));
     } catch (err) {
       console.log('Failed to fetch courses', err);
     } finally {
@@ -209,11 +209,17 @@ export default function AdminCoursesScreen() {
     setFormInstructor(course.instructor);
     setFormDescription(course.description || '');
     setFormDuration(course.duration);
-    setFormTotalSessions(String(course.totalSessions || ''));
-    setFormStartDate(course.startDate);
-    setFormEndDate(course.endDate);
-    setFormClassTime(course.classTimings);
-    setFormClassDays(course.classDays ? course.classDays.split(', ') : []);
+    setFormTotalSessions(course.totalSessions ? String(course.totalSessions) : '');
+    // startDate/endDate may be array from batch — normalise to string
+    const toStr = (v: any) => {
+      if (!v) return '';
+      if (Array.isArray(v)) return `${v[0]}-${String(v[1]).padStart(2,'0')}-${String(v[2]).padStart(2,'0')}`;
+      return String(v);
+    };
+    setFormStartDate(toStr(course.startDate));
+    setFormEndDate(toStr(course.endDate));
+    setFormClassTime(course.classTimings || '');
+    setFormClassDays(course.classDays ? course.classDays.split(', ').filter(Boolean) : []);
     setFormCapacity(String(course.maxCapacity));
     setFormPrice(course.price.replace(/[^\d]/g, ''));
     setFormStatus(course.status);
@@ -234,24 +240,26 @@ export default function AdminCoursesScreen() {
       formStatus === 'Active' ? 'ACTIVE' :
       formStatus === 'Completed' ? 'INACTIVE' : 'DRAFT';
 
-    const payload = {
+    const payload: any = {
       title: formTitle,
-      category: formCategory,
+      category: formCategory || null,
       instructor: formInstructor,
-      description: formDescription,
-      duration: formDuration,
+      description: formDescription || null,
+      duration: formDuration || null,
       totalSessions: formTotalSessions ? Number(formTotalSessions) : null,
-      startDate: formStartDate || null,
-      endDate: formEndDate || null,
-      classTimings: formClassTime,
-      classDays: formClassDays.join(', '),
+      classTimings: formClassTime || null,
+      classDays: formClassDays.length > 0 ? formClassDays.join(', ') : null,
       maxCapacity: Number(formCapacity),
       price: Number(formPrice),
       status: backendStatus,
-      syllabusTopics: formSyllabusTopics,
-      whatYouWillLearn: formWhatYouWillLearn,
+      syllabusTopics: formSyllabusTopics || null,
+      whatYouWillLearn: formWhatYouWillLearn || null,
       googleMeetLink: formGoogleMeetLink || null,
     };
+
+    // Only include dates if they are valid yyyy-MM-dd strings
+    if (formStartDate && /^\d{4}-\d{2}-\d{2}$/.test(formStartDate)) payload.startDate = formStartDate;
+    if (formEndDate && /^\d{4}-\d{2}-\d{2}$/.test(formEndDate)) payload.endDate = formEndDate;
 
     try {
       if (selectedCourse) {
