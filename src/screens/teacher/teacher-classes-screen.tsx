@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
-  TextInput, Platform, ActivityIndicator, Linking, Share, StatusBar,
+  TextInput, Platform, ActivityIndicator, Linking, Share, StatusBar, Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { api } from '../../services/api';
 
 interface BatchItem {
   id: number;
+  courseId?: number;
   batchName: string;
   selectCourse: string;
   instructor: string;
@@ -48,6 +49,9 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [editingMeetBatch, setEditingMeetBatch] = useState<BatchItem | null>(null);
+  const [editMeetLink, setEditMeetLink] = useState('');
+  const [savingMeet, setSavingMeet] = useState(false);
   const selectedBatchRef = useRef<BatchItem | null>(null);
 
   // Keep ref in sync so the polling interval can access current batch
@@ -81,13 +85,23 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
     try {
       const res = await api.getMyBatches();
       if (res.success && Array.isArray(res.data)) {
-        setBatches(res.data.map((b: any) => ({
-          ...b,
-          duration: b.duration || '',
-          startDate: b.startDate || '',
-          endDate: b.endDate || '',
-          classTimings: b.classTimings || b.courseTimings || '',
-        })));
+        setBatches(res.data.map((b: any) => {
+          // Spring Boot serialises LocalDate as [yyyy,m,d] array
+          const toDateStr = (v: any): string => {
+            if (!v) return '';
+            if (Array.isArray(v)) return `${v[0]}-${String(v[1]).padStart(2,'0')}-${String(v[2]).padStart(2,'0')}`;
+            return String(v);
+          };
+          return {
+            ...b,
+            startDate: toDateStr(b.startDate),
+            endDate: toDateStr(b.endDate),
+            duration: b.duration || '',
+            classTimings: b.classTimings ?? '',
+            totalSessions: b.totalSessions ?? null,
+            courseId: b.courseId ?? null,
+          };
+        }));
       }
     } catch (e) {
       console.error('Failed to load batches', e);
@@ -145,6 +159,29 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
 
   const handleStartClass = (link: string) => {
     if (link) Linking.openURL(link);
+  };
+
+  const handleSaveMeetLink = async () => {
+    if (!editingMeetBatch) return;
+    if (!editingMeetBatch.courseId) {
+      alert('Cannot update: course ID not found. Please refresh and try again.');
+      return;
+    }
+    setSavingMeet(true);
+    try {
+      const res = await api.updateCourseMeetLink(editingMeetBatch.courseId, editMeetLink.trim());
+      if (res?.success === false) throw new Error(res.message ?? 'Save failed');
+      setBatches(prev => prev.map(b =>
+        b.courseId === editingMeetBatch.courseId
+          ? { ...b, googleMeetLink: editMeetLink.trim() }
+          : b
+      ));
+      setEditingMeetBatch(null);
+    } catch (e: any) {
+      alert('Failed to save: ' + (e?.message ?? 'Unknown error'));
+    } finally {
+      setSavingMeet(false);
+    }
   };
 
   const filteredBatches = batches.filter(b => b.status === activeTab);
@@ -443,6 +480,13 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                     <View style={styles.meetLabelRow}>
                       <Ionicons name="videocam-outline" size={13} color="#9CA3AF" />
                       <Text style={styles.meetLabel}>Google Meet Link</Text>
+                      <TouchableOpacity
+                        style={styles.meetEditBtn}
+                        onPress={() => { setEditingMeetBatch(item); setEditMeetLink(item.googleMeetLink || ''); }}
+                      >
+                        <Ionicons name="create-outline" size={13} color="#7B2CBF" />
+                        <Text style={styles.meetEditBtnText}>Edit</Text>
+                      </TouchableOpacity>
                     </View>
                     {item.googleMeetLink ? (
                       <View style={styles.meetLinkWrapper}>
@@ -457,7 +501,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      <Text style={styles.noMeetText}>No meet link assigned to this course</Text>
+                      <Text style={styles.noMeetText}>No meet link assigned — tap Edit to add one</Text>
                     )}
                   </View>
                 )}
@@ -487,6 +531,37 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
         )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Edit Meet Link Modal */}
+      <Modal visible={!!editingMeetBatch} transparent animationType="fade" onRequestClose={() => setEditingMeetBatch(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.meetModalOverlay}>
+          <View style={styles.meetModalBox}>
+            <Text style={styles.meetModalTitle}>Update Google Meet Link</Text>
+            <Text style={styles.meetModalSub}>{editingMeetBatch?.selectCourse}</Text>
+            <TextInput
+              style={styles.meetModalInput}
+              value={editMeetLink}
+              onChangeText={setEditMeetLink}
+              placeholder="https://meet.google.com/xxx-xxxx-xxx"
+              placeholderTextColor="#9CA3AF"
+              autoCapitalize="none"
+              keyboardType="url"
+              autoFocus
+            />
+            <Text style={styles.meetModalHint}>This will update the link for all students in this course.</Text>
+            <View style={styles.meetModalBtns}>
+              <TouchableOpacity style={styles.meetModalCancel} onPress={() => setEditingMeetBatch(null)}>
+                <Text style={styles.meetModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.meetModalSave} onPress={handleSaveMeetLink} disabled={savingMeet}>
+                {savingMeet
+                  ? <ActivityIndicator size="small" color="#FFF" />
+                  : <Text style={styles.meetModalSaveText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -724,5 +799,17 @@ const styles = StyleSheet.create({
     gap: 6, borderWidth: 1.5, borderColor: '#E5E7EB',
     borderRadius: 10, height: 38,
   },
-  messageBtnText: { fontSize: 12, fontWeight: '600', color: '#7B2CBF' },
+  meetEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#F3E8FF', borderRadius: 8 },
+  meetEditBtnText: { fontSize: 11, fontWeight: '600', color: '#7B2CBF' },
+  meetModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  meetModalBox: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, width: '100%' },
+  meetModalTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
+  meetModalSub: { fontSize: 12, color: '#7B2CBF', fontWeight: '600', marginBottom: 16 },
+  meetModalInput: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, height: 46, paddingHorizontal: 12, fontSize: 13, color: '#1F2937', backgroundColor: '#F9FAFB', marginBottom: 8 },
+  meetModalHint: { fontSize: 11, color: '#9CA3AF', marginBottom: 20 },
+  meetModalBtns: { flexDirection: 'row', gap: 12 },
+  meetModalCancel: { flex: 1, height: 44, borderRadius: 10, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  meetModalCancelText: { fontSize: 13, fontWeight: '600', color: '#4B5563' },
+  meetModalSave: { flex: 1, height: 44, borderRadius: 10, backgroundColor: '#7B2CBF', justifyContent: 'center', alignItems: 'center' },
+  meetModalSaveText: { fontSize: 13, fontWeight: 'bold', color: '#FFF' },
 });

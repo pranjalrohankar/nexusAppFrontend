@@ -282,23 +282,7 @@ interface Enrollment {
   classTimings?: string;
   startDate?: string;
   endDate?: string;
-}
-
-// Returns true if today matches a class day AND (no timing stored OR current time is within window)
-function isClassLiveNow(classTimings?: string): boolean {
-  if (!classTimings) return true; // no timing stored → show if today's day matches
-  const match = classTimings.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (!match) return true; // can't parse → show anyway
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-  if (period === 'PM' && hours !== 12) hours += 12;
-  if (period === 'AM' && hours === 12) hours = 0;
-  const now = new Date();
-  const classStart = new Date(now);
-  classStart.setHours(hours, minutes, 0, 0);
-  const diffMin = (now.getTime() - classStart.getTime()) / 60000;
-  return diffMin >= -15 && diffMin <= 90;
+  googleMeetLink?: string;
 }
 
 const TODAY_NAME = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
@@ -727,11 +711,11 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
   InstructorAvatar: React.FC<{ name: string; courseKey?: string }>;
 }) {
   const liveClasses = enrollments.filter(e => {
-    if (e.status !== 'ACTIVE') return false;
+    if (e.status === 'COMPLETED') return false;
     const todayMatch = Array.isArray(e.classDays) && e.classDays.some(
       d => d.trim().toLowerCase().startsWith(TODAY_NAME.substring(0, 3))
     );
-    return todayMatch && isClassLiveNow(e.classTimings);
+    return todayMatch;
   });
   return (
     <View style={styles.section}>
@@ -789,11 +773,15 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
               <View style={[styles.cardFooter, styles.rowBetween]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                  <Text style={styles.liveNowText}>Live Now</Text>
+                  <Text style={styles.liveNowText}>{enr.classTimings || 'Today'}</Text>
                 </View>
-                <TouchableOpacity style={styles.joinNowButton}>
+                <TouchableOpacity
+                  style={[styles.joinNowButton, !enr.googleMeetLink && { backgroundColor: '#9CA3AF' }]}
+                  onPress={() => enr.googleMeetLink && Linking.openURL(enr.googleMeetLink)}
+                  disabled={!enr.googleMeetLink}
+                >
                   <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
-                  <Text style={styles.joinNowText}>Join Now</Text>
+                  <Text style={styles.joinNowText}>{enr.googleMeetLink ? 'Join Now' : 'No Link'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
