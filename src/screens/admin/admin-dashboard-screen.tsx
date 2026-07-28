@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
-import { adminDataCache } from '../../components/layout/app-tabs';
+import { adminDataCache } from '../../services/admin-data-cache';
 import AdminEnquiriesScreen from './admin-enquiries-screen';
 
 export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewAllEnrollments?: () => void }) {

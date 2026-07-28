@@ -245,6 +245,8 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
   };
 
   const handleRead = (id: number) => {
+    api.markEnquiryRead(id).catch(() => {});
+    const updated = localEnquiries.map(e => e.id === id ? { ...e, isRead: true } : e);
     setLocalEnquiries(updated);
     onEnquiriesUpdate(updated);
   };

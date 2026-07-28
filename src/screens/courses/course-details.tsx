@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { parseSyllabus } from '../../utils/syllabus-parser';
+import { getCompletedTopicsForCourse } from '../../utils/syllabus-progress-store';
 
 export interface SyllabusItem {
   moduleNumber: string;
@@ -38,7 +41,8 @@ export interface CourseData {
   level: string;
   skills: string[];
   teacher: TeacherData;
-  syllabus: SyllabusItem[];
+  syllabus?: SyllabusItem[] | any;
+  syllabusTopics?: string;
 }
 
 interface CourseDetailsProps {
@@ -48,14 +52,181 @@ interface CourseDetailsProps {
 
 type TabType = 'Overview' | 'Syllabus' | 'Teacher';
 
+function SyllabusTabContent({ course }: { course: CourseData }) {
+  const parsedModules = parseSyllabus(course.syllabusTopics || course.syllabus);
+  const [expandedModules, setExpandedModules] = useState<Record<number, boolean>>({ 0: true });
+  const [completedTopics, setCompletedTopics] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (course.title) {
+      getCompletedTopicsForCourse(course.title).then(setCompletedTopics);
+    }
+  }, [course.title]);
+
+  const toggleModule = (idx: number) => {
+    setExpandedModules((prev) => ({
+      ...prev,
+      [idx]: !prev[idx],
+    }));
+  };
+
+  if (!parsedModules || parsedModules.length === 0) {
+    return (
+      <View style={styles.emptySyllabusCard}>
+        <Ionicons name="book-outline" size={36} color="#9CA3AF" />
+        <Text style={styles.emptySyllabusText}>No syllabus topics available for this course yet.</Text>
+      </View>
+    );
+  }
+
+  // Progress metrics calculation
+  let allTopics: string[] = [];
+  parsedModules.forEach(m => {
+    if (m.topics && m.topics.length > 0) {
+      allTopics.push(...m.topics);
+    }
+  });
+  const totalTopics = allTopics.length;
+  const doneCount = allTopics.filter(t => completedTopics.includes(t)).length;
+  const progressPct = totalTopics > 0 ? Math.round((doneCount / totalTopics) * 100) : 0;
+
+  return (
+    <View style={styles.syllabusContainer}>
+      {/* Syllabus Header */}
+      <View style={styles.syllabusHeaderBlock}>
+        <Text style={styles.syllabusMainTitle}>{course.title} Course Syllabus</Text>
+        <View style={styles.badgeRow}>
+          <View style={styles.orangePulseDot} />
+          <Text style={styles.badgeText}>Live Interactive Course</Text>
+        </View>
+      </View>
+
+      {/* Progress Bar Card */}
+      <View style={{ backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1F2937' }}>Course Progress</Text>
+          </View>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#7B2CBF' }}>
+            {doneCount} / {totalTopics} Covered ({progressPct}%)
+          </Text>
+        </View>
+        <View style={{ height: 10, backgroundColor: '#F3E8FF', borderRadius: 5, overflow: 'hidden' }}>
+          <View style={{ width: `${progressPct}%`, height: '100%', backgroundColor: '#10B981', borderRadius: 5 }} />
+        </View>
+        <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 8 }}>
+          {progressPct === 100 ? '🎉 All topics covered by teacher!' : `${totalTopics - doneCount} remaining topics to be covered by instructor.`}
+        </Text>
+      </View>
+
+      {/* Module Nav Summary */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.moduleNavScroll}
+      >
+        {parsedModules.map((mod, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={[
+              styles.moduleNavPill,
+              expandedModules[idx] && styles.moduleNavPillActive,
+            ]}
+            onPress={() => toggleModule(idx)}
+          >
+            <Text
+              style={[
+                styles.moduleNavPillText,
+                expandedModules[idx] && styles.moduleNavPillTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              Module {idx + 1}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Accordion Modules List */}
+      <View style={styles.accordionList}>
+        {parsedModules.map((mod, idx) => {
+          const isExpanded = !!expandedModules[idx];
+          return (
+            <View key={idx} style={styles.accordionCard}>
+              {/* Accordion Header */}
+              <TouchableOpacity
+                style={styles.accordionHeader}
+                onPress={() => toggleModule(idx)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.accordionHeaderLeft}>
+                  <View style={styles.orangeDot} />
+                  <Text style={styles.accordionTitle}>
+                    {mod.title.startsWith('Module') ? mod.title : `Module ${idx + 1} – ${mod.title}`}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color="#FF6A00"
+                />
+              </TouchableOpacity>
+
+              {/* Accordion Body */}
+              {isExpanded && (
+                <View style={styles.accordionBody}>
+                  {mod.topics && mod.topics.length > 0 ? (
+                    mod.topics.map((topic, tIdx) => {
+                      const isCovered = completedTopics.includes(topic);
+                      return (
+                        <View key={tIdx} style={[styles.topicRow, { alignItems: 'center', paddingVertical: 6 }]}>
+                          <Ionicons
+                            name={isCovered ? "checkmark-circle" : "ellipse-outline"}
+                            size={18}
+                            color={isCovered ? "#10B981" : "#9CA3AF"}
+                            style={{ marginRight: 8 }}
+                          />
+                          <Text style={[styles.topicText, { flex: 1, color: isCovered ? '#059669' : '#374151', fontWeight: isCovered ? '600' : '400' }]}>
+                            {topic}
+                          </Text>
+                          {isCovered ? (
+                            <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669' }}>Covered</Text>
+                            </View>
+                          ) : (
+                            <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '500', color: '#9CA3AF' }}>Pending</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <Text style={styles.topicTextMuted}>
+                      Comprehensive topics and practical exercises covered in this module.
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function CourseDetails({ course, onBack }: CourseDetailsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerInner}>
+        <View style={[styles.headerInner, { width: '100%', maxWidth: isDesktop ? 900 : undefined, alignSelf: 'center' }]}>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
@@ -66,7 +237,7 @@ export default function CourseDetails({ course, onBack }: CourseDetailsProps) {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { width: '100%', maxWidth: isDesktop ? 900 : undefined, alignSelf: 'center' }]}
         showsVerticalScrollIndicator={false}
       >
         {/* 2. COURSE HERO CARD */}
@@ -158,32 +329,7 @@ export default function CourseDetails({ course, onBack }: CourseDetailsProps) {
           </View>
         )}
 
-        {activeTab === 'Syllabus' && (
-          <View style={styles.syllabusContainer}>
-            {course.syllabus && course.syllabus.map((item, index) => (
-              <View key={index} style={styles.syllabusCard}>
-                <View style={styles.syllabusCardLeft}>
-                  <Text style={styles.syllabusCardTitle}>{item.title}</Text>
-                  <View style={styles.syllabusCardInfoRow}>
-                    <View style={styles.syllabusInfoItem}>
-                      <Ionicons name="book-outline" size={14} color="#6B7280" />
-                      <Text style={styles.syllabusInfoText}>{item.lessons} lessons</Text>
-                    </View>
-                    <View style={styles.syllabusInfoItem}>
-                      <Ionicons name="time-outline" size={14} color="#6B7280" />
-                      <Text style={styles.syllabusInfoText}>{item.weeks} weeks</Text>
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.syllabusCardRight}>
-                  <View style={styles.moduleBadge}>
-                    <Text style={styles.moduleBadgeText}>{item.moduleNumber}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+        {activeTab === 'Syllabus' && <SyllabusTabContent course={course} />}
 
         {activeTab === 'Teacher' && (
           <View style={styles.teacherCard}>
@@ -438,68 +584,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
-  // Syllabus Section
-  syllabusContainer: {
-    gap: 12,
-  },
-  syllabusCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  syllabusCardLeft: {
-    flex: 1,
-    paddingRight: 16,
-  },
-  syllabusCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  syllabusCardInfoRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  syllabusInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  syllabusInfoText: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  syllabusCardRight: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  moduleBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#FAF5FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F3E8FF',
-  },
-  moduleBadgeText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#7B2CBF',
-  },
   // Instructor & Teacher Card Styles
   teacherCard: {
     backgroundColor: '#FFFFFF',
@@ -598,5 +682,141 @@ const styles = StyleSheet.create({
     color: '#7B2CBF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  // Syllabus Accordion & Module Styles
+  syllabusContainer: {
+    marginBottom: 24,
+  },
+  emptySyllabusCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  emptySyllabusText: {
+    color: '#6B7280',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  syllabusHeaderBlock: {
+    marginBottom: 16,
+  },
+  syllabusMainTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  orangePulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF6A00',
+    marginRight: 6,
+  },
+  badgeText: {
+    color: '#FF6A00',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  moduleNavScroll: {
+    paddingBottom: 12,
+    gap: 8,
+  },
+  moduleNavPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  moduleNavPillActive: {
+    backgroundColor: '#FF6A00',
+    borderColor: '#FF6A00',
+  },
+  moduleNavPillText: {
+    color: '#E9D5FF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  moduleNavPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  accordionList: {
+    gap: 12,
+    marginTop: 8,
+  },
+  accordionCard: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  orangeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF6A00',
+    marginRight: 10,
+  },
+  accordionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  accordionBody: {
+    backgroundColor: '#121212',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 10,
+  },
+  topicRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  topicNumber: {
+    color: '#FF6A00',
+    fontWeight: '700',
+    fontSize: 13,
+    marginRight: 8,
+    marginTop: 1,
+  },
+  topicText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 13,
+    fontWeight: '400',
+    lineHeight: 18,
+    flex: 1,
+  },
+  topicTextMuted: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 13,
+    fontStyle: 'italic',
   },
 });

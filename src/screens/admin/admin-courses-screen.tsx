@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,7 +7,6 @@ import {
   ScrollView,
   Platform,
   TextInput,
-  Modal,
   Animated,
   ActivityIndicator,
   StatusBar,
@@ -16,33 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
+import { parseSyllabus, serializeSyllabus } from '../../utils/syllabus-parser';
 
-interface Course {
-  id: string;
-  title: string;
-  category: string;
-  instructor: string;
-  duration: string;
-  studentsCount: number;
-  maxCapacity: number;
-  startDate: string;
-  endDate: string;
-  classTimings: string;
-  classDays: string;
-  price: string;
-  status: 'Active' | 'Upcoming' | 'Completed';
-  description?: string;
-  syllabusTopics?: string;
-  whatYouWillLearn?: string;
-  googleMeetLink?: string;
-  totalSessions?: number;
+import { Course, Teacher, CourseFormData, DEFAULT_FORM_DATA } from './courses-components/types';
+import { CourseCardItem } from './courses-components/CourseCardItem';
+import { CourseModal } from './courses-components/CourseModal';
 
-}
-
-interface Teacher {
-  id: string;
-  name: string;
-}
+const PAGE_SIZE = 5;
 
 export default function AdminCoursesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,46 +29,45 @@ export default function AdminCoursesScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-
-  // Form Fields
-  const [formTitle, setFormTitle] = useState('');
-  const [formCategory, setFormCategory] = useState('');
-  const [formInstructor, setFormInstructor] = useState('');
-  const [formDescription, setFormDescription] = useState('');
-  const [formDuration, setFormDuration] = useState('');
-  const [formTotalSessions, setFormTotalSessions] = useState('');
-  const [formStartDate, setFormStartDate] = useState('');
-  const [formEndDate, setFormEndDate] = useState('');
-  const [formClassTime, setFormClassTime] = useState('');
-  const [formClassDays, setFormClassDays] = useState<string[]>([]);
-  const [formCapacity, setFormCapacity] = useState('50');
-  const [formPrice, setFormPrice] = useState('');
-  const [formStatus, setFormStatus] = useState<'Active' | 'Upcoming' | 'Completed'>('Active');
-  const [formSyllabusTopics, setFormSyllabusTopics] = useState('');
-  const [formWhatYouWillLearn, setFormWhatYouWillLearn] = useState('');
-  const [googleMeetChecked, setGoogleMeetChecked] = useState(false);
-  const [formGoogleMeetLink, setFormGoogleMeetLink] = useState('');
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
+
+  // Form State
+  const [formData, setFormData] = useState<CourseFormData>(DEFAULT_FORM_DATA);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 5;
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ message, type });
-    toastAnim.setValue(0);
-    Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-    toastTimer.current = setTimeout(() => {
-      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => setToast(null));
-    }, 3000);
-  };
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
-  const fetchCourses = async () => {
+  const showToast = useCallback(
+    (message: string, type: 'success' | 'error' = 'success') => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setToast({ message, type });
+      toastAnim.setValue(0);
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+      toastTimer.current = setTimeout(() => {
+        Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(
+          () => setToast(null)
+        );
+      }, 3000);
+    },
+    [toastAnim]
+  );
+
+  const updateFormField = useCallback(<K extends keyof CourseFormData>(key: K, value: CourseFormData[K]) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const fetchCourses = useCallback(async () => {
     setLoading(true);
     try {
       const [courseRes, teacherRes, batchRes] = await Promise.all([
@@ -108,31 +86,34 @@ export default function AdminCoursesScreen() {
         s === 'ACTIVE' ? 'Active' : s === 'COMPLETED' ? 'Completed' : 'Upcoming';
 
       const mapped = list.map((c: any) => {
-        // Find batches for this course; prefer ACTIVE, else UPCOMING, else first
-        const linked = allBatches.filter((b: any) =>
-          (b.selectCourse ?? '').toLowerCase() === (c.title ?? '').toLowerCase()
+        const linked = allBatches.filter(
+          (b: any) => (b.selectCourse ?? '').toLowerCase() === (c.title ?? '').toLowerCase()
         );
         const batch =
           linked.find((b: any) => b.status === 'ACTIVE') ??
           linked.find((b: any) => b.status === 'UPCOMING') ??
-          linked[0] ?? null;
+          linked[0] ??
+          null;
 
-        // Status: use batch status if a batch exists, else fall back to course status
         const status: 'Active' | 'Upcoming' | 'Completed' = batch
           ? batchStatusLabel(batch.status)
-          : c.status === 'ACTIVE' ? 'Active' : c.status === 'INACTIVE' ? 'Completed' : 'Upcoming';
+          : c.status === 'ACTIVE'
+          ? 'Active'
+          : c.status === 'INACTIVE'
+          ? 'Completed'
+          : 'Upcoming';
 
         return {
           id: String(c.id),
           title: c.title,
           category: c.category ?? '',
           instructor: c.instructor ?? 'TBD',
-          duration: c.duration ?? '',
+          duration: batch?.duration || c.duration || '',
           studentsCount: c.studentsCount ?? c.enrollmentCount ?? 0,
           maxCapacity: c.maxCapacity ?? 50,
-          startDate: c.startDate ?? '',
-          endDate: c.endDate ?? '',
-          classTimings: c.classTimings ?? '',
+          startDate: batch?.startDate || c.startDate || '',
+          endDate: batch?.endDate || c.endDate || '',
+          classTimings: batch?.classTimings || batch?.courseTimings || c.classTimings || '',
           classDays: c.classDays ?? '',
           price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
           status,
@@ -141,10 +122,6 @@ export default function AdminCoursesScreen() {
           whatYouWillLearn: c.whatYouWillLearn ?? '',
           googleMeetLink: c.googleMeetLink ?? '',
           totalSessions: c.totalSessions ?? 0,
-            duration: batch?.duration || c.duration || '',
-          startDate: batch?.startDate || c.startDate || '',
-          endDate: batch?.endDate || c.endDate || '',
-          classTimings: batch?.classTimings || batch?.courseTimings || c.classTimings || '',
         };
       });
       setCourses(mapped.sort((a: any, b: any) => Number(b.id) - Number(a.id)));
@@ -153,113 +130,128 @@ export default function AdminCoursesScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const getEnrollmentCount = async (courseTitle: string) => {
-    try {
-      const res = await api.getEnrollmentCount(courseTitle);
-      return res?.count ?? 0;
-    } catch {
-      return 0;
-    }
-  };
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
 
-  useEffect(() => { fetchCourses(); }, []);
+  // ── Memoized Filtering & Pagination ──
+  const filteredCourses = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return courses.filter((course) => {
+      const matchesSearch =
+        !q ||
+        course.title.toLowerCase().includes(q) ||
+        course.instructor.toLowerCase().includes(q);
+      return activeTab === 'All' ? matchesSearch : matchesSearch && course.status === activeTab;
+    });
+  }, [courses, searchQuery, activeTab]);
 
-  const filteredCourses = courses.filter(course => {
-    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          course.instructor.toLowerCase().includes(searchQuery.toLowerCase());
-    if (activeTab === 'All') return matchesSearch;
-    return matchesSearch && course.status === activeTab;
-  });
+  const totalPages = useMemo(
+    () => Math.ceil(filteredCourses.length / PAGE_SIZE) || 1,
+    [filteredCourses.length]
+  );
 
-  const totalPages = Math.ceil(filteredCourses.length / PAGE_SIZE);
-  const paginatedCourses = filteredCourses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginatedCourses = useMemo(() => {
+    return filteredCourses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  }, [filteredCourses, page]);
 
-  const activeCount = courses.filter(c => c.status === 'Active').length;
-  const upcomingCount = courses.filter(c => c.status === 'Upcoming').length;
-  const completedCount = courses.filter(c => c.status === 'Completed').length;
+  const { activeCount, upcomingCount, completedCount } = useMemo(() => {
+    let active = 0,
+      upcoming = 0,
+      completed = 0;
+    courses.forEach((c) => {
+      if (c.status === 'Active') active++;
+      else if (c.status === 'Upcoming') upcoming++;
+      else if (c.status === 'Completed') completed++;
+    });
+    return { activeCount: active, upcomingCount: upcoming, completedCount: completed };
+  }, [courses]);
 
-  const handleOpenAddModal = () => {
+  // ── Handlers ──
+  const handleOpenAddModal = useCallback(() => {
     setSelectedCourse(null);
-    setFormTitle('');
-    setFormCategory('');
-    setFormInstructor('');
-    setFormDescription('');
-    setFormDuration('');
-    setFormTotalSessions('');
-    setFormStartDate('');
-    setFormEndDate('');
-    setFormClassTime('');
-    setFormClassDays([]);
-    setFormCapacity('50');
-    setFormPrice('');
-    setFormStatus('Upcoming');
-    setFormSyllabusTopics('');
-    setFormWhatYouWillLearn('');
-    setGoogleMeetChecked(false);
-    setFormGoogleMeetLink('');
+    setFormData(DEFAULT_FORM_DATA);
+    setShowInstructorDropdown(false);
     setIsModalVisible(true);
-  };
+  }, []);
 
-  const handleOpenEditModal = (course: Course) => {
+  const handleOpenEditModal = useCallback((course: Course) => {
     setSelectedCourse(course);
-    setFormTitle(course.title);
-    setFormCategory(course.category);
-    setFormInstructor(course.instructor);
-    setFormDescription(course.description || '');
-    setFormDuration(course.duration);
-    setFormTotalSessions(course.totalSessions ? String(course.totalSessions) : '');
-    // startDate/endDate may be array from batch — normalise to string
     const toStr = (v: any) => {
       if (!v) return '';
-      if (Array.isArray(v)) return `${v[0]}-${String(v[1]).padStart(2,'0')}-${String(v[2]).padStart(2,'0')}`;
+      if (Array.isArray(v))
+        return `${v[0]}-${String(v[1]).padStart(2, '0')}-${String(v[2]).padStart(2, '0')}`;
       return String(v);
     };
-    setFormStartDate(toStr(course.startDate));
-    setFormEndDate(toStr(course.endDate));
-    setFormClassTime(course.classTimings || '');
-    setFormClassDays(course.classDays ? course.classDays.split(', ').filter(Boolean) : []);
-    setFormCapacity(String(course.maxCapacity));
-    setFormPrice(course.price.replace(/[^\d]/g, ''));
-    setFormStatus(course.status);
-    setFormSyllabusTopics(course.syllabusTopics || '');
-    setFormWhatYouWillLearn(course.whatYouWillLearn || '');
-    setGoogleMeetChecked(!!course.googleMeetLink);
-    setFormGoogleMeetLink(course.googleMeetLink || '');
-    setIsModalVisible(true);
-  };
 
-  const handleSaveCourse = async () => {
-    if (!formTitle || !formInstructor || !formCapacity || !formPrice) {
+    const parsed = parseSyllabus(course.syllabusTopics);
+    setFormData({
+      title: course.title,
+      category: course.category,
+      instructor: course.instructor,
+      description: course.description || '',
+      duration: course.duration,
+      totalSessions: course.totalSessions ? String(course.totalSessions) : '',
+      startDate: toStr(course.startDate),
+      endDate: toStr(course.endDate),
+      classTime: course.classTimings || '',
+      classDays: course.classDays ? course.classDays.split(', ').filter(Boolean) : [],
+      capacity: String(course.maxCapacity),
+      price: course.price.replace(/[^\d]/g, ''),
+      status: course.status,
+      syllabusTopics: course.syllabusTopics || '',
+      syllabusModules: parsed.length > 0 ? parsed : [{ title: 'Module 1', topics: [''] }],
+      syllabusMode: 'builder',
+      whatYouWillLearn: course.whatYouWillLearn || '',
+      googleMeetLink: course.googleMeetLink || '',
+    });
+    setShowInstructorDropdown(false);
+    setIsModalVisible(true);
+  }, []);
+
+  const handleSaveCourse = useCallback(async () => {
+    if (!formData.title || !formData.instructor || !formData.capacity || !formData.price) {
       showToast('Please fill out all required fields.', 'error');
       return;
     }
 
     const backendStatus =
-      formStatus === 'Active' ? 'ACTIVE' :
-      formStatus === 'Completed' ? 'INACTIVE' : 'DRAFT';
+      formData.status === 'Active'
+        ? 'ACTIVE'
+        : formData.status === 'Completed'
+        ? 'INACTIVE'
+        : 'DRAFT';
+
+    const finalSyllabus =
+      formData.syllabusMode === 'builder'
+        ? serializeSyllabus(formData.syllabusModules)
+        : formData.syllabusTopics;
 
     const payload: any = {
-      title: formTitle,
-      category: formCategory || null,
-      instructor: formInstructor,
-      description: formDescription || null,
-      duration: formDuration || null,
-      totalSessions: formTotalSessions ? Number(formTotalSessions) : null,
-      classTimings: formClassTime || null,
-      classDays: formClassDays.length > 0 ? formClassDays.join(', ') : null,
-      maxCapacity: Number(formCapacity),
-      price: Number(formPrice),
+      title: formData.title,
+      category: formData.category || null,
+      instructor: formData.instructor,
+      description: formData.description || null,
+      duration: formData.duration || null,
+      totalSessions: formData.totalSessions ? Number(formData.totalSessions) : null,
+      classTimings: formData.classTime || null,
+      classDays: formData.classDays.length > 0 ? formData.classDays.join(', ') : null,
+      maxCapacity: Number(formData.capacity),
+      price: Number(formData.price),
       status: backendStatus,
-      syllabusTopics: formSyllabusTopics || null,
-      whatYouWillLearn: formWhatYouWillLearn || null,
-      googleMeetLink: formGoogleMeetLink || null,
+      syllabusTopics: finalSyllabus || null,
+      whatYouWillLearn: formData.whatYouWillLearn || null,
+      googleMeetLink: formData.googleMeetLink || null,
     };
 
-    // Only include dates if they are valid yyyy-MM-dd strings
-    if (formStartDate && /^\d{4}-\d{2}-\d{2}$/.test(formStartDate)) payload.startDate = formStartDate;
-    if (formEndDate && /^\d{4}-\d{2}-\d{2}$/.test(formEndDate)) payload.endDate = formEndDate;
+    if (formData.startDate && /^\d{4}-\d{2}-\d{2}$/.test(formData.startDate)) {
+      payload.startDate = formData.startDate;
+    }
+    if (formData.endDate && /^\d{4}-\d{2}-\d{2}$/.test(formData.endDate)) {
+      payload.endDate = formData.endDate;
+    }
 
     try {
       if (selectedCourse) {
@@ -276,37 +268,53 @@ export default function AdminCoursesScreen() {
       showToast(err?.message ?? 'Failed to save course.', 'error');
       console.error('handleSaveCourse error:', err);
     }
-  };
+  }, [formData, selectedCourse, fetchCourses, showToast]);
 
-  const handleDeleteCourse = async (id: string) => {
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('Are you sure you want to delete this course?')
-      : true;
-    if (!confirmed) return;
-    try {
-      await api.deleteCourse(id);
-      fetchCourses();
-      showToast('Course deleted successfully.');
-    } catch (err) {
-      showToast('Failed to delete course.', 'error');
-      console.error(err);
-    }
-  };
+  const handleDeleteCourse = useCallback(
+    async (id: string) => {
+      const confirmed =
+        Platform.OS === 'web' ? window.confirm('Are you sure you want to delete this course?') : true;
+      if (!confirmed) return;
+      try {
+        await api.deleteCourse(id);
+        fetchCourses();
+        showToast('Course deleted successfully.');
+      } catch (err) {
+        showToast('Failed to delete course.', 'error');
+        console.error(err);
+      }
+    },
+    [fetchCourses, showToast]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
+
       {/* HEADER */}
       <View style={styles.header}>
         <LinearGradient
           colors={[
-            'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
-            'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
-            'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
-            'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
-            'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
+            'rgba(0,0,0,0)',
+            'rgba(9,2,0,0.14)',
+            'rgba(41,18,1,0.286)',
+            'rgba(78,39,5,0.427)',
+            'rgba(118,62,11,0.573)',
+            'rgba(160,86,19,0.714)',
+            'rgba(205,112,27,0.86)',
+            '#FB8B24',
+            'rgba(205,112,27,0.86)',
+            'rgba(160,86,19,0.714)',
+            'rgba(118,62,11,0.573)',
+            'rgba(78,39,5,0.427)',
+            'rgba(41,18,1,0.286)',
+            'rgba(9,2,0,0.14)',
+            'rgba(0,0,0,0)',
           ]}
-          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+          locations={[
+            0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857,
+            0.8571, 0.9286, 1,
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.headerAccentLine}
@@ -320,6 +328,7 @@ export default function AdminCoursesScreen() {
             <Ionicons name="add" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
+
         {/* Search bar inside header */}
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
@@ -328,7 +337,10 @@ export default function AdminCoursesScreen() {
             placeholder="Search courses, instructors..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
-            onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
+            onChangeText={(v) => {
+              setSearchQuery(v);
+              setPage(1);
+            }}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -344,20 +356,37 @@ export default function AdminCoursesScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-
         {/* FILTER PILL TABS */}
         <View style={styles.filterTabsRow}>
           {(['All', 'Active', 'Upcoming', 'Completed'] as const).map((tab) => {
-            const count = tab === 'All' ? courses.length : tab === 'Active' ? activeCount : tab === 'Upcoming' ? upcomingCount : completedCount;
-            const pillStyle = tab === 'Active' ? styles.filterPillGreen : tab === 'Upcoming' ? styles.filterPillAmber : tab === 'Completed' ? styles.filterPillGray : styles.filterPill;
+            const count =
+              tab === 'All'
+                ? courses.length
+                : tab === 'Active'
+                ? activeCount
+                : tab === 'Upcoming'
+                ? upcomingCount
+                : completedCount;
+            const pillStyle =
+              tab === 'Active'
+                ? styles.filterPillGreen
+                : tab === 'Upcoming'
+                ? styles.filterPillAmber
+                : tab === 'Completed'
+                ? styles.filterPillGray
+                : styles.filterPill;
             return (
               <TouchableOpacity
                 key={tab}
                 style={[pillStyle, activeTab === tab && styles.filterPillActive]}
-                onPress={() => { setActiveTab(tab); setPage(1); }}
+                onPress={() => {
+                  setActiveTab(tab);
+                  setPage(1);
+                }}
               >
                 <Text style={[styles.filterPillText, activeTab === tab && styles.filterPillTextActive]}>
-                  {tab}{tab !== 'All' ? ` ${count}` : ''}
+                  {tab}
+                  {tab !== 'All' ? ` ${count}` : ''}
                 </Text>
               </TouchableOpacity>
             );
@@ -395,66 +424,14 @@ export default function AdminCoursesScreen() {
               <Text style={styles.emptyText}>No courses scheduled under this tab.</Text>
             </View>
           ) : (
-            paginatedCourses.map((item) => {
-              return (
-                <View key={item.id} style={styles.courseCard}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.titleCol}>
-                      <Text style={styles.courseTitle}>{item.title}</Text>
-                      <Text style={styles.instructorName}>Instructor: {item.instructor}</Text>
-                    </View>
-                    <View style={[styles.statusBadge,
-                      item.status === 'Active' ? styles.statusActive :
-                      item.status === 'Upcoming' ? styles.statusUpcoming :
-                      styles.statusCompleted
-                    ]}>
-                      <Text style={[
-                        styles.statusBadgeText,
-                        item.status === 'Active' ? styles.statusActiveText :
-                        item.status === 'Upcoming' ? styles.statusUpcomingText :
-                        styles.statusCompletedText
-                      ]}>{item.status}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailsGrid}>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="time-outline" size={13} color="#6B7280" />
-                      <Text style={styles.detailVal}>{item.duration}</Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="people-outline" size={13} color="#6B7280" />
-                      <Text style={styles.detailVal}>{item.studentsCount}/{item.maxCapacity} enrolled</Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="calendar-outline" size={13} color="#6B7280" />
-                      <Text style={styles.detailVal}>{item.startDate ? (() => { const [y,m,d] = item.startDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })() : ''}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceVal}>{item.price}</Text>
-                  </View>
-
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={styles.editBtn}
-                      onPress={() => handleOpenEditModal(item)}
-                    >
-                      <Ionicons name="create-outline" size={14} color="#7B2CBF" />
-                      <Text style={styles.editBtnText}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.deleteCardBtn}
-                      onPress={() => handleDeleteCourse(item.id)}
-                    >
-                      <Ionicons name="trash-outline" size={14} color="#EF4444" />
-                      <Text style={styles.deleteBtnText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
+            paginatedCourses.map((item) => (
+              <CourseCardItem
+                key={item.id}
+                item={item}
+                onEdit={handleOpenEditModal}
+                onDelete={handleDeleteCourse}
+              />
+            ))
           )}
         </View>
 
@@ -462,22 +439,30 @@ export default function AdminCoursesScreen() {
           <View style={styles.pagination}>
             <TouchableOpacity
               style={[styles.pageBtn, page === 1 && styles.pageBtnDisabled]}
-              onPress={() => setPage(p => Math.max(1, p - 1))}
+              onPress={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
             >
               <Ionicons name="chevron-back" size={16} color={page === 1 ? '#D1D5DB' : '#7B2CBF'} />
             </TouchableOpacity>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
-              <TouchableOpacity key={n} style={[styles.pageBtn, page === n && styles.pageBtnActive]} onPress={() => setPage(n)}>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+              <TouchableOpacity
+                key={n}
+                style={[styles.pageBtn, page === n && styles.pageBtnActive]}
+                onPress={() => setPage(n)}
+              >
                 <Text style={[styles.pageBtnText, page === n && styles.pageBtnTextActive]}>{n}</Text>
               </TouchableOpacity>
             ))}
             <TouchableOpacity
               style={[styles.pageBtn, page === totalPages && styles.pageBtnDisabled]}
-              onPress={() => setPage(p => Math.min(totalPages, p + 1))}
+              onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
-              <Ionicons name="chevron-forward" size={16} color={page === totalPages ? '#D1D5DB' : '#7B2CBF'} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={page === totalPages ? '#D1D5DB' : '#7B2CBF'}
+              />
             </TouchableOpacity>
           </View>
         )}
@@ -487,201 +472,44 @@ export default function AdminCoursesScreen() {
 
       {/* TOAST NOTIFICATION */}
       {toast && (
-        <Animated.View style={[
-          styles.toast,
-          toast.type === 'error' ? styles.toastError : styles.toastSuccess,
-          { opacity: toastAnim, transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] },
-        ]}>
-          <Ionicons name={toast.type === 'error' ? 'close-circle' : 'checkmark-circle'} size={18} color="#FFFFFF" />
+        <Animated.View
+          style={[
+            styles.toast,
+            toast.type === 'error' ? styles.toastError : styles.toastSuccess,
+            {
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-20, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Ionicons
+            name={toast.type === 'error' ? 'close-circle' : 'checkmark-circle'}
+            size={18}
+            color="#FFFFFF"
+          />
           <Text style={styles.toastText}>{toast.message}</Text>
         </Animated.View>
       )}
 
       {/* ADD / EDIT COURSE MODAL */}
-      <Modal
-        visible={isModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {selectedCourse ? 'Edit Course Details' : 'Add New Course'}
-              </Text>
-              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#1F2937" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {/* Basic Info */}
-              <Text style={styles.formSectionTitle}>Basic Information</Text>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Course Title *</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formTitle}
-                  onChangeText={setFormTitle}
-                  placeholder="e.g. Full Stack Web Development"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Instructor *</Text>
-                <TouchableOpacity 
-                  style={styles.dropdown} 
-                  onPress={() => setShowInstructorDropdown(!showInstructorDropdown)}
-                >
-                  <Ionicons name="person-outline" size={16} color="#9CA3AF" />
-                  <Text style={[styles.dropdownText, !formInstructor && styles.dropdownPlaceholder]}>
-                    {formInstructor || 'Select Instructor'}
-                  </Text>
-                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-                </TouchableOpacity>
-                {showInstructorDropdown && (
-                  <View style={styles.dropdownList}>
-                    <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
-                      {teachers.length === 0 ? (
-                        <View style={styles.dropdownItem}>
-                          <Text style={{ color: '#9CA3AF' }}>No teachers available</Text>
-                        </View>
-                      ) : (
-                        teachers.map(t => (
-                          <TouchableOpacity 
-                            key={t.id} 
-                            style={styles.dropdownItem} 
-                            onPress={() => { 
-                              setFormInstructor(t.name); 
-                              setShowInstructorDropdown(false); 
-                            }}
-                          >
-                            <Text>{t.name}</Text>
-                            {formInstructor === t.name && <Ionicons name="checkmark" size={18} color="#7B2CBF" />}
-                          </TouchableOpacity>
-                        ))
-                      )}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Course Overview *</Text>
-                <TextInput
-                  style={[styles.modalInput, styles.textArea]}
-                  value={formDescription}
-                  onChangeText={setFormDescription}
-                  multiline={true}
-                  placeholder="Brief overview of the course..."
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              {/* Additional Details */}
-              <Text style={styles.formSectionTitle}>Additional Details</Text>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Total Sessions</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={formTotalSessions}
-                  onChangeText={setFormTotalSessions}
-                  keyboardType="number-pad"
-                  placeholder="48"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Course Syllabus/Topics</Text>
-                <TextInput
-                  style={[styles.modalInput, styles.textArea]}
-                  value={formSyllabusTopics}
-                  onChangeText={setFormSyllabusTopics}
-                  multiline={true}
-                  placeholder="List main topics covered in the course..."
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>What you will learn</Text>
-                <TextInput
-                  style={[styles.modalInput, styles.textArea]}
-                  value={formWhatYouWillLearn}
-                  onChangeText={setFormWhatYouWillLearn}
-                  multiline={true}
-                  placeholder="Enter the pointers..."
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.fieldLabel}>Max Capacity *</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formCapacity}
-                    onChangeText={setFormCapacity}
-                    keyboardType="number-pad"
-                    placeholder="50"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.fieldLabel}>Price (₹) *</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={formPrice}
-                    onChangeText={setFormPrice}
-                    keyboardType="number-pad"
-                    placeholder="25000"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Google Meet Link</Text>
-                <View style={styles.meetInputRow}>
-                  <Ionicons name="videocam-outline" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.modalInput, { flex: 1, height: 42 }]}
-                    value={formGoogleMeetLink}
-                    onChangeText={setFormGoogleMeetLink}
-                    placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                    placeholderTextColor="#9CA3AF"
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                </View>
-                <Text style={styles.checkboxSubtext}>Paste your Google Meet link here. It will be visible to the assigned teacher.</Text>
-              </View>
-
-              <View style={styles.modalActionRow}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setIsModalVisible(false)}
-                >
-                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalSubmitBtn}
-                  onPress={handleSaveCourse}
-                >
-                  <Text style={styles.modalSubmitBtnText}>
-                    {selectedCourse ? 'Save Changes' : 'Create Course'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </SafeAreaView>
-        </View>
-      </Modal>
+      <CourseModal
+        isVisible={isModalVisible}
+        selectedCourse={selectedCourse}
+        teachers={teachers}
+        formData={formData}
+        showInstructorDropdown={showInstructorDropdown}
+        onClose={() => setIsModalVisible(false)}
+        onUpdateField={updateFormField}
+        onToggleDropdown={() => setShowInstructorDropdown((prev) => !prev)}
+        onSubmit={handleSaveCourse}
+      />
     </SafeAreaView>
   );
 }
@@ -735,7 +563,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 6,
   },
-  // Search bar (now inside header)
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -753,7 +580,6 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     height: '100%',
   },
-  // Filter pill tabs
   filterTabsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -770,13 +596,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(16,185,129,0.12)',
+    backgroundColor: 'rgba(16,185,129,0.10)',
   },
   filterPillAmber: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(245,158,11,0.12)',
+    backgroundColor: 'rgba(245,158,11,0.10)',
   },
   filterPillGray: {
     paddingHorizontal: 14,
@@ -790,470 +616,130 @@ const styles = StyleSheet.create({
   filterPillText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7B2CBF',
+    color: '#4B5563',
   },
   filterPillTextActive: {
     color: '#FFFFFF',
-  },
-  // Stats card
-  statsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: '#F3F4F6',
   },
   scrollView: {
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
   scrollContent: {
-    padding: 20,
-  },
-  bottomSpacer: {
-    height: 100,
-  },
-  // List
-  listContainer: {
-    gap: 16,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 40,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  courseCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  },
+  statsCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
+    alignItems: 'center',
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  titleCol: {
+  statItem: {
     flex: 1,
-  },
-  courseTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  instructorName: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  statusBadge: {
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  statusActive: {
-    backgroundColor: '#ECFDF5',
-  },
-  statusUpcoming: {
-    backgroundColor: '#FEF3C7',
-  },
-  statusCompleted: {
-    backgroundColor: '#F3F4F6',
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  statusActiveText: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  statusUpcomingText: {
-    color: '#F59E0B',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  statusCompletedText: {
-    color: '#6B7280',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  detailsGrid: {
-    flexDirection: 'row',
-    marginTop: 14,
-    gap: 14,
-  },
-  detailItem: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
-  detailVal: {
-    fontSize: 11,
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 12,
     color: '#6B7280',
     fontWeight: '500',
+    marginTop: 2,
   },
-  progressRow: {
-    flexDirection: 'row',
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E5E7EB',
+  },
+  listContainer: {
+    gap: 12,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
     alignItems: 'center',
-    marginTop: 12,
+    justifyContent: 'center',
     gap: 10,
   },
-  progressBarBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#10B981',
-    borderRadius: 3,
-  },
-  progressPercent: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    width: 26,
-    textAlign: 'right',
-  },
-  priceRow: {
-    marginTop: 12,
-  },
-  priceVal: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#7B2CBF',
-  },
-
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    marginTop: 12,
-    paddingTop: 12,
-    gap: 12,
-  },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3E8FF',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 4,
-  },
-  editBtnText: {
-    color: '#7B2CBF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  deleteCardBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 4,
-  },
-  deleteBtnText: {
-    color: '#EF4444',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  // Modal layout
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    height: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  modalScroll: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  formSectionTitle: {
+  emptyText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#7B2CBF',
-    marginTop: 16,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 6,
-  },
-  formGroup: {
-    marginBottom: 14,
-  },
-  formRow: {
-    flexDirection: 'row',
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    height: 42,
-    paddingHorizontal: 12,
-    fontSize: 13,
-    color: '#1F2937',
-    backgroundColor: '#F9FAFB',
-  },
-  textArea: {
-    height: 80,
-    paddingTop: 10,
-    textAlignVertical: 'top',
-  },
-  meetInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
-    marginBottom: 4,
-  },
-  meetCheckboxRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginTop: 16,
-    paddingVertical: 4,
-  },
-  checkboxTextLabel: {
-    fontSize: 12,
-    color: '#374151',
-    fontWeight: '600',
-  },
-  checkboxSubtext: {
-    fontSize: 11,
     color: '#6B7280',
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  dropdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    height: 42,
-    paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
-    gap: 8,
-  },
-  dropdownText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#1F2937',
-  },
-  dropdownPlaceholder: {
-    color: '#9CA3AF',
-  },
-  dropdownList: {
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    marginTop: 4,
-    maxHeight: 200,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  dropdownItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  daysRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  dayChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFF',
-  },
-  dayChipActive: {
-    backgroundColor: '#7B2CBF',
-    borderColor: '#7B2CBF',
-  },
-  dayChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  dayChipTextActive: {
-    color: '#FFF',
-  },
-  modalActionRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    height: 46,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCancelBtnText: {
-    color: '#4B5563',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  modalSubmitBtn: {
-    flex: 2,
-    backgroundColor: '#7B2CBF',
-    height: 46,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalSubmitBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  toast: {
-    position: 'absolute',
-    top: 16,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    zIndex: 999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  toastSuccess: { backgroundColor: '#10B981' },
-  toastError: { backgroundColor: '#EF4444' },
-  toastText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    marginTop: 20,
+    marginTop: 16,
+    marginBottom: 8,
   },
   pageBtn: {
     width: 34,
     height: 34,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderRadius: 17,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   pageBtnActive: {
     backgroundColor: '#7B2CBF',
     borderColor: '#7B2CBF',
   },
   pageBtnDisabled: {
-    borderColor: '#F3F4F6',
-    backgroundColor: '#F9FAFB',
+    opacity: 0.5,
   },
   pageBtnText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: '#4B5563',
   },
   pageBtnTextActive: {
     color: '#FFFFFF',
+  },
+  bottomSpacer: {
+    height: 80,
+  },
+  toast: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 9999,
+  },
+  toastSuccess: {
+    backgroundColor: '#10B981',
+  },
+  toastError: {
+    backgroundColor: '#EF4444',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
 });

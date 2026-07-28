@@ -10,12 +10,14 @@ import {
   StatusBar,
   ActivityIndicator,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import GenBatchDetails from './gen-batch-details';
+import BatchInfoScreen from './batch-info-screen';
 import { api } from '../../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -27,8 +29,11 @@ interface BatchesScreenProps {
 }
 
 export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const [activeTab, setActiveTab] = useState<SubTabType>('Ongoing');
   const [selectedGenBatch, setSelectedGenBatch] = useState<string | null>(null);
+  const [viewingBatchInfo, setViewingBatchInfo] = useState<any | null>(null);
   const [ongoingBatches, setOngoingBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [teacherPhotos, setTeacherPhotos] = useState<Record<string, string>>({});
@@ -62,7 +67,7 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
       const mapped = data.map((e: any) => {
         const start = e.startDate ? new Date(e.startDate) : null;
         const end = e.endDate ? new Date(e.endDate) : null;
-        let duration = '';
+        let duration = '3 Months';
         if (start && end) {
           const months = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30));
           duration = `${months} Month${months !== 1 ? 's' : ''}`;
@@ -73,8 +78,15 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
           : e.classTimings || 'TBD';
         return {
           id: String(e.id),
-          title: e.courseTitle || '',
+          title: e.courseTitle || e.selectCourse || e.batchName || 'Enrolled Course',
+          subtitle: e.batchName || 'Active Enrolled Batch',
           duration,
+          startDate: e.startDate ? new Date(e.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'June 15, 2026',
+          instructor: e.instructor || 'TBD',
+          schedule: nextClass,
+          classDays: e.classDays || [],
+          classTiming: e.classTimings || 'TBD',
+          syllabusTopics: e.syllabusTopics || e.syllabus || '',
           isLive: false,
           teacher: { name: e.instructor || 'TBD', emoji: '👨💻' },
           progress: '0/0',
@@ -112,9 +124,19 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
 
   const handleEnrollSuccess = (_batch: any) => {
     setSelectedGenBatch(null);
+    setViewingBatchInfo(null);
     setActiveTab('Ongoing');
     fetchEnrollments();
   };
+
+  if (viewingBatchInfo) {
+    return (
+      <BatchInfoScreen 
+        onBack={() => setViewingBatchInfo(null)} 
+        batch={viewingBatchInfo}
+      />
+    );
+  }
 
   if (selectedGenBatch) {
     return (
@@ -130,7 +152,7 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       {/* 1. HEADER */}
       <View style={styles.header}>
-        <View style={{ width: '100%', paddingHorizontal: 4 }}>
+        <View style={{ width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center', paddingHorizontal: 4 }}>
           {/* Accent line FIRST — above NEXUS title, same as home */}
           <LinearGradient
             colors={[
@@ -162,7 +184,7 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }]}
         showsVerticalScrollIndicator={false}
       >
         {/* 2. STATS ROW */}
@@ -225,14 +247,14 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
 
         {/* 4. BATCH CARDS LIST */}
         {activeTab === 'Ongoing' ? (
-          <View style={styles.listContainer}>
+          <View style={[styles.listContainer, { flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }]}>
             {loading ? (
               <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 40 }} />
             ) : ongoingBatches.length === 0 ? (
               <Text style={styles.emptyText}>No enrolled batches found.</Text>
             ) : (
               ongoingBatches.map((batch) => (
-                <View key={batch.id} style={styles.batchCard}>
+                <View key={batch.id} style={[styles.batchCard, { width: isDesktop ? '48.8%' : '100%' }]}>
                   {/* Card Header (Purple Area) */}
                   <View style={styles.batchCardHeader}>
                     <View style={styles.batchHeaderLeft}>
@@ -329,15 +351,24 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
                         </TouchableOpacity>
                       </View>
                     )}
+
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3E8FF', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 10, justifyContent: 'center', gap: 6 }}
+                      onPress={() => setViewingBatchInfo(batch)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="book-outline" size={16} color="#7B2CBF" />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#7B2CBF' }}>View Syllabus & Live Progress</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
             )}
           </View>
         ) : (
-          <View style={styles.listContainer}>
+          <View style={[styles.listContainer, { flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }]}>
             {/* Gen Batches Header */}
-            <View style={styles.genBatchesHeader}>
+            <View style={[styles.genBatchesHeader, { width: '100%' }]}>
               <Text style={styles.genBatchesTitle}>Gen Batches</Text>
               <Text style={styles.genBatchesSubtitle}>View all available batches and their courses</Text>
             </View>
@@ -345,7 +376,7 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
             {genBatches.map((batch) => (
               <TouchableOpacity 
                 key={batch.id} 
-                style={styles.genBatchCard}
+                style={[styles.genBatchCard, { width: isDesktop ? '48.8%' : '100%' }]}
                 onPress={() => setSelectedGenBatch(batch.id)}
                 activeOpacity={0.8}
               >
