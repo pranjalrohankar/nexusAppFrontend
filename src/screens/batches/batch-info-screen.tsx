@@ -465,35 +465,6 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
                 </View>
               </View>
 
-              {/* FEES & ENROLLMENT */}
-              <View style={styles.sectionHeaderRow}>
-                <Ionicons name="card" size={20} color="#7B2CBF" />
-                <Text style={styles.sectionTitle}>Enrollment & Fees</Text>
-              </View>
-
-              <View style={styles.feesCardBox}>
-                <View style={styles.feesHeaderRow}>
-                  <View>
-                    <Text style={styles.feesLabel}>Total Course Fee</Text>
-                    <Text style={styles.feesValue}>{data.fees}</Text>
-                  </View>
-                  <View style={styles.greenCheckCircle}>
-                    <Ionicons name="shield-checkmark" size={20} color="#10B981" />
-                  </View>
-                </View>
-                <Text style={styles.installmentText}>{data.installment}</Text>
-
-                <TouchableOpacity style={styles.purpleEnrollButton} onPress={handleEnroll} activeOpacity={0.8}>
-                  <Text style={styles.purpleEnrollButtonText}>Enroll Now - {data.fees}</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#FFF" />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.outlineButton} activeOpacity={0.8}>
-                  <Ionicons name="download-outline" size={18} color="#7B2CBF" />
-                  <Text style={styles.outlineButtonText}>Download Brochure</Text>
-                </TouchableOpacity>
-              </View>
-
             </View>
 
           </View>
