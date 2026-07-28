@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   TextInput,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -73,6 +74,8 @@ interface GenBatchDetailsProps {
 }
 
 export default function GenBatchDetails({ onBack, onEnrollSuccess }: GenBatchDetailsProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBatch, setSelectedBatch] = useState<typeof availableBatches[0] | null>(null);
 
@@ -90,40 +93,42 @@ export default function GenBatchDetails({ onBack, onEnrollSuccess }: GenBatchDet
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }]}
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <View style={styles.headerTopRow}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
-              <Ionicons name="arrow-back" size={24} color="#FFF" />
-            </TouchableOpacity>
-            <View style={styles.headerIcons}>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="notifications-outline" size={22} color="#FFF" />
-                <View style={styles.badgeDot} />
+          <View style={{ width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }}>
+            <View style={styles.headerTopRow}>
+              <TouchableOpacity style={styles.backButton} onPress={onBack}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
               </TouchableOpacity>
+              <View style={styles.headerIcons}>
+                <TouchableOpacity style={styles.iconButton}>
+                  <Ionicons name="notifications-outline" size={22} color="#FFF" />
+                  <View style={styles.badgeDot} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-          <Text style={styles.headerTitle}>Upcoming Batches</Text>
-          <Text style={styles.headerSubtitle}>Enroll in new courses starting soon</Text>
-          
-          {/* SEARCH BAR (Overlapping style in original, here just inside header) */}
-          <View style={styles.searchWrapper}>
-            <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search batches..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+            <Text style={styles.headerTitle}>Upcoming Batches</Text>
+            <Text style={styles.headerSubtitle}>Enroll in new courses starting soon</Text>
+            
+            {/* SEARCH BAR */}
+            <View style={styles.searchWrapper}>
+              <Ionicons name="search-outline" size={20} color="#9CA3AF" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search batches..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
           </View>
         </View>
 
-        <View style={styles.bodyBackground}>
+        <View style={[styles.bodyBackground, { width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }]}>
           {/* STATS ROW */}
           <View style={styles.statsContainer}>
             <View style={styles.statCol}>
@@ -146,11 +151,11 @@ export default function GenBatchDetails({ onBack, onEnrollSuccess }: GenBatchDet
           <Text style={styles.listTitle}>Available Batches ({availableBatches.length})</Text>
 
           {/* CARDS */}
-          <View style={styles.listContainer}>
+          <View style={[styles.listContainer, { flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }]}>
           {availableBatches
             .filter(batch => batch.title.toLowerCase().includes(searchQuery.toLowerCase()) || batch.instructor.toLowerCase().includes(searchQuery.toLowerCase()))
             .map((batch) => (
-            <View key={batch.id} style={styles.batchCard}>
+            <View key={batch.id} style={[styles.batchCard, { width: isDesktop ? '48.8%' : '100%' }]}>
               <Text style={styles.batchTitle}>{batch.title}</Text>
               <Text style={styles.batchSubtitle}>{batch.subtitle}</Text>
               

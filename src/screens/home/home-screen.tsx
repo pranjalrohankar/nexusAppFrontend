@@ -22,7 +22,7 @@ import {
   PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api, getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
 export const exploreCoursesList: ExploreCourseItem[] = [];
@@ -122,12 +122,122 @@ export const coursesData: Record<string, CourseData> = {
       studentsCount: '10,000+',
     },
     syllabus: [
-      { moduleNumber: '1', title: 'Java Programming Core', lessons: '12', weeks: '3' },
-      { moduleNumber: '2', title: 'Spring Framework & Spring Boot', lessons: '14', weeks: '3' },
-      { moduleNumber: '3', title: 'Hibernate ORM & Databases', lessons: '8', weeks: '2' },
-      { moduleNumber: '4', title: 'Microservices & REST Services', lessons: '12', weeks: '3' },
-      { moduleNumber: '5', title: 'Frontend Integration with React', lessons: '6', weeks: '3' },
+      { moduleNumber: '1', title: 'Core Java & OOPs', lessons: '12', weeks: '3' },
+      { moduleNumber: '2', title: 'JDBC Database Connectivity', lessons: '8', weeks: '2' },
+      { moduleNumber: '3', title: 'Servlets & JSP Web Architecture', lessons: '10', weeks: '2' },
+      { moduleNumber: '4', title: 'Hibernate ORM Framework', lessons: '10', weeks: '2' },
+      { moduleNumber: '5', title: 'Spring Framework Core', lessons: '12', weeks: '3' },
+      { moduleNumber: '6', title: 'Spring Boot & Microservices', lessons: '14', weeks: '3' },
+      { moduleNumber: '7', title: 'Responsive Web Design (HTML5, CSS3, Bootstrap)', lessons: '10', weeks: '2' },
     ],
+    syllabusTopics: JSON.stringify([
+      {
+        title: 'Module 1 – Core Java & Object Oriented Programming',
+        topics: [
+          "OOP's Features (Encapsulation, Inheritance, Polymorphism, Abstraction)",
+          'Inner Class & Anonymous Classes',
+          'Reflection API & Runtime Metadata',
+          'Wrapper Classes & Autoboxing',
+          'Exception Handling (Try-Catch, Custom Exceptions)',
+          'Multithreading in Java & Synchronization',
+          'I/O Programming & File Handling',
+          'GUI Programming Fundamentals',
+          'Collection Framework (List, Set, Map, Mini Project)',
+        ],
+      },
+      {
+        title: 'Module 2 – Advanced Java & Database Connectivity (JDBC)',
+        topics: [
+          'Need of JDBC & Database Drivers',
+          'JDBC Driver Types & Architecture',
+          'JDBC Transaction Management & Savepoints',
+          'Advance JDBC & Batch Processing',
+          'What is Stored Procedure?',
+          'JDBC using Stored Procedures',
+          'Data Access Object (DAO) Design Pattern',
+          'JDBC Application using Swing & DAO Pattern',
+        ],
+      },
+      {
+        title: 'Module 3 – Web Components: Servlets & JSP',
+        topics: [
+          'Overview of HTML, CSS, XML & JEE Architecture',
+          'Servlet Basics & Lifecycle',
+          'Servlet API & Request/Response Flow',
+          'Session Tracking in Java (Cookies, HttpSession, URL Rewriting)',
+          'Session Tracking Mechanism & State Preservation',
+          'ServletFilter API & Interceptors',
+          'Introduction to JSP & Syntax',
+          'JSP Tag & Directives',
+          'JSP Implicit Objects & Expression Language (EL)',
+          'JSP Specification & Concept of MVC (Mini Project)',
+        ],
+      },
+      {
+        title: 'Module 4 – Java Frameworks: Hibernate ORM',
+        topics: [
+          'Introduction to ORM & Limitations of JDBC',
+          'What is ORM? & What is Hibernate?',
+          'Hibernate Architecture & SessionFactory',
+          'Hibernate Example & Setup',
+          'CRUD Operations Using Hibernate API',
+          'Hibernate Entity Mapping with Annotations',
+          'Hibernate Generator Classes & Identifier Strategies',
+          'Hibernate Mapping & Relationships (One-to-One, One-to-Many, Many-to-Many)',
+          'Component Mapping & Value Types',
+          'Inheritance Mapping Strategies',
+          'Collection Mapping',
+          'HQL (Hibernate Query Language) & Criteria API',
+          'Caching in Hibernate (First Level & Second Level Cache)',
+        ],
+      },
+      {
+        title: 'Module 5 – Spring Framework & Core Architecture',
+        topics: [
+          'Introduction to Spring Framework Features & Ecosystem',
+          'What is Spring? & Spring Features',
+          'Spring Modules Architecture',
+          'Dependency Injection (DI) & Inversion of Control (IoC)',
+          'IoC Container (BeanFactory & ApplicationContext)',
+          'What is Bean? & Bean Lifecycle',
+          'Spring Core Annotations (@Component, @Autowired, @Qualifier)',
+          'Spring DAO & Database Access Integration',
+          'Spring Web MVC Architecture',
+          'Spring Aspect Oriented Programming (AOP)',
+        ],
+      },
+      {
+        title: 'Module 6 – Spring Boot & Microservices Architecture',
+        topics: [
+          'Introduction to Spring Boot & Auto-Configuration',
+          'Dependency Management using POM.xml & Starters',
+          'CommandLineRunner & ApplicationRunner',
+          'Introduction to ORM with JPA & Spring Data',
+          'Spring MVC with Spring Boot',
+          'Building RESTful Web Services with Spring MVC',
+          'Spring Boot Security & JWT Authentication',
+          'Microservices Architecture & Communication (Mini Project)',
+        ],
+      },
+      {
+        title: 'Module 7 – Responsive Web Design (HTML5, CSS3, Bootstrap)',
+        topics: [
+          'HTML Basics: Structure, Elements, and Attributes',
+          'Various Input Fields, Forms & Validations in HTML',
+          'Tables, Frames, Lists, & Layout Structures',
+          'Fonts, Colors, Images & Media Elements',
+          'HTML Forms & Controls',
+          'Styling with CSS, Selectors and Style Definitions',
+          'Properties of CSS & Linking HTML & CSS',
+          'Limitations of Normal Selectors & Types of Selectors',
+          'CSS Properties, Pseudo-elements & CSS Animations',
+          'Introduction to Bootstrap Grid System & Components',
+          'What is Bootstrap Components & Glyphicons Component',
+          'Dropdown Menu Component, Button Groups & Button Toolbar',
+          'Navigation Pills & Tabs Components',
+        ],
+      },
+    ]),
   },
   'Node js for AI': {
     title: 'Node js for AI & Web Integration',
@@ -554,7 +664,11 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
             {/* Watch Now button */}
             <TouchableOpacity
               style={rs.watchBtn}
-              onPress={() => { setPlayTitle(rec.title); setPlayUri(getStreamUrl(rec.id)); }}
+              onPress={() => {
+                setPlayTitle(rec.title);
+                const targetUri = rec.videoUrl ? resolveDynamicFileUrl(rec.videoUrl) : getStreamUrl(rec.id);
+                setPlayUri(targetUri);
+              }}
             >
               <Ionicons name="play" size={14} color="#FFF" />
               <Text style={rs.watchBtnText}>Watch Now</Text>

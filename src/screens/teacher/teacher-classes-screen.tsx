@@ -2,11 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
   TextInput, Platform, ActivityIndicator, Linking, Share, StatusBar, Modal, KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../services/api';
+import { parseSyllabus } from '../../utils/syllabus-parser';
+import { getCompletedTopicsForCourse, toggleTopicCompleted } from '../../utils/syllabus-progress-store';
 
 interface BatchItem {
   id: number;
@@ -23,6 +26,7 @@ interface BatchItem {
   duration?: string;
   googleMeetLink?: string;
   totalSessions?: number;
+  syllabusTopics?: string;
 }
 
 interface Student {
@@ -41,6 +45,8 @@ interface TeacherClassesScreenProps {
 }
 
 export default function TeacherClassesScreen({ onOpenNotifications }: TeacherClassesScreenProps) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'UPCOMING' | 'COMPLETED'>('ACTIVE');
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +58,17 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
   const [editingMeetBatch, setEditingMeetBatch] = useState<BatchItem | null>(null);
   const [editMeetLink, setEditMeetLink] = useState('');
   const [savingMeet, setSavingMeet] = useState(false);
+  const [syllabusBatch, setSyllabusBatch] = useState<BatchItem | null>(null);
+  const [completedTopics, setCompletedTopics] = useState<string[]>([]);
   const selectedBatchRef = useRef<BatchItem | null>(null);
+
+  useEffect(() => {
+    if (syllabusBatch?.selectCourse) {
+      getCompletedTopicsForCourse(syllabusBatch.selectCourse, syllabusBatch.instructor).then(setCompletedTopics);
+    } else {
+      setCompletedTopics([]);
+    }
+  }, [syllabusBatch]);
 
   // Keep ref in sync so the polling interval can access current batch
   useEffect(() => { selectedBatchRef.current = selectedBatch; }, [selectedBatch]);
@@ -83,7 +99,17 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
   const loadBatches = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.getMyBatches();
+      const [res, coursesRes] = await Promise.all([
+        api.getMyBatches(),
+        api.getAllCourses(),
+      ]);
+
+      const courseList = Array.isArray(coursesRes?.data) ? coursesRes.data : Array.isArray(coursesRes?.content) ? coursesRes.content : Array.isArray(coursesRes) ? coursesRes : [];
+      const courseSyllabusMap: Record<string, string> = {};
+      courseList.forEach((c: any) => {
+        if (c.title) courseSyllabusMap[c.title.toLowerCase().trim()] = c.syllabusTopics || '';
+      });
+
       if (res.success && Array.isArray(res.data)) {
         setBatches(res.data.map((b: any) => {
           // Spring Boot serialises LocalDate as [yyyy,m,d] array
@@ -92,6 +118,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             if (Array.isArray(v)) return `${v[0]}-${String(v[1]).padStart(2,'0')}-${String(v[2]).padStart(2,'0')}`;
             return String(v);
           };
+          const matchedSyllabus = courseSyllabusMap[(b.selectCourse || '').toLowerCase().trim()] || b.syllabusTopics || '';
           return {
             ...b,
             startDate: toDateStr(b.startDate),
@@ -100,6 +127,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             classTimings: b.classTimings ?? '',
             totalSessions: b.totalSessions ?? null,
             courseId: b.courseId ?? null,
+            syllabusTopics: matchedSyllabus,
           };
         }));
       }
@@ -362,48 +390,52 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       <View style={styles.header}>
-        <LinearGradient
-          colors={[
-            'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
-            'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
-            'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
-            'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
-            'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
-          ]}
-          locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.headerAccentLine}
-        />
-        <View style={styles.headerTopRow}>
-          <Text style={styles.logoText}>
-            NE<Text style={styles.logoTextGold}>X</Text>US
-          </Text>
-          <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
-            <Ionicons name="notifications-outline" size={22} color="#FFF" />
-            <View style={styles.badgeDot} />
-          </TouchableOpacity>
+        <View style={{ width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }}>
+          <LinearGradient
+            colors={[
+              'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+              'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+              'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+              'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+              'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+            ]}
+            locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.headerAccentLine}
+          />
+          <View style={styles.headerTopRow}>
+            <Text style={styles.logoText}>
+              NE<Text style={styles.logoTextGold}>X</Text>US
+            </Text>
+            <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
+              <Ionicons name="notifications-outline" size={22} color="#FFF" />
+              <View style={styles.badgeDot} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.headerTitle}>My Classes</Text>
+          <Text style={styles.headerSubtitle}>Manage your courses and Google Meet links.</Text>
         </View>
-        <Text style={styles.headerTitle}>My Classes</Text>
-        <Text style={styles.headerSubtitle}>Manage your courses and Google Meet links.</Text>
       </View>
 
       {/* TABS */}
       <View style={styles.subTabContainer}>
-        {(['ACTIVE', 'UPCOMING', 'COMPLETED'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.subTabBtn, activeTab === tab && styles.subTabBtnActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.subTabText, activeTab === tab && styles.subTabTextActive]}>
-              {tab === 'ACTIVE' ? 'Active' : tab === 'UPCOMING' ? 'Upcoming' : 'Completed'} ({counts[tab]})
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <View style={{ width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center', flexDirection: 'row', gap: 8 }}>
+          {(['ACTIVE', 'UPCOMING', 'COMPLETED'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.subTabBtn, activeTab === tab && styles.subTabBtnActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.subTabText, activeTab === tab && styles.subTabTextActive]}>
+                {tab === 'ACTIVE' ? 'Active' : tab === 'UPCOMING' ? 'Upcoming' : 'Completed'} ({counts[tab]})
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }]} showsVerticalScrollIndicator={false}>
         {loading ? (
           <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 60 }} />
         ) : filteredBatches.length === 0 ? (
@@ -412,9 +444,9 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             <Text style={styles.emptyText}>No {activeTab.toLowerCase()} classes</Text>
           </View>
         ) : (
-          <View style={styles.classList}>
+          <View style={[styles.classList, { flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap' }]}>
             {filteredBatches.map(item => (
-              <View key={item.id} style={styles.classCard}>
+              <View key={item.id} style={[styles.classCard, { width: isDesktop ? '48.8%' : '100%' }]}>
                 {/* Title + Badge */}
                 <View style={styles.cardHeaderRow}>
                   <View style={{ flex: 1 }}>
@@ -510,7 +542,12 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                 <View style={styles.cardActionBtnRow}>
                   <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => loadStudents(item)}>
                     <Ionicons name="people-outline" size={14} color="#7B2CBF" />
-                    <Text style={styles.cardViewStudentsText}>View Students</Text>
+                    <Text style={styles.cardViewStudentsText}>Students</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => setSyllabusBatch(item)}>
+                    <Ionicons name="book-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.cardViewStudentsText}>Syllabus</Text>
                   </TouchableOpacity>
 
                   {item.status === 'ACTIVE' && item.googleMeetLink ? (
@@ -561,6 +598,129 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* View Course Syllabus Modal */}
+      <Modal visible={!!syllabusBatch} transparent animationType="slide" onRequestClose={() => setSyllabusBatch(null)}>
+        <View style={styles.meetModalOverlay}>
+          <SafeAreaView style={[styles.meetModalBox, { maxHeight: '85%', padding: 20, width: '100%', maxWidth: 680, alignSelf: 'center' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#1F2937' }}>Course Syllabus</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#7B2CBF' }}>{syllabusBatch?.selectCourse}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSyllabusBatch(null)}>
+                <Ionicons name="close" size={24} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {(() => {
+                const modules = parseSyllabus(syllabusBatch?.syllabusTopics);
+                if (!modules || modules.length === 0) {
+                  return (
+                    <View style={{ padding: 30, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="book-outline" size={36} color="#9CA3AF" />
+                      <Text style={{ fontSize: 14, color: '#6B7280', marginTop: 10 }}>No syllabus modules added for this course yet.</Text>
+                    </View>
+                  );
+                }
+
+                // Calculate progress
+                let allTopics: string[] = [];
+                modules.forEach(m => {
+                  if (m.topics && m.topics.length > 0) {
+                    allTopics.push(...m.topics);
+                  }
+                });
+                const totalTopics = allTopics.length;
+                const doneCount = allTopics.filter(t => completedTopics.includes(t)).length;
+                const progressPct = totalTopics > 0 ? Math.round((doneCount / totalTopics) * 100) : 0;
+
+                return (
+                  <View>
+                    {/* Overall Progress Banner */}
+                    <View style={{ backgroundColor: '#F3E8FF', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E9D5FF' }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#7B2CBF' }}>Syllabus Completion</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#7B2CBF' }}>{doneCount} / {totalTopics} Covered ({progressPct}%)</Text>
+                      </View>
+                      <View style={{ height: 8, backgroundColor: '#E9D5FF', borderRadius: 4, overflow: 'hidden' }}>
+                        <View style={{ width: `${progressPct}%`, height: '100%', backgroundColor: '#7B2CBF', borderRadius: 4 }} />
+                      </View>
+                      <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 6, fontStyle: 'italic' }}>
+                        Tap any topic below to mark it as covered for students.
+                      </Text>
+                    </View>
+
+                    {modules.map((mod, idx) => (
+                      <View key={idx} style={{ backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#7B2CBF', marginBottom: 10 }}>
+                          {mod.title.startsWith('Module') ? mod.title : `Module ${idx + 1} – ${mod.title}`}
+                        </Text>
+                        {mod.topics && mod.topics.length > 0 ? (
+                          mod.topics.map((t, tIdx) => {
+                            const isDone = completedTopics.includes(t);
+                            return (
+                              <TouchableOpacity
+                                key={tIdx}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  paddingVertical: 8,
+                                  borderBottomWidth: tIdx < mod.topics.length - 1 ? 1 : 0,
+                                  borderBottomColor: '#F3F4F6',
+                                  gap: 8,
+                                }}
+                                onPress={async () => {
+                                  if (!syllabusBatch?.selectCourse) return;
+                                  const updated = await toggleTopicCompleted(syllabusBatch.selectCourse, t, syllabusBatch.instructor);
+                                  setCompletedTopics(updated);
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <Ionicons
+                                  name={isDone ? "checkbox" : "square-outline"}
+                                  size={20}
+                                  color={isDone ? "#10B981" : "#9CA3AF"}
+                                />
+                                <Text style={{
+                                  fontSize: 13,
+                                  color: isDone ? '#059669' : '#374151',
+                                  fontWeight: isDone ? '600' : '400',
+                                  textDecorationLine: isDone ? 'line-through' : 'none',
+                                  flex: 1,
+                                }}>
+                                  {t}
+                                </Text>
+                                {isDone ? (
+                                  <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>COVERED</Text>
+                                  </View>
+                                ) : (
+                                  <Text style={{ fontSize: 11, color: '#9CA3AF' }}>Tap to complete</Text>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })
+                        ) : (
+                          <Text style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Comprehensive topics covered in this module.</Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={{ backgroundColor: '#7B2CBF', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 14 }}
+              onPress={() => setSyllabusBatch(null)}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>Close</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -799,6 +959,7 @@ const styles = StyleSheet.create({
     gap: 6, borderWidth: 1.5, borderColor: '#E5E7EB',
     borderRadius: 10, height: 38,
   },
+  messageBtnText: { fontSize: 13, fontWeight: '600', color: '#7B2CBF' },
   meetEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#F3E8FF', borderRadius: 8 },
   meetEditBtnText: { fontSize: 11, fontWeight: '600', color: '#7B2CBF' },
   meetModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },

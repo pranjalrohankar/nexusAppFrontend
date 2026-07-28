@@ -12,7 +12,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { adminDataCache } from '../../components/layout/app-tabs';
+import { adminDataCache } from '../../services/admin-data-cache';
 import { api } from '../../services/api';
 
 interface Enrollment {

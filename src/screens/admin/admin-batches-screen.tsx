@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated, StatusBar, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
-import { adminDataCache } from '../../components/layout/app-tabs';
+import { adminDataCache } from '../../services/admin-data-cache';
 import BatchStudentsScreen from './batch-students-screen';
 
 type FilterTab = 'All' | 'Active' | 'Upcoming' | 'Completed';
@@ -41,6 +41,8 @@ interface Teacher {
 }
 
 export default function AdminBatchesScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const [batches, setBatches] = useState<Batch[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -62,6 +64,7 @@ export default function AdminBatchesScreen() {
   const [formClassDays, setFormClassDays] = useState<ClassDay[]>([]);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
+  const [activeCalendarField, setActiveCalendarField] = useState<'start' | 'end' | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -232,47 +235,49 @@ export default function AdminBatchesScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <LinearGradient
-          colors={[
-            'rgba(0,0,0,0)','rgba(9,2,0,0.14)','rgba(41,18,1,0.286)',
-            'rgba(78,39,5,0.427)','rgba(118,62,11,0.573)','rgba(160,86,19,0.714)',
-            'rgba(205,112,27,0.86)','#FB8B24','rgba(205,112,27,0.86)',
-            'rgba(160,86,19,0.714)','rgba(118,62,11,0.573)','rgba(78,39,5,0.427)',
-            'rgba(41,18,1,0.286)','rgba(9,2,0,0.14)','rgba(0,0,0,0)',
-          ]}
-          locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.headerAccentLine}
-        />
-        <View style={styles.headerTop}>
-          <View style={styles.headerTextCol}>
-            <Text style={styles.headerTitle}>Batches</Text>
-            <Text style={styles.headerSubtitle}>{batches.length} total batches</Text>
-          </View>
-          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
-            <Ionicons name="add" size={24} color="#FFF" />
-          </TouchableOpacity>
-        </View>
-        {/* Search bar inside header */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search batches, courses, instructors..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+        <View style={{ width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }}>
+          <LinearGradient
+            colors={[
+              'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
+              'rgba(78,39,5,0.427)', 'rgba(118,62,11,0.573)', 'rgba(160,86,19,0.714)',
+              'rgba(205,112,27,0.86)', '#FB8B24', 'rgba(205,112,27,0.86)',
+              'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
+              'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
+            ]}
+            locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.headerAccentLine}
           />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+          <View style={styles.headerTop}>
+            <View style={styles.headerTextCol}>
+              <Text style={styles.headerTitle}>Batches</Text>
+              <Text style={styles.headerSubtitle}>{batches.length} total batches</Text>
+            </View>
+            <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddModal}>
+              <Ionicons name="add" size={24} color="#FFF" />
             </TouchableOpacity>
-          ) : null}
+          </View>
+          {/* Search bar inside header */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search batches, courses, instructors..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { width: '100%', maxWidth: isDesktop ? 1200 : undefined, alignSelf: 'center' }]} showsVerticalScrollIndicator={false}>
         {/* Filter Tabs */}
         <View style={styles.filterTabs}>
           <TouchableOpacity
@@ -335,10 +340,11 @@ export default function AdminBatchesScreen() {
           </View>
         ) : (
           <>
+            <View style={{ flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }}>
           {pagedBatches.map((batch) => {
             const selectedCourse = courses.find(c => c.title === batch.selectCourse);
             return (
-              <View key={batch.id} style={styles.batchCard}>
+              <View key={batch.id} style={[styles.batchCard, { width: isDesktop ? '48.8%' : '100%' }]}>
                 {/* Card Header: icon + name/course + status + menu */}
                 <View style={styles.batchHeader}>
                   <View style={styles.batchIconBox}>
@@ -430,6 +436,7 @@ export default function AdminBatchesScreen() {
               </View>
             );
           })}
+          </View>
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -468,7 +475,7 @@ export default function AdminBatchesScreen() {
       {/* Add/Edit Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { width: '100%', maxWidth: 700, alignSelf: 'center', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderBottomLeftRadius: isDesktop ? 24 : 0, borderBottomRightRadius: isDesktop ? 24 : 0 }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="arrow-back" size={24} color="#FFF" />
@@ -549,23 +556,31 @@ export default function AdminBatchesScreen() {
               <View style={styles.dateRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>Start Date *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="YYYY-MM-DD"
-                    value={formStartDate}
-                    onChangeText={setFormStartDate}
-                    placeholderTextColor="#9CA3AF"
-                  />
+                  <TouchableOpacity
+                    style={styles.datePickerInputBox}
+                    onPress={() => setActiveCalendarField('start')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="calendar" size={18} color="#7B2CBF" style={{ marginRight: 8 }} />
+                    <Text style={[styles.dateInputText, !formStartDate && styles.dateInputPlaceholder]}>
+                      {formStartDate || 'Select Date'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={14} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
+                  </TouchableOpacity>
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.fieldLabel}>End Date</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="YYYY-MM-DD"
-                    value={formEndDate}
-                    onChangeText={setFormEndDate}
-                    placeholderTextColor="#9CA3AF"
-                  />
+                  <TouchableOpacity
+                    style={styles.datePickerInputBox}
+                    onPress={() => setActiveCalendarField('end')}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="calendar" size={18} color="#7B2CBF" style={{ marginRight: 8 }} />
+                    <Text style={[styles.dateInputText, !formEndDate && styles.dateInputPlaceholder]}>
+                      {formEndDate || 'Select Date'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={14} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -604,7 +619,213 @@ export default function AdminBatchesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* VISUAL MONTHLY CALENDAR MODAL */}
+      <CalendarModal
+        visible={activeCalendarField !== null}
+        title={activeCalendarField === 'start' ? 'Select Start Date' : 'Select End Date'}
+        initialDate={activeCalendarField === 'start' ? formStartDate : formEndDate}
+        onClose={() => setActiveCalendarField(null)}
+        onSelectDate={(dateStr) => {
+          if (activeCalendarField === 'start') setFormStartDate(dateStr);
+          else if (activeCalendarField === 'end') setFormEndDate(dateStr);
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function CalendarModal({
+  visible,
+  title,
+  initialDate,
+  onClose,
+  onSelectDate,
+}: {
+  visible: boolean;
+  title: string;
+  initialDate?: string;
+  onClose: () => void;
+  onSelectDate: (dateStr: string) => void;
+}) {
+  const [navDate, setNavDate] = useState(() => {
+    if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
+      const [y, m] = initialDate.split('-').map(Number);
+      return new Date(y, m - 1, 1);
+    }
+    return new Date();
+  });
+  const [showYearPicker, setShowYearPicker] = useState(false);
+
+  useEffect(() => {
+    if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
+      const [y, m] = initialDate.split('-').map(Number);
+      setNavDate(new Date(y, m - 1, 1));
+    } else {
+      setNavDate(new Date());
+    }
+    setShowYearPicker(false);
+  }, [initialDate, visible]);
+
+  const year = navDate.getFullYear();
+  const month = navDate.getMonth();
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
+
+  const handlePrevMonth = () => setNavDate(new Date(year, month - 1, 1));
+  const handleNextMonth = () => setNavDate(new Date(year, month + 1, 1));
+
+  const handlePickDay = (day: number) => {
+    const mm = String(month + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    onSelectDate(`${year}-${mm}-${dd}`);
+    onClose();
+  };
+
+  const handlePickYear = (selectedYear: number) => {
+    setNavDate(new Date(selectedYear, month, 1));
+    setShowYearPicker(false);
+  };
+
+  const daysArray: (number | null)[] = [];
+  for (let i = 0; i < firstDayIndex; i++) daysArray.push(null);
+  for (let d = 1; d <= daysInMonth; d++) daysArray.push(d);
+
+  const yearsList = Array.from({ length: 16 }, (_, i) => 2020 + i);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={calStyles.overlay}>
+        <View style={calStyles.box}>
+          <View style={calStyles.header}>
+            <Text style={calStyles.modalTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={22} color="#1F2937" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Month & Year Navigation Header */}
+          <View style={calStyles.monthRow}>
+            <TouchableOpacity style={calStyles.navBtn} onPress={handlePrevMonth}>
+              <Ionicons name="chevron-back" size={18} color="#7B2CBF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              onPress={() => setShowYearPicker(p => !p)}
+            >
+              <Text style={calStyles.monthTitle}>{MONTH_NAMES[month]}</Text>
+              <View style={calStyles.yearChip}>
+                <Text style={calStyles.yearChipText}>{year}</Text>
+                <Ionicons name={showYearPicker ? "chevron-up" : "chevron-down"} size={12} color="#7B2CBF" />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={calStyles.navBtn} onPress={handleNextMonth}>
+              <Ionicons name="chevron-forward" size={18} color="#7B2CBF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Year Picker Grid View */}
+          {showYearPicker ? (
+            <View style={{ height: 240 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#6B7280', marginBottom: 8, textAlign: 'center' }}>
+                SELECT YEAR
+              </Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={calStyles.yearsGrid}>
+                  {yearsList.map((y) => (
+                    <TouchableOpacity
+                      key={y}
+                      style={[
+                        calStyles.yearCell,
+                        y === year && calStyles.selectedYearCell,
+                      ]}
+                      onPress={() => handlePickYear(y)}
+                    >
+                      <Text style={[calStyles.yearText, y === year && calStyles.selectedYearText]}>
+                        {y}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          ) : (
+            <>
+              {/* Weekday Labels */}
+              <View style={calStyles.weekHeader}>
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => (
+                  <Text key={w} style={calStyles.weekLabel}>
+                    {w}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Days Grid */}
+              <View style={calStyles.daysGrid}>
+                {daysArray.map((day, idx) => {
+                  if (day === null) {
+                    return <View key={idx} style={calStyles.emptyCell} />;
+                  }
+                  const formattedSelected = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const isSelected = initialDate === formattedSelected;
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const isToday = todayStr === formattedSelected;
+
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[
+                        calStyles.dayCell,
+                        isToday && calStyles.todayCell,
+                        isSelected && calStyles.selectedCell,
+                      ]}
+                      onPress={() => handlePickDay(day)}
+                    >
+                      <Text
+                        style={[
+                          calStyles.dayText,
+                          isToday && calStyles.todayText,
+                          isSelected && calStyles.selectedText,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          )}
+
+          <View style={calStyles.footer}>
+            <TouchableOpacity
+              style={calStyles.todayBtn}
+              onPress={() => {
+                const today = new Date();
+                const y = today.getFullYear();
+                const m = String(today.getMonth() + 1).padStart(2, '0');
+                const d = String(today.getDate()).padStart(2, '0');
+                onSelectDate(`${y}-${m}-${d}`);
+                onClose();
+              }}
+            >
+              <Text style={calStyles.todayBtnText}>Select Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={calStyles.cancelBtn} onPress={onClose}>
+              <Text style={calStyles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -748,6 +969,18 @@ const styles = StyleSheet.create({
   dropdownList: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, marginTop: 4, maxHeight: 200, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
   dropdownItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dateRow: { flexDirection: 'row' },
+  datePickerInputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    height: 48,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFF',
+  },
+  dateInputText: { fontSize: 14, color: '#1F2937' },
+  dateInputPlaceholder: { color: '#9CA3AF' },
   daysRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   dayChip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFF' },
   dayChipActive: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
@@ -767,4 +1000,36 @@ const styles = StyleSheet.create({
   pageNumActive: { backgroundColor: '#7B2CBF' },
   pageNumText: { fontSize: 13, fontWeight: '700', color: '#7B2CBF' },
   pageNumTextActive: { color: '#FFF' },
+});
+
+const calStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  box: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, width: '100%', maxWidth: 360, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 8 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#1F2937' },
+  monthRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: '#F9FAFB', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 },
+  navBtn: { padding: 4 },
+  monthTitle: { fontSize: 15, fontWeight: '700', color: '#7B2CBF' },
+  yearChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3E8FF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
+  yearChipText: { fontSize: 13, fontWeight: '700', color: '#7B2CBF' },
+  yearsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', paddingVertical: 4 },
+  yearCell: { width: '22%', paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', alignItems: 'center' },
+  selectedYearCell: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
+  yearText: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  selectedYearText: { color: '#FFFFFF', fontWeight: '700' },
+  weekHeader: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
+  weekLabel: { width: 40, textAlign: 'center', fontSize: 12, fontWeight: '700', color: '#6B7280' },
+  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
+  emptyCell: { width: 40, height: 40, margin: 2 },
+  dayCell: { width: 40, height: 40, margin: 2, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB' },
+  todayCell: { borderWidth: 1.5, borderColor: '#7B2CBF', backgroundColor: '#F3E8FF' },
+  selectedCell: { backgroundColor: '#7B2CBF' },
+  dayText: { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+  todayText: { color: '#7B2CBF', fontWeight: '700' },
+  selectedText: { color: '#FFFFFF', fontWeight: '700' },
+  footer: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginTop: 18, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 14 },
+  todayBtn: { flex: 1, backgroundColor: 'rgba(123,44,191,0.1)', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  todayBtnText: { fontSize: 13, fontWeight: '700', color: '#7B2CBF' },
+  cancelBtn: { flex: 1, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  cancelBtnText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
 });

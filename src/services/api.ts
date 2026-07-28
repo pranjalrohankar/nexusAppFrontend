@@ -40,28 +40,32 @@ export function getApiBaseUrl() {
 
 export function resolveDynamicFileUrl(urlOrPath: string): string {
   if (!urlOrPath) return '';
-  if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://') || urlOrPath.startsWith('data:') || urlOrPath.startsWith('blob:')) {
-    const activeApiBase = getApiBaseUrl().replace('/api', '');
-    return urlOrPath
+  const activeApiBase = getApiBaseUrl().replace('/api', '');
+  let url = String(urlOrPath).trim();
+
+  // If URL matches any domain/IP like http://192.168.x.x:8080/uploads/ or http://localhost:8080/uploads/
+  if (/^https?:\/\/[^\/]+(?::\d+)?\/uploads\//i.test(url)) {
+    return url.replace(/^https?:\/\/[^\/]+(?::\d+)?/i, activeApiBase);
+  }
+
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+    return url
       .replace(/http:\/\/localhost:8080/g, activeApiBase)
       .replace(/http:\/\/10\.0\.2\.2:8080/g, activeApiBase);
   }
 
-  const normalized = urlOrPath.replace(/\\/g, '/');
+  const normalized = url.replace(/\\/g, '/');
   if (normalized.includes('uploads/materials/')) {
     const filename = normalized.split('uploads/materials/').pop();
-    const base = getApiBaseUrl().replace(/\/api$/, '');
-    return `${base}/uploads/materials/${filename}`;
+    return `${activeApiBase}/uploads/materials/${filename}`;
   }
   if (normalized.includes('uploads/recordings/')) {
     const filename = normalized.split('uploads/recordings/').pop();
-    const base = getApiBaseUrl().replace(/\/api$/, '');
-    return `${base}/uploads/recordings/${filename}`;
+    return `${activeApiBase}/uploads/recordings/${filename}`;
   }
 
   const cleanPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
-  const base = getApiBaseUrl().replace(/\/api$/, '');
-  return `${base}${cleanPath}`;
+  return `${activeApiBase}${cleanPath}`;
 }
 
 const BASE_URL = getApiBaseUrl();
@@ -72,22 +76,9 @@ export function setToken(token: string) {
   _token = token;
   try {
     if (Platform.OS === "web") {
-      // amazonq-ignore-next-line
-      // amazonq-ignore-next-line
       localStorage.setItem("auth_token", token);
     } else {
       AsyncStorage.setItem("auth_token", token);
-    }
-  } catch {}
-}
-
-export async function loadToken(): Promise<void> {
-  if (_token) return;
-  try {
-    if (Platform.OS === "web") {
-      _token = localStorage.getItem("auth_token");
-    } else {
-      _token = await AsyncStorage.getItem("auth_token");
     }
   } catch {}
 }
@@ -97,10 +88,16 @@ export function getToken(): string | null {
   try {
     if (Platform.OS === "web") {
       _token = localStorage.getItem("auth_token");
+    } else {
+      AsyncStorage.getItem("auth_token").then((val) => {
+        if (val) _token = val;
+      });
     }
   } catch {}
   return _token;
 }
+
+export const loadToken = getToken;
 
 export function clearToken() {
   _token = null;
@@ -282,13 +279,35 @@ export const api = {
 
   updateCourseMeetLink: (id: number | string, googleMeetLink: string) =>
     put(`/courses/${id}/meet-link`, { googleMeetLink }),
-  getStudyMaterialsByCourse: (course: string) =>
-    get(`/materials/by-course?course=${encodeURIComponent(course)}`),
+
+  getStudyMaterials: async () => {
+    const res = await get("/materials");
+    const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+    return list.map((item: any) => ({
+      ...item,
+      fileUrl: resolveDynamicFileUrl(item.fileUrl || item.url || item.filePath),
+    }));
+  },
+  getStudyMaterialsByCourse: async (course: string) => {
+    const res = await get(`/materials/by-course?course=${encodeURIComponent(course)}`);
+    const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+    return list.map((item: any) => ({
+      ...item,
+      fileUrl: resolveDynamicFileUrl(item.fileUrl || item.url || item.filePath),
+    }));
+  },
   uploadStudyMaterial: (data: FormData) =>
     postFormData("/materials/upload", data),
   deleteStudyMaterial: (id: number | string) => del(`/materials/${id}`),
 
-  getClassRecordings: () => get("/recordings"),
+  getClassRecordings: async () => {
+    const res = await get("/recordings");
+    const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+    return list.map((item: any) => ({
+      ...item,
+      videoUrl: resolveDynamicFileUrl(item.videoUrl || item.url || item.filePath),
+    }));
+  },
   uploadClassRecording: (data: FormData) =>
     postFormData("/recordings/upload", data),
   getRecordingStreamUrl: (id: number | string) => `${getApiBaseUrl()}/recordings/stream/${id}`,
@@ -311,13 +330,25 @@ export const api = {
   },
   getStudentMaterials: async () => {
     const res = await get('/student/materials');
-    // backend returns a plain array or { data: [...] }
-    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+    const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+    return list.map((item: any) => ({
+      ...item,
+      fileUrl: resolveDynamicFileUrl(item.fileUrl || item.url || item.filePath),
+    }));
   },
-  getStudentRecordings: () => get('/student/recordings'),
+  getStudentRecordings: async () => {
+    const res = await get('/student/recordings');
+    const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+    return list.map((item: any) => ({
+      ...item,
+      videoUrl: resolveDynamicFileUrl(item.videoUrl || item.url || item.filePath),
+    }));
+  },
   getStudentUpcomingClasses: () => get('/student/upcoming-classes'),
   getStudentNotifications: () => get('/notifications/student'),
   markAllStudentNotificationsRead: () => patch('/notifications/student/mark-all-read'),
+  getStudentMarks: (studentId: string | number) => get(`/student/${studentId}/marks`),
+  getStudentsByCourse: (course: string) => get(`/admin/students?course=${encodeURIComponent(course)}`),
   getMaterialDownloadUrl: (id: number | string) => `${getApiBaseUrl()}/materials/download/${id}`,
   setActivityStatus: (online: boolean) => put('/student/activity-status', { online }),
   getPrivacySettings: () => get('/student/privacy-settings'),
@@ -327,10 +358,4 @@ export const api = {
   getTeacherNotifications: () => get('/notifications/teacher'),
   markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
   markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
-
-  // Student marks & course data for teachers
-  getStudentsByCourse: (courseTitle: string) =>
-    get(`/enrollments/course?courseTitle=${encodeURIComponent(courseTitle)}`),
-  getStudentMarks: (studentId: number | string) =>
-    get(`/test-attempts/student/${studentId}`),
 };

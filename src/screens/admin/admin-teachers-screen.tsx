@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
-import { adminDataCache } from '../../components/layout/app-tabs';
+import { adminDataCache } from '../../services/admin-data-cache';
 
 interface Teacher {
   id: string;
