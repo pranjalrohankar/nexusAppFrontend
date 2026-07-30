@@ -54,17 +54,27 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
   const [students, setStudents] = useState<Student[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [copiedId, setCopiedId] = useState<number | null>(null);
-  const [editingMeetBatch, setEditingMeetBatch] = useState<BatchItem | null>(null);
-  const [editMeetLink, setEditMeetLink] = useState('');
-  const [savingMeet, setSavingMeet] = useState(false);
   const [syllabusBatch, setSyllabusBatch] = useState<BatchItem | null>(null);
   const [completedTopics, setCompletedTopics] = useState<string[]>([]);
+  const [completedTopicsMap, setCompletedTopicsMap] = useState<Record<string, string[]>>({});
   const selectedBatchRef = useRef<BatchItem | null>(null);
 
+  const refreshCompletedTopicsForBatches = useCallback(async (batchList: BatchItem[]) => {
+    const map: Record<string | number, string[]> = {};
+    for (const b of batchList) {
+      if (b.id) {
+        try {
+          const topics = await getCompletedTopicsForCourse(b.selectCourse, b.instructor, b.id);
+          map[b.id] = topics;
+        } catch {}
+      }
+    }
+    setCompletedTopicsMap(map);
+  }, []);
+
   useEffect(() => {
-    if (syllabusBatch?.selectCourse) {
-      getCompletedTopicsForCourse(syllabusBatch.selectCourse, syllabusBatch.instructor).then(setCompletedTopics);
+    if (syllabusBatch?.selectCourse && syllabusBatch?.id) {
+      getCompletedTopicsForCourse(syllabusBatch.selectCourse, syllabusBatch.instructor, syllabusBatch.id).then(setCompletedTopics);
     } else {
       setCompletedTopics([]);
     }
@@ -111,7 +121,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
       });
 
       if (res.success && Array.isArray(res.data)) {
-        setBatches(res.data.map((b: any) => {
+        const list = res.data.map((b: any) => {
           // Spring Boot serialises LocalDate as [yyyy,m,d] array
           const toDateStr = (v: any): string => {
             if (!v) return '';
@@ -129,23 +139,23 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             courseId: b.courseId ?? null,
             syllabusTopics: matchedSyllabus,
           };
-        }));
+        });
+        setBatches(list);
+        await refreshCompletedTopicsForBatches(list);
       }
     } catch (e) {
       console.error('Failed to load batches', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshCompletedTopicsForBatches]);
 
   useEffect(() => { loadBatches(); }, [loadBatches]);
 
-  const loadStudents = async (batch: BatchItem) => {
-    setSelectedBatch(batch);
-    setStudentsLoading(true);
-    setStudents([]);
+  const fetchStudents = useCallback(async (batchId: number, showSpinner = true) => {
+    if (showSpinner) setStudentsLoading(true);
     try {
-      const res = await api.getBatchStudents(batch.id);
+      const res = await api.getBatchStudents(batchId);
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       setStudents(list.map((s: any) => ({
         id: String(s.id ?? s.enrollmentId ?? Math.random()),
@@ -160,9 +170,23 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
     } catch (e) {
       console.error('Failed to load students', e);
     } finally {
-      setStudentsLoading(false);
+      if (showSpinner) setStudentsLoading(false);
     }
+  }, []);
+
+  const loadStudents = (batch: BatchItem) => {
+    setSelectedBatch(batch);
+    setStudents([]);
+    fetchStudents(batch.id, true);
   };
+
+  useEffect(() => {
+    if (!selectedBatch) return;
+    const interval = setInterval(() => {
+      fetchStudents(selectedBatch.id, false);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [selectedBatch, fetchStudents]);
 
   const formatEnrolledDate = (dateStr: string) => {
     if (!dateStr) return '';
@@ -175,41 +199,40 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
   const getInitials = (name: string) =>
     name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
-  const handleCopyLink = async (link: string, id: number) => {
-    if (Platform.OS === 'web') {
-      try { await navigator.clipboard.writeText(link); } catch {}
-    } else {
-      await Share.share({ message: link, title: 'Google Meet Link' });
-    }
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+  const getBatchModuleProgress = (item: BatchItem) => {
+    const modules = parseSyllabus(item.syllabusTopics);
+    const doneTopics = completedTopicsMap[item.id] || [];
 
-  const handleStartClass = (link: string) => {
-    if (link) Linking.openURL(link);
-  };
+    let totalTopics = 0;
+    let doneTopicsCount = 0;
+    let totalModules = modules.length;
+    let doneModulesCount = 0;
 
-  const handleSaveMeetLink = async () => {
-    if (!editingMeetBatch) return;
-    if (!editingMeetBatch.courseId) {
-      alert('Cannot update: course ID not found. Please refresh and try again.');
-      return;
+    modules.forEach(m => {
+      if (m.topics && m.topics.length > 0) {
+        totalTopics += m.topics.length;
+        const modDoneTopics = m.topics.filter(t => doneTopics.includes(t));
+        doneTopicsCount += modDoneTopics.length;
+        if (modDoneTopics.length === m.topics.length) {
+          doneModulesCount++;
+        }
+      }
+    });
+
+    let progressPct = 0;
+    if (totalTopics > 0) {
+      progressPct = Math.round((doneTopicsCount / totalTopics) * 100);
+    } else if (item.status === 'COMPLETED') {
+      progressPct = 100;
     }
-    setSavingMeet(true);
-    try {
-      const res = await api.updateCourseMeetLink(editingMeetBatch.courseId, editMeetLink.trim());
-      if (res?.success === false) throw new Error(res.message ?? 'Save failed');
-      setBatches(prev => prev.map(b =>
-        b.courseId === editingMeetBatch.courseId
-          ? { ...b, googleMeetLink: editMeetLink.trim() }
-          : b
-      ));
-      setEditingMeetBatch(null);
-    } catch (e: any) {
-      alert('Failed to save: ' + (e?.message ?? 'Unknown error'));
-    } finally {
-      setSavingMeet(false);
-    }
+
+    return {
+      totalModules,
+      doneModulesCount,
+      totalTopics,
+      doneTopicsCount,
+      progressPct,
+    };
   };
 
   const filteredBatches = batches.filter(b => b.status === activeTab);
@@ -315,27 +338,28 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                         <Text style={styles.enrolledDate}>{formatEnrolledDate(s.enrollmentDate)}</Text>
                       ) : null}
                     </View>
-                    <View style={[
-                      styles.onlineStatusBadge,
-                      (s.onlineStatus === 'online' || s.onlineStatus === 'always_online')
-                        ? styles.onlineStatusBadgeActive
-                        : styles.onlineStatusBadgeInactive
-                    ]}>
-                      <View style={[
-                        styles.onlineDot,
-                        (s.onlineStatus === 'online' || s.onlineStatus === 'always_online')
-                          ? styles.onlineDotGreen
-                          : styles.onlineDotGray
-                      ]} />
-                      <Text style={[
-                        styles.onlineStatusText,
-                        (s.onlineStatus === 'online' || s.onlineStatus === 'always_online')
-                          ? styles.onlineStatusTextActive
-                          : styles.onlineStatusTextInactive
-                      ]}>
-                        {(s.onlineStatus === 'online' || s.onlineStatus === 'always_online') ? 'Active' : 'Inactive'}
-                      </Text>
-                    </View>
+                    {(() => {
+                      const isLogged = s.onlineStatus === 'online' || s.onlineStatus === 'always_online';
+                      return (
+                        <View style={[
+                          styles.onlineStatusBadge,
+                          isLogged
+                            ? styles.onlineStatusBadgeActive
+                            : styles.onlineStatusBadgeInactive
+                        ]}>
+                          <View style={[
+                            styles.onlineDot,
+                            isLogged ? styles.onlineDotGreen : styles.onlineDotGray
+                          ]} />
+                          <Text style={[
+                            styles.onlineStatusText,
+                            isLogged ? styles.onlineStatusTextActive : styles.onlineStatusTextInactive
+                          ]}>
+                            {isLogged ? 'Active' : 'Inactive'}
+                          </Text>
+                        </View>
+                      );
+                    })()}
                   </View>
 
                   {/* Email + Phone */}
@@ -414,7 +438,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             </TouchableOpacity>
           </View>
           <Text style={styles.headerTitle}>My Classes</Text>
-          <Text style={styles.headerSubtitle}>Manage your courses and Google Meet links.</Text>
+          <Text style={styles.headerSubtitle}>Manage your courses and class schedules.</Text>
         </View>
       </View>
 
@@ -445,160 +469,97 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
           </View>
         ) : (
           <View style={[styles.classList, { flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap' }]}>
-            {filteredBatches.map(item => (
-              <View key={item.id} style={[styles.classCard, { width: isDesktop ? '48.8%' : '100%' }]}>
-                {/* Title + Badge */}
-                <View style={styles.cardHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.classCardTitle}>{item.selectCourse}</Text>
-                    <Text style={styles.classCardBatch}>{item.batchName}</Text>
+            {filteredBatches.map(item => {
+              const { totalModules, doneModulesCount, totalTopics, doneTopicsCount, progressPct } = getBatchModuleProgress(item);
+              return (
+                <View key={item.id} style={[styles.classCard, { width: isDesktop ? '48.8%' : '100%' }]}>
+                  {/* Title + Badge */}
+                  <View style={styles.cardHeaderRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.classCardTitle}>{item.selectCourse}</Text>
+                      <Text style={styles.classCardBatch}>{item.batchName}</Text>
+                    </View>
+                    <View style={[
+                      styles.statusBadge,
+                      item.status === 'ACTIVE' ? styles.badgeActive :
+                      item.status === 'UPCOMING' ? styles.badgeUpcoming : styles.badgeCompleted
+                    ]}>
+                      <Text style={[
+                        styles.statusBadgeText,
+                        item.status === 'ACTIVE' ? styles.badgeTextActive :
+                        item.status === 'UPCOMING' ? styles.badgeTextUpcoming : styles.badgeTextCompleted
+                      ]}>{item.status}</Text>
+                    </View>
                   </View>
-                  <View style={[
-                    styles.statusBadge,
-                    item.status === 'ACTIVE' ? styles.badgeActive :
-                    item.status === 'UPCOMING' ? styles.badgeUpcoming : styles.badgeCompleted
-                  ]}>
-                    <Text style={[
-                      styles.statusBadgeText,
-                      item.status === 'ACTIVE' ? styles.badgeTextActive :
-                      item.status === 'UPCOMING' ? styles.badgeTextUpcoming : styles.badgeTextCompleted
-                    ]}>{item.status}</Text>
-                  </View>
-                </View>
 
-                {/* Students count + Duration chips */}
-                <View style={styles.chipsRow}>
-                  <View style={styles.chip}>
-                    <Ionicons name="people-outline" size={13} color="#7B2CBF" />
-                    <Text style={styles.chipText}>{item.studentsCount} students</Text>
+                  {/* Students count + Duration chips */}
+                  <View style={styles.chipsRow}>
+                    <View style={styles.chip}>
+                      <Ionicons name="people-outline" size={13} color="#7B2CBF" />
+                      <Text style={styles.chipText}>{item.studentsCount} students</Text>
+                    </View>
+                    <View style={styles.chip}>
+                      <Ionicons name="time-outline" size={13} color="#7B2CBF" />
+                      <Text style={styles.chipText}>{item.duration || '—'}</Text>
+                    </View>
                   </View>
-                  <View style={styles.chip}>
-                    <Ionicons name="time-outline" size={13} color="#7B2CBF" />
-                    <Text style={styles.chipText}>{item.duration || '—'}</Text>
-                  </View>
-                </View>
 
-                {/* Schedule box */}
-                <View style={styles.scheduleBox}>
-                  <Text style={styles.scheduleLabel}>Schedule</Text>
-                  <Text style={styles.scheduleValue}>
-                    {item.classDays && item.classDays.length > 0 ? formatDays(item.classDays) : '—'}
-                    {item.classTimings ? ` · ${item.classTimings}` : ''}
-                  </Text>
-                  {item.startDate ? (
-                    <Text style={[styles.scheduleValue, { marginTop: 3, color: '#6B7280', fontWeight: '500' }]}>
-                      {(() => { const [y,m,d] = item.startDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })()}
-                      {item.endDate ? ` → ${(() => { const [y,m,d] = item.endDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })()}` : ''}
+                  {/* Schedule box */}
+                  <View style={styles.scheduleBox}>
+                    <Text style={styles.scheduleLabel}>Schedule</Text>
+                    <Text style={styles.scheduleValue}>
+                      {item.classDays && item.classDays.length > 0 ? formatDays(item.classDays) : '—'}
+                      {item.classTimings ? ` · ${item.classTimings}` : ''}
                     </Text>
-                  ) : null}
-                </View>
+                    {item.startDate ? (
+                      <Text style={[styles.scheduleValue, { marginTop: 3, color: '#6B7280', fontWeight: '500' }]}>
+                        {(() => { const [y,m,d] = item.startDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })()}
+                        {item.endDate ? ` → ${(() => { const [y,m,d] = item.endDate.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); })()}` : ''}
+                      </Text>
+                    ) : null}
+                  </View>
 
-                {/* Progress bar */}
-                {item.totalSessions != null && item.totalSessions > 0 && (
+                  {/* Module Progress Bar */}
                   <View style={styles.progressRow}>
                     <View style={styles.progressLabels}>
-                      <Text style={styles.progressLabel}>Progress</Text>
-                      <Text style={styles.progressVal}>0/{item.totalSessions} Classes</Text>
+                      <Text style={styles.progressLabel}>Module Progress</Text>
+                      <Text style={styles.progressVal}>
+                        {totalModules > 0
+                          ? `${doneModulesCount}/${totalModules} Modules (${progressPct}%)`
+                          : item.totalSessions && item.totalSessions > 0
+                          ? `0/${item.totalSessions} Sessions`
+                          : `${progressPct}%`}
+                      </Text>
                     </View>
                     <View style={styles.progressBarBg}>
-                      <View style={[styles.progressBarFill, { width: '0%' }]} />
+                      <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
                     </View>
+                    {totalTopics > 0 ? (
+                      <Text style={{ fontSize: 10, color: '#6B7280', marginTop: 4, fontWeight: '500' }}>
+                        {doneTopicsCount} of {totalTopics} topics covered
+                      </Text>
+                    ) : null}
                   </View>
-                )}
 
-                {/* Google Meet Link */}
-                {item.status !== 'COMPLETED' && (
-                  <View style={styles.meetBox}>
-                    <View style={styles.meetLabelRow}>
-                      <Ionicons name="videocam-outline" size={13} color="#9CA3AF" />
-                      <Text style={styles.meetLabel}>Google Meet Link</Text>
-                      <TouchableOpacity
-                        style={styles.meetEditBtn}
-                        onPress={() => { setEditingMeetBatch(item); setEditMeetLink(item.googleMeetLink || ''); }}
-                      >
-                        <Ionicons name="create-outline" size={13} color="#7B2CBF" />
-                        <Text style={styles.meetEditBtnText}>Edit</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {item.googleMeetLink ? (
-                      <View style={styles.meetLinkWrapper}>
-                        <Ionicons name="logo-google" size={14} color="#4285F4" />
-                        <Text style={styles.meetLinkText} numberOfLines={1}>{item.googleMeetLink}</Text>
-                        <TouchableOpacity onPress={() => handleCopyLink(item.googleMeetLink!, item.id)} style={styles.meetIconBtn}>
-                          <Ionicons
-                            name={copiedId === item.id ? 'checkmark' : 'copy-outline'}
-                            size={16}
-                            color={copiedId === item.id ? '#10B981' : '#7B2CBF'}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <Text style={styles.noMeetText}>No meet link assigned — tap Edit to add one</Text>
-                    )}
-                  </View>
-                )}
-
-                {/* Action Buttons */}
-                <View style={styles.cardActionBtnRow}>
-                  <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => loadStudents(item)}>
-                    <Ionicons name="people-outline" size={14} color="#7B2CBF" />
-                    <Text style={styles.cardViewStudentsText}>Students</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => setSyllabusBatch(item)}>
-                    <Ionicons name="book-outline" size={14} color="#7B2CBF" />
-                    <Text style={styles.cardViewStudentsText}>Syllabus</Text>
-                  </TouchableOpacity>
-
-                  {item.status === 'ACTIVE' && item.googleMeetLink ? (
-                    <TouchableOpacity style={styles.cardStartBtn} onPress={() => handleStartClass(item.googleMeetLink!)}>
-                      <Ionicons name="videocam" size={14} color="#FFF" />
-                      <Text style={styles.cardStartText}>Start Class</Text>
+                  {/* Action Buttons */}
+                  <View style={styles.cardActionBtnRow}>
+                    <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => loadStudents(item)}>
+                      <Ionicons name="people-outline" size={14} color="#7B2CBF" />
+                      <Text style={styles.cardViewStudentsText}>Students ({item.studentsCount})</Text>
                     </TouchableOpacity>
-                  ) : item.status === 'ACTIVE' ? (
-                    <View style={[styles.cardStartBtn, { backgroundColor: '#D1D5DB' }]}>
-                      <Ionicons name="videocam-off-outline" size={14} color="#9CA3AF" />
-                      <Text style={[styles.cardStartText, { color: '#9CA3AF' }]}>No Link</Text>
-                    </View>
-                  ) : null}
+
+                    <TouchableOpacity style={styles.cardViewSyllabusBtn} onPress={() => setSyllabusBatch(item)}>
+                      <Ionicons name="book-outline" size={14} color="#FFF" />
+                      <Text style={styles.cardViewSyllabusText}>Syllabus & Modules</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      {/* Edit Meet Link Modal */}
-      <Modal visible={!!editingMeetBatch} transparent animationType="fade" onRequestClose={() => setEditingMeetBatch(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.meetModalOverlay}>
-          <View style={styles.meetModalBox}>
-            <Text style={styles.meetModalTitle}>Update Google Meet Link</Text>
-            <Text style={styles.meetModalSub}>{editingMeetBatch?.selectCourse}</Text>
-            <TextInput
-              style={styles.meetModalInput}
-              value={editMeetLink}
-              onChangeText={setEditMeetLink}
-              placeholder="https://meet.google.com/xxx-xxxx-xxx"
-              placeholderTextColor="#9CA3AF"
-              autoCapitalize="none"
-              keyboardType="url"
-              autoFocus
-            />
-            <Text style={styles.meetModalHint}>This will update the link for all students in this course.</Text>
-            <View style={styles.meetModalBtns}>
-              <TouchableOpacity style={styles.meetModalCancel} onPress={() => setEditingMeetBatch(null)}>
-                <Text style={styles.meetModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.meetModalSave} onPress={handleSaveMeetLink} disabled={savingMeet}>
-                {savingMeet
-                  ? <ActivityIndicator size="small" color="#FFF" />
-                  : <Text style={styles.meetModalSaveText}>Save</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* View Course Syllabus Modal */}
       <Modal visible={!!syllabusBatch} transparent animationType="slide" onRequestClose={() => setSyllabusBatch(null)}>
@@ -673,9 +634,10 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                                   gap: 8,
                                 }}
                                 onPress={async () => {
-                                  if (!syllabusBatch?.selectCourse) return;
-                                  const updated = await toggleTopicCompleted(syllabusBatch.selectCourse, t, syllabusBatch.instructor);
+                                  if (!syllabusBatch?.selectCourse || !syllabusBatch?.id) return;
+                                  const updated = await toggleTopicCompleted(syllabusBatch.selectCourse, t, syllabusBatch.instructor, syllabusBatch.id);
                                   setCompletedTopics(updated);
+                                  setCompletedTopicsMap(prev => ({ ...prev, [syllabusBatch.id]: updated }));
                                 }}
                                 activeOpacity={0.7}
                               >
@@ -857,13 +819,18 @@ const styles = StyleSheet.create({
   noMeetText: { fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' },
 
   // Action buttons
-  cardActionBtnRow: { flexDirection: 'row', gap: 12 },
+  cardActionBtnRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
   cardViewStudentsBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, borderWidth: 1.5, borderColor: '#7B2CBF',
-    height: 42, borderRadius: 12,
+    height: 42, borderRadius: 12, backgroundColor: '#FAF5FF',
   },
   cardViewStudentsText: { color: '#7B2CBF', fontSize: 12, fontWeight: 'bold' },
+  cardViewSyllabusBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: '#7B2CBF', height: 42, borderRadius: 12,
+  },
+  cardViewSyllabusText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   cardStartBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, backgroundColor: '#7B2CBF', height: 42, borderRadius: 12,
