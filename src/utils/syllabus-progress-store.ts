@@ -2,7 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY_PREFIX = '@nexus_syllabus_completed_topics_';
 
-function buildKey(courseKey: string, instructorName?: string): string {
+function buildKey(courseKey: string, instructorName?: string, batchId?: number | string): string {
+  if (batchId) {
+    return `${STORAGE_KEY_PREFIX}batch_${batchId}`;
+  }
   const normCourse = (courseKey || '').toLowerCase().trim().replace(/\s+/g, '_');
   if (instructorName && instructorName.trim().length > 0) {
     const normInst = instructorName.toLowerCase().trim().replace(/\s+/g, '_');
@@ -12,19 +15,21 @@ function buildKey(courseKey: string, instructorName?: string): string {
 }
 
 /**
- * Returns list of completed topic titles for a course/batch key and optional instructor name
+ * Returns list of completed topic titles for a course/batch key, optional instructor name, and batchId
  */
-export const getCompletedTopicsForCourse = async (courseKey: string, instructorName?: string): Promise<string[]> => {
-  if (!courseKey) return [];
+export const getCompletedTopicsForCourse = async (
+  courseKey: string,
+  instructorName?: string,
+  batchId?: number | string
+): Promise<string[]> => {
+  if (!courseKey && !batchId) return [];
   try {
-    const keysToTry = [
-      buildKey(courseKey, instructorName),
-      buildKey(courseKey),
-    ];
-    if (courseKey.includes(' ')) {
-      const shortKey = courseKey.split(' ')[0];
-      keysToTry.push(buildKey(shortKey, instructorName));
-      keysToTry.push(buildKey(shortKey));
+    const keysToTry: string[] = [];
+    if (batchId) {
+      keysToTry.push(buildKey(courseKey, instructorName, batchId));
+    } else {
+      keysToTry.push(buildKey(courseKey, instructorName));
+      keysToTry.push(buildKey(courseKey));
     }
 
     const allCompleted = new Set<string>();
@@ -45,12 +50,17 @@ export const getCompletedTopicsForCourse = async (courseKey: string, instructorN
 };
 
 /**
- * Toggles a topic's completion status for a course/batch and instructor
+ * Toggles a topic's completion status for a course/batch, instructor, and batchId
  */
-export const toggleTopicCompleted = async (courseKey: string, topicName: string, instructorName?: string): Promise<string[]> => {
-  if (!courseKey || !topicName) return [];
+export const toggleTopicCompleted = async (
+  courseKey: string,
+  topicName: string,
+  instructorName?: string,
+  batchId?: number | string
+): Promise<string[]> => {
+  if ((!courseKey && !batchId) || !topicName) return [];
   try {
-    const current = await getCompletedTopicsForCourse(courseKey, instructorName);
+    const current = await getCompletedTopicsForCourse(courseKey, instructorName, batchId);
     let updated: string[];
     if (current.includes(topicName)) {
       updated = current.filter(t => t !== topicName);
@@ -58,17 +68,13 @@ export const toggleTopicCompleted = async (courseKey: string, topicName: string,
       updated = [...current, topicName];
     }
 
-    const primaryKey = buildKey(courseKey, instructorName);
-    const fallbackKey = buildKey(courseKey);
+    const primaryKey = buildKey(courseKey, instructorName, batchId);
     const jsonVal = JSON.stringify(updated);
 
     await AsyncStorage.setItem(primaryKey, jsonVal);
-    await AsyncStorage.setItem(fallbackKey, jsonVal);
-
-    if (courseKey.includes(' ')) {
-      const shortKey = courseKey.split(' ')[0];
-      await AsyncStorage.setItem(buildKey(shortKey, instructorName), jsonVal);
-      await AsyncStorage.setItem(buildKey(shortKey), jsonVal);
+    if (!batchId) {
+      const fallbackKey = buildKey(courseKey);
+      await AsyncStorage.setItem(fallbackKey, jsonVal);
     }
 
     return updated;

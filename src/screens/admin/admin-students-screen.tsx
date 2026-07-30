@@ -1,5 +1,6 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -105,21 +106,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     ]).start(() => setToast(null));
   };
 
-  useEffect(() => {
-    if (adminDataCache.students.length > 0 && onCountChange) {
-      onCountChange(adminDataCache.students.length);
-    }
-    loadStudents();
-    loadCourses();
-    loadBatches();
-    if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
-
-    // Poll every 15s to keep online status fresh
-    const interval = setInterval(() => loadStudents(false), 15000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadStudents = async (showSpinner = true) => {
+  const loadStudents = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
       const res = await api.getStudents();
@@ -128,17 +115,15 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         adminDataCache.students = res.data;
         setStudents(list);
         if (onCountChange) onCountChange(list.length);
-      } else {
-        showToast(res.message || 'Failed to load students', 'error');
       }
     } catch (err) {
-      showToast('Cannot connect to server', 'error');
+      // Silent error during background poll
     } finally {
       if (showSpinner) setLoading(false);
     }
-  };
+  }, [onCountChange]);
 
-  const loadCourses = async () => {
+  const loadCourses = useCallback(async () => {
     if (adminDataCache.courses.length > 0) {
       setCourses(adminDataCache.courses as Course[]);
       return;
@@ -149,12 +134,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         adminDataCache.courses = res.data;
         setCourses(res.data);
       }
-    } catch (err) {
-      console.error('Failed to load courses', err);
-    }
-  };
+    } catch (err) { }
+  }, []);
 
-  const loadBatches = async () => {
+  const loadBatches = useCallback(async () => {
     try {
       const data = await api.getBatches();
       const list = Array.isArray(data) ? data : [];
@@ -163,28 +146,20 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         batchName: b.batchName,
         selectCourse: b.selectCourse,
       })));
-    } catch (err) {
-      console.error('Failed to load batches', err);
-    }
-  };
+    } catch (err) { }
+  }, []);
 
-  const filteredStudents = students.filter(student => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
-    const isActive = student.onlineStatus === 'online' || student.onlineStatus === 'always_online';
-    if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Active') return matchesSearch && isActive;
-    if (activeTab === 'Inactive') return matchesSearch && !isActive;
-    return matchesSearch;
-  });
+  useFocusEffect(
+    useCallback(() => {
+      loadStudents(true);
+      loadCourses();
+      loadBatches();
+      const interval = setInterval(() => loadStudents(false), 3000);
+      return () => clearInterval(interval);
+    }, [loadStudents, loadCourses, loadBatches])
+  );
 
-  const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
-  const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
-  const inactiveCount = students.filter(s => s.onlineStatus !== 'online' && s.onlineStatus !== 'always_online').length;
-
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = useCallback(() => {
     setSelectedStudent(null);
     setFormFirstName('');
     setFormLastName('');
@@ -210,7 +185,27 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setShowBatchDropdown(false);
     setShowNewBatchDropdown(false);
     setIsModalVisible(true);
-  };
+  }, []);
+
+  const filteredStudents = students.filter(student => {
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
+    const isActive = student.onlineStatus === 'online' || student.onlineStatus === 'always_online';
+    if (activeTab === 'All') return matchesSearch;
+    if (activeTab === 'Active') return matchesSearch && isActive;
+    if (activeTab === 'Inactive') return matchesSearch && !isActive;
+    return matchesSearch;
+  });
+
+  const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
+  const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
+  const inactiveCount = students.filter(s => s.onlineStatus !== 'online' && s.onlineStatus !== 'always_online').length;
+
+  useEffect(() => {
+    if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
+  }, [onRegisterAdd, handleOpenAddModal]);
 
   const handleOpenEditModal = (student: Student) => {
     setSelectedStudent(student);
@@ -488,11 +483,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                     <Text style={styles.studentName}>{item.name}</Text>
                     <Text style={styles.joinedText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
-                  <View style={[styles.statusBadge, (item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? styles.statusActive : styles.statusInactive]}>
-                    <Text style={[styles.statusText, (item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? styles.statusActiveText : styles.statusInactiveText]}>
-                      {(item.onlineStatus === 'online' || item.onlineStatus === 'always_online') ? 'Active' : 'Inactive'}
-                    </Text>
-                  </View>
+                  {(() => {
+                    const isLogged = item.onlineStatus === 'online' || item.onlineStatus === 'always_online';
+                    return (
+                      <View style={[styles.statusBadge, isLogged ? styles.statusActive : styles.statusInactive]}>
+                        <Text style={[styles.statusText, isLogged ? styles.statusActiveText : styles.statusInactiveText]}>
+                          {isLogged ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 {/* Info block */}
