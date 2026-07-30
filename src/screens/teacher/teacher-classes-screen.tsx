@@ -55,6 +55,9 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syllabusBatch, setSyllabusBatch] = useState<BatchItem | null>(null);
+  const [meetBatch, setMeetBatch] = useState<BatchItem | null>(null);
+  const [meetUrlInput, setMeetUrlInput] = useState('');
+  const [savingMeetUrl, setSavingMeetUrl] = useState(false);
   const [completedTopics, setCompletedTopics] = useState<string[]>([]);
   const [completedTopicsMap, setCompletedTopicsMap] = useState<Record<string, string[]>>({});
   const selectedBatchRef = useRef<BatchItem | null>(null);
@@ -541,6 +544,32 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                     ) : null}
                   </View>
 
+                  {/* Google Meet Box */}
+                  <View style={styles.meetBoxContainer}>
+                    <Ionicons name="videocam-outline" size={16} color="#7B2CBF" />
+                    <TouchableOpacity
+                      style={{ flex: 1, marginHorizontal: 8 }}
+                      onPress={() => {
+                        const url = item.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf';
+                        Linking.openURL(url).catch(() => {});
+                      }}
+                    >
+                      <Text style={styles.meetUrlText} numberOfLines={1}>
+                        {item.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.meetEditBtn}
+                      onPress={() => {
+                        setMeetBatch(item);
+                        setMeetUrlInput(item.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf');
+                      }}
+                    >
+                      <Ionicons name="create-outline" size={14} color="#7B2CBF" />
+                      <Text style={styles.meetEditBtnText}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   {/* Action Buttons */}
                   <View style={styles.cardActionBtnRow}>
                     <TouchableOpacity style={styles.cardViewStudentsBtn} onPress={() => loadStudents(item)}>
@@ -549,8 +578,19 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.cardViewSyllabusBtn} onPress={() => setSyllabusBatch(item)}>
-                      <Ionicons name="book-outline" size={14} color="#FFF" />
-                      <Text style={styles.cardViewSyllabusText}>Syllabus & Modules</Text>
+                      <Ionicons name="book-outline" size={14} color="#7B2CBF" />
+                      <Text style={styles.cardViewSyllabusText}>Syllabus</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.cardStartClassBtn}
+                      onPress={() => {
+                        const url = item.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf';
+                        Linking.openURL(url).catch(() => {});
+                      }}
+                    >
+                      <Ionicons name="videocam" size={14} color="#FFF" />
+                      <Text style={styles.cardStartClassText}>Start Class</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -560,6 +600,85 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
         )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Update Google Meet Link Modal */}
+      <Modal
+        visible={!!meetBatch}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMeetBatch(null)}
+      >
+        <View style={styles.meetModalOverlay}>
+          <View style={styles.meetModalBoxContainer}>
+            <Text style={styles.meetModalMainTitle}>Update Google Meet Link</Text>
+            <Text style={styles.meetModalCourseTitle}>{meetBatch?.selectCourse}</Text>
+
+            <View style={styles.meetModalInputBox}>
+              <TextInput
+                style={styles.meetModalInputField}
+                value={meetUrlInput}
+                onChangeText={setMeetUrlInput}
+                placeholder="https://meet.google.com/..."
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <Text style={styles.meetModalSubtitleNote}>
+              This will update the link for all students in this course.
+            </Text>
+
+            <View style={styles.meetModalBtnRow}>
+              <TouchableOpacity
+                style={styles.meetModalCancelButton}
+                onPress={() => setMeetBatch(null)}
+                disabled={savingMeetUrl}
+              >
+                <Text style={styles.meetModalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.meetModalSaveButton}
+                onPress={async () => {
+                  if (!meetBatch) return;
+                  setSavingMeetUrl(true);
+                  try {
+                    await api.updateBatch(meetBatch.id, {
+                      batchName: meetBatch.batchName,
+                      selectCourse: meetBatch.selectCourse,
+                      instructor: meetBatch.instructor,
+                      duration: meetBatch.duration,
+                      startDate: meetBatch.startDate,
+                      endDate: meetBatch.endDate,
+                      classDays: meetBatch.classDays,
+                      classTimings: meetBatch.classTimings,
+                      status: meetBatch.status,
+                      googleMeetLink: meetUrlInput,
+                    });
+                    if (meetBatch.courseId) {
+                      await api.updateCourse(meetBatch.courseId, { googleMeetLink: meetUrlInput });
+                    }
+                    setBatches(prev => prev.map(b => b.id === meetBatch.id ? { ...b, googleMeetLink: meetUrlInput } : b));
+                    setMeetBatch(null);
+                  } catch (e) {
+                    console.error('Failed to update meet link', e);
+                  } finally {
+                    setSavingMeetUrl(false);
+                  }
+                }}
+                disabled={savingMeetUrl}
+              >
+                {savingMeetUrl ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.meetModalSaveButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* View Course Syllabus Modal */}
       <Modal visible={!!syllabusBatch} transparent animationType="slide" onRequestClose={() => setSyllabusBatch(null)}>
@@ -940,4 +1059,43 @@ const styles = StyleSheet.create({
   meetModalCancelText: { fontSize: 13, fontWeight: '600', color: '#4B5563' },
   meetModalSave: { flex: 1, height: 44, borderRadius: 10, backgroundColor: '#7B2CBF', justifyContent: 'center', alignItems: 'center' },
   meetModalSaveText: { fontSize: 13, fontWeight: 'bold', color: '#FFF' },
+
+  meetBoxContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F5F3FF', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#DDD6FE', marginBottom: 14,
+  },
+  meetUrlText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
+  cardStartClassBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: '#7B2CBF', height: 42, borderRadius: 12,
+  },
+  cardStartClassText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  meetModalBoxContainer: {
+    backgroundColor: '#FFF', borderRadius: 24, padding: 24,
+    width: '100%', maxWidth: 460,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 16, elevation: 8,
+  },
+  meetModalMainTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E293B', marginBottom: 4 },
+  meetModalCourseTitle: { fontSize: 14, fontWeight: '600', color: '#7B2CBF', marginBottom: 20 },
+  meetModalInputBox: { marginBottom: 8 },
+  meetModalInputField: {
+    borderWidth: 2, borderColor: '#FB8B24', borderRadius: 14,
+    height: 48, paddingHorizontal: 14, fontSize: 14,
+    color: '#1E293B', backgroundColor: '#FFFFFF',
+  },
+  meetModalSubtitleNote: { fontSize: 12, color: '#94A3B8', marginBottom: 24 },
+  meetModalBtnRow: { flexDirection: 'row', gap: 12 },
+  meetModalCancelButton: {
+    flex: 1, height: 46, borderRadius: 14,
+    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
+  },
+  meetModalCancelButtonText: { fontSize: 14, fontWeight: '700', color: '#475569' },
+  meetModalSaveButton: {
+    flex: 1, height: 46, borderRadius: 14,
+    backgroundColor: '#7B2CBF', justifyContent: 'center', alignItems: 'center',
+  },
+  meetModalSaveButtonText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

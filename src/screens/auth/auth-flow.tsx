@@ -157,10 +157,13 @@ const [loading, setLoading] = useState(false);
         deviceFingerprint = stored;
       } catch {}
 
-      // Auto-detect role: try each role until one succeeds
-      const rolesToTry: ('student' | 'teacher' | 'admin')[] = ['student', 'teacher', 'admin'];
+      // Auto-detect role: try selected role first, then fallback to others if needed
+      const rolesToTry: ('student' | 'teacher' | 'admin')[] = [
+        selectedRole,
+        ...(['student', 'teacher', 'admin'] as const).filter(r => r !== selectedRole)
+      ];
       let successRes: any = null;
-      let detectedRole: 'student' | 'teacher' | 'admin' = 'student';
+      let detectedRole: 'student' | 'teacher' | 'admin' = selectedRole;
 
       for (const role of rolesToTry) {
         try {

@@ -395,7 +395,7 @@ interface Enrollment {
   googleMeetLink?: string;
 }
 
-const TODAY_NAME = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
+const TODAY_NAME = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()];
 
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
@@ -430,7 +430,7 @@ function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string
   const seek = (ratio: number) => { if (duration > 0) { player.currentTime = ratio * duration; resetHide(); } };
   const setPlaybackSpeed = (s: number) => { player.playbackRate = s; setSpeed(s); setShowSpeedMenu(false); setShowMenu(false); };
   const handleDownload = () => { setShowMenu(false); Linking.openURL(uri); };
-  const handlePiP = () => { setShowMenu(false); try { (player as any).enterPictureInPicture?.(); } catch {} };
+  const handlePiP = () => { setShowMenu(false); try { (player as any).enterPictureInPicture?.(); } catch { } };
   const barWidth = useRef(0);
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -468,7 +468,7 @@ function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string
           <Text style={vp.timeText}>{fmtTime(currentTime)} / {fmtTime(duration)}</Text>
           <View style={vp.rightIcons}>
             <TouchableOpacity onPress={toggleMute} style={vp.iconBtn}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color="#fff" /></TouchableOpacity>
-            <TouchableOpacity onPress={() => { try { videoViewRef.current?.enterFullscreen(); } catch {} }} style={vp.iconBtn}><Ionicons name="expand" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => { try { videoViewRef.current?.enterFullscreen(); } catch { } }} style={vp.iconBtn}><Ionicons name="expand" size={20} color="#fff" /></TouchableOpacity>
             <TouchableOpacity onPress={() => { setShowMenu(v => !v); setShowSpeedMenu(false); }} style={vp.iconBtn}><Ionicons name="ellipsis-vertical" size={20} color="#fff" /></TouchableOpacity>
           </View>
         </View>
@@ -572,7 +572,7 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
   useEffect(() => {
     api.getStudentRecordings().then((data: any) => {
       setRecordings(Array.isArray(data) ? data : []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => { }).finally(() => setLoading(false));
   }, []);
 
   // Filter chips = enrolled courses (not just courses that have recordings)
@@ -626,55 +626,50 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
           <Text style={rs.emptyText}>No recordings found</Text>
         </View>
       ) : (
-        filtered.map((rec: any) => (
-          <View key={rec.id} style={rs.card}>
-            <View style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start' }}>
-              {/* Thumbnail — dark purple bg + lighter purple inner box + white play circle */}
-              <View style={rs.thumb}>
-                <View style={rs.thumbInner}>
-                  <View style={rs.playCircle}>
-                    <Ionicons name="play" size={13} color="#7B2CBF" style={{ marginLeft: 2 }} />
+        filtered.map((rec: any) => {
+          const playVideo = () => {
+            setPlayTitle(rec.title);
+            const targetUri = rec.videoUrl ? resolveDynamicFileUrl(rec.videoUrl) : getStreamUrl(rec.id);
+            setPlayUri(targetUri);
+          };
+          return (
+            <TouchableOpacity key={rec.id} style={rs.card} onPress={playVideo} activeOpacity={0.85}>
+              <View style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start' }}>
+                {/* Thumbnail — clickable video play icon */}
+                <TouchableOpacity style={rs.thumb} onPress={playVideo} activeOpacity={0.8}>
+                  <View style={rs.thumbInner}>
+                    <View style={rs.playCircle}>
+                      <Ionicons name="play" size={13} color="#7B2CBF" style={{ marginLeft: 2 }} />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+                {/* Info */}
+                <View style={{ flex: 1 }}>
+                  <Text style={rs.cardTitle} numberOfLines={2}>{rec.title}</Text>
+                  <Text style={rs.instructorText}>{rec.instructor || 'Instructor'}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 }}>
+                    <Ionicons name="grid-outline" size={11} color="#7B2CBF" />
+                    <Text style={rs.courseTag} numberOfLines={1}>{rec.course}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+                    {(rec.classDate || rec.uploadedAt) && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Ionicons name="calendar-outline" size={11} color="#6B7280" />
+                        <Text style={rs.meta}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
+                      </View>
+                    )}
+                    {rec.duration && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Ionicons name="time-outline" size={11} color="#6B7280" />
+                        <Text style={rs.meta}>{rec.duration}</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
-              {/* Info */}
-              <View style={{ flex: 1 }}>
-                <Text style={rs.cardTitle} numberOfLines={2}>{rec.title}</Text>
-                <Text style={rs.instructorText}>{rec.instructor || 'Instructor'}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 }}>
-                  <Ionicons name="grid-outline" size={11} color="#7B2CBF" />
-                  <Text style={rs.courseTag} numberOfLines={1}>{rec.course}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
-                  {(rec.classDate || rec.uploadedAt) && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <Ionicons name="calendar-outline" size={11} color="#6B7280" />
-                      <Text style={rs.meta}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
-                    </View>
-                  )}
-                  {rec.duration && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <Ionicons name="time-outline" size={11} color="#6B7280" />
-                      <Text style={rs.meta}>{rec.duration}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-            {/* Watch Now button */}
-            <TouchableOpacity
-              style={rs.watchBtn}
-              onPress={() => {
-                setPlayTitle(rec.title);
-                const targetUri = rec.videoUrl ? resolveDynamicFileUrl(rec.videoUrl) : getStreamUrl(rec.id);
-                setPlayUri(targetUri);
-              }}
-            >
-              <Ionicons name="play" size={14} color="#FFF" />
-              <Text style={rs.watchBtnText}>Watch Now</Text>
             </TouchableOpacity>
-          </View>
-        ))
+          );
+        })
       )}
       {/* Video Modal */}
       <InlineVideoModal
@@ -696,7 +691,7 @@ function MaterialsSection() {
   useEffect(() => {
     api.getStudentMaterials().then((data: any) => {
       setMaterials(Array.isArray(data) ? data : []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => { }).finally(() => setLoading(false));
   }, []);
 
   const categories = ['All', ...Array.from(new Set(materials.map((m: any) => m.course).filter(Boolean)))];
@@ -713,9 +708,9 @@ function MaterialsSection() {
   const getFileIcon = (filename?: string) => {
     const ext = filename?.split('.').pop()?.toLowerCase();
     if (ext === 'pdf') return 'document-text';
-    if (['doc','docx'].includes(ext || '')) return 'document';
-    if (['ppt','pptx'].includes(ext || '')) return 'easel';
-    if (['zip','rar'].includes(ext || '')) return 'archive';
+    if (['doc', 'docx'].includes(ext || '')) return 'document';
+    if (['ppt', 'pptx'].includes(ext || '')) return 'easel';
+    if (['zip', 'rar'].includes(ext || '')) return 'archive';
     return 'attach';
   };
 
@@ -824,83 +819,78 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
   setSelectedCourse: (c: CourseData | null) => void;
   InstructorAvatar: React.FC<{ name: string; courseKey?: string }>;
 }) {
-  const liveClasses = enrollments.filter(e => {
-    if (e.status === 'COMPLETED') return false;
-    const todayMatch = Array.isArray(e.classDays) && e.classDays.some(
-      d => d.trim().toLowerCase().startsWith(TODAY_NAME.substring(0, 3))
-    );
-    return todayMatch;
-  });
+  const liveClasses = enrollments.filter(e => e.status !== 'COMPLETED');
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Join Classes</Text>
       {liveClasses.length === 0 ? (
         <View style={[styles.classCard, { alignItems: 'center', padding: 32, gap: 8 }]}>
           <Ionicons name="videocam-off-outline" size={32} color="#D1D5DB" />
-          <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600' }}>No live classes today</Text>
-          <Text style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center' }}>Your next class will appear here when it's time to join</Text>
+          <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600' }}>No enrolled classes</Text>
+          <Text style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center' }}>Your enrolled classes and Google Meet links will appear here</Text>
         </View>
       ) : (
-        liveClasses.map((enr, idx) => (
-          <TouchableOpacity
-            key={idx}
-            style={[styles.classCard, { padding: 0, overflow: 'hidden', marginBottom: idx < liveClasses.length - 1 ? 12 : 0 }]}
-            onPress={() => setSelectedCourse(coursesData[enr.courseTitle] ?? null)}
-            activeOpacity={0.8}
-          >
-            <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
-                <View style={styles.livePillBadge}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 5 }} />
-                  <Text style={styles.livePillText}>LIVE</Text>
-                </View>
-              </View>
-              {enr.classDays && enr.classDays.length > 0 ? (
-                <View style={styles.classTimeRow}>
-                  <Ionicons name="time-outline" size={16} color="#E9D5FF" />
-                  <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>
-                    {enr.classDays.join(', ')}{enr.classTimings ? ` - ${enr.classTimings}` : ''}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
-              {enr.instructor ? (
-                <View style={styles.instructorRow}>
-                  <InstructorAvatar name={enr.instructor} courseKey={enr.courseTitle} />
-                  <View>
-                    <Text style={styles.instructorLabel}>Instructor</Text>
-                    <Text style={styles.instructorName}>{enr.instructor}</Text>
+        liveClasses.map((enr, idx) => {
+          const meetUrl = enr.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf';
+          return (
+            <View
+              key={idx}
+              style={[styles.classCard, { padding: 0, overflow: 'hidden', marginBottom: idx < liveClasses.length - 1 ? 12 : 0 }]}
+            >
+              <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
+                  <View style={styles.livePillBadge}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 5 }} />
+                    <Text style={styles.livePillText}>LIVE</Text>
                   </View>
                 </View>
-              ) : null}
-              <View style={styles.progressContainer}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.progressLabel}>Progress</Text>
-                  <Text style={styles.progressValue}>8/50 Classes</Text>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: '16%' }]} />
-                </View>
+                {enr.classDays && enr.classDays.length > 0 ? (
+                  <View style={styles.classTimeRow}>
+                    <Ionicons name="time-outline" size={16} color="#E9D5FF" />
+                    <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>
+                      {enr.classDays.join(', ')}{enr.classTimings ? ` - ${enr.classTimings}` : ''}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-              <View style={[styles.cardFooter, styles.rowBetween]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                  <Text style={styles.liveNowText}>{enr.classTimings || 'Today'}</Text>
+
+              <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+                {enr.instructor ? (
+                  <View style={styles.instructorRow}>
+                    <InstructorAvatar name={enr.instructor} courseKey={enr.courseTitle} />
+                    <View>
+                      <Text style={styles.instructorLabel}>Instructor</Text>
+                      <Text style={styles.instructorName}>{enr.instructor}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                <View style={styles.progressContainer}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.progressLabel}>Progress</Text>
+                    <Text style={styles.progressValue}>8/50 Classes</Text>
+                  </View>
+                  <View style={styles.progressBarBg}>
+                    <View style={[styles.progressBarFill, { width: '16%' }]} />
+                  </View>
                 </View>
-                <TouchableOpacity
-                  style={[styles.joinNowButton, !enr.googleMeetLink && { backgroundColor: '#9CA3AF' }]}
-                  onPress={() => enr.googleMeetLink && Linking.openURL(enr.googleMeetLink)}
-                  disabled={!enr.googleMeetLink}
-                >
-                  <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
-                  <Text style={styles.joinNowText}>{enr.googleMeetLink ? 'Join Now' : 'No Link'}</Text>
-                </TouchableOpacity>
+                <View style={[styles.cardFooter, styles.rowBetween]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                    <Text style={styles.liveNowText}>{enr.classTimings || 'Today'}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.joinNowButton}
+                    onPress={() => Linking.openURL(meetUrl).catch(() => { })}
+                  >
+                    <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
+                    <Text style={styles.joinNowText}>Join Now</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </TouchableOpacity>
-        ))
+          );
+        })
       )}
     </View>
   );
@@ -926,12 +916,12 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
         price: c.price != null ? `₹${Number(c.price).toLocaleString('en-IN')}` : '₹0',
         key: c.title,
       })));
-    }).catch(() => {});
+    }).catch(() => { });
 
     api.getStudentEnrollments().then((data: any) => {
       const list = Array.isArray(data) ? data : [];
       setEnrollments(list);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   if (isViewingRecordings) {
@@ -999,7 +989,7 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
                 'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
                 'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
               ]}
-              locations={[0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1]}
+              locations={[0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1]}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={styles.headerAccentLine}
             />
@@ -1020,117 +1010,140 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
         </View>
 
         <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 3. WELCOME CARD */}
-        <View style={styles.welcomeCard}>
-          <View style={styles.welcomeHeaderRow}>
-            <Text style={[styles.welcomeTitle, { fontSize: 18, fontWeight: 'bold', fontFamily: undefined }]}>
-              {userName ? `Welcome, ${userName.split(' ')[0]}!` : 'Master Skills, Achieve More'}
-            </Text>
-          </View>
-          <Text style={[styles.welcomeSubtitle, { fontSize: 11, lineHeight: 16 }]}>Access live classes, study materials, assignments, and recorded sessions —all in one seamless learning platform designed to help you stay ahead.</Text>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statsBox}>
-              <Text style={styles.statsLabel}>Courses Enrolled</Text>
-              <Text style={styles.statsValue}>{enrollments.length}</Text>
-            </View>
-            <View style={styles.statsBox}>
-              <Text style={styles.statsLabel}>Hours Learned</Text>
-              <Text style={styles.statsValue}>24</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 4. TAB TOGGLE BUTTONS */}
-        <View style={styles.toggleRow}>
-          <TouchableOpacity
-            style={[styles.toggleTab, activeTab === 'JOIN_CLASS' && styles.toggleTabActive]}
-            onPress={() => setActiveTab('JOIN_CLASS')}
-          >
-            <Ionicons
-              name="videocam-outline"
-              size={18}
-              color={activeTab === 'JOIN_CLASS' ? '#FFF' : '#4B5563'}
-              style={styles.tabIcon}
-            />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={[styles.toggleTabText, activeTab === 'JOIN_CLASS' && styles.toggleTabTextActive]}>
-                Join Class
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 3. WELCOME CARD */}
+          <View style={styles.welcomeCard}>
+            <View style={styles.welcomeHeaderRow}>
+              <Text style={[styles.welcomeTitle, { fontSize: 18, fontWeight: 'bold', fontFamily: undefined }]}>
+                {userName ? `Welcome, ${userName.split(' ')[0]}!` : 'Master Skills, Achieve More'}
               </Text>
-              {activeTab === 'JOIN_CLASS' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />}
             </View>
-          </TouchableOpacity>
+            <Text style={[styles.welcomeSubtitle, { fontSize: 11, lineHeight: 16 }]}>Access live classes, study materials, assignments, and recorded sessions —all in one seamless learning platform designed to help you stay ahead.</Text>
 
-          <TouchableOpacity
-            style={[styles.toggleTab, activeTab === 'UPCOMING' && styles.toggleTabActive]}
-            onPress={() => setActiveTab('UPCOMING')}
-          >
-            <Ionicons
-              name="calendar-outline"
-              size={18}
-              color={activeTab === 'UPCOMING' ? '#FFF' : '#4B5563'}
-              style={styles.tabIcon}
-            />
-            <Text style={[styles.toggleTabText, activeTab === 'UPCOMING' && styles.toggleTabTextActive]}>
-              Upcoming
-            </Text>
-            {activeTab === 'UPCOMING' && <View style={styles.activeDot} />}
-          </TouchableOpacity>
-        </View>
-
-        {/* 5. DYNAMIC CLASSES VIEW */}
-        {activeTab === 'JOIN_CLASS' ? (
-          <LiveClassesView
-            enrollments={enrollments}
-            setSelectedCourse={setSelectedCourse}
-            InstructorAvatar={InstructorAvatar}
-          />
-        ) : (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Upcoming Classes</Text>
-            {enrollments.filter(e => e.status === 'ACTIVE' || e.status === 'UPCOMING').length === 0 ? (
-              <View style={[styles.classCard, { alignItems: 'center', padding: 32, gap: 8 }]}>
-                <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
-                <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600' }}>No upcoming classes</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statsBox}>
+                <Text style={styles.statsLabel}>Courses Enrolled</Text>
+                <Text style={styles.statsValue}>{enrollments.length}</Text>
               </View>
-            ) : (
-              enrollments
-                .filter(e => e.status === 'ACTIVE' || e.status === 'UPCOMING')
-                .map((enr, idx) => (
-                  <View
-                    key={idx}
-                    style={[styles.upcomingCard, idx > 0 && { marginTop: 12 }]}
-                  >
-                    <Text style={styles.upcomingTitle}>{enr.courseTitle}</Text>
-                    <View style={styles.upcomingRow}>
-                      <Ionicons name="time-outline" size={16} color="#E9D5FF" />
-                      <Text style={styles.upcomingTime}>
-                        {enr.classDays && enr.classDays.length > 0
-                          ? `${enr.classDays.join(', ')}${enr.classTimings ? ` - ${enr.classTimings}` : ''}`
-                          : enr.classTimings || 'Schedule TBD'}
-                      </Text>
-                    </View>
-                    <View style={styles.upcomingRow}>
-                      <Ionicons name="person-outline" size={16} color="#E9D5FF" />
-                      <View>
-                        <Text style={styles.upcomingInstructorLabel}>Instructor</Text>
-                        <Text style={styles.upcomingInstructorName}>{enr.instructor || 'TBD'}</Text>
-                      </View>
-                    </View>
-                  </View>
-                ))
-            )}
+              <View style={styles.statsBox}>
+                <Text style={styles.statsLabel}>Hours Learned</Text>
+                <Text style={styles.statsValue}>24</Text>
+              </View>
+            </View>
           </View>
-        )}
+
+          {/* 4. TAB TOGGLE BUTTONS */}
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[styles.toggleTab, activeTab === 'JOIN_CLASS' && styles.toggleTabActive]}
+              onPress={() => setActiveTab('JOIN_CLASS')}
+            >
+              <Ionicons
+                name="videocam-outline"
+                size={18}
+                color={activeTab === 'JOIN_CLASS' ? '#FFF' : '#4B5563'}
+                style={styles.tabIcon}
+              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={[styles.toggleTabText, activeTab === 'JOIN_CLASS' && styles.toggleTabTextActive]}>
+                  Join Class
+                </Text>
+                {activeTab === 'JOIN_CLASS' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />}
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.toggleTab, activeTab === 'UPCOMING' && styles.toggleTabActive]}
+              onPress={() => setActiveTab('UPCOMING')}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={18}
+                color={activeTab === 'UPCOMING' ? '#FFF' : '#4B5563'}
+                style={styles.tabIcon}
+              />
+              <Text style={[styles.toggleTabText, activeTab === 'UPCOMING' && styles.toggleTabTextActive]}>
+                Upcoming
+              </Text>
+              {activeTab === 'UPCOMING' && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+          </View>
+
+          {/* 5. DYNAMIC CLASSES VIEW */}
+          {activeTab === 'JOIN_CLASS' ? (
+            <LiveClassesView
+              enrollments={enrollments}
+              setSelectedCourse={setSelectedCourse}
+              InstructorAvatar={InstructorAvatar}
+            />
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Upcoming Classes</Text>
+              {enrollments.filter(e => e.status === 'ACTIVE' || e.status === 'UPCOMING').length === 0 ? (
+                <View style={[styles.classCard, { alignItems: 'center', padding: 32, gap: 8 }]}>
+                  <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
+                  <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600' }}>No upcoming classes</Text>
+                </View>
+              ) : (
+                enrollments
+                  .filter(e => e.status === 'ACTIVE' || e.status === 'UPCOMING')
+                  .map((enr, idx) => {
+                    const meetUrl = enr.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf';
+                    return (
+                      <View
+                        key={idx}
+                        style={[styles.upcomingCard, idx > 0 && { marginTop: 12 }]}
+                      >
+                        <Text style={styles.upcomingTitle}>{enr.courseTitle}</Text>
+                        <View style={styles.upcomingRow}>
+                          <Ionicons name="time-outline" size={16} color="#E9D5FF" />
+                          <Text style={styles.upcomingTime}>
+                            {enr.classDays && enr.classDays.length > 0
+                              ? `${enr.classDays.join(', ')}${enr.classTimings ? ` - ${enr.classTimings}` : ''}`
+                              : enr.classTimings || 'Schedule TBD'}
+                          </Text>
+                        </View>
+                        <View style={styles.upcomingRow}>
+                          <Ionicons name="person-outline" size={16} color="#E9D5FF" />
+                          <View>
+                            <Text style={styles.upcomingInstructorLabel}>Instructor</Text>
+                            <Text style={styles.upcomingInstructorName}>{enr.instructor || 'TBD'}</Text>
+                          </View>
+                        </View>
+
+                        {/* Google Meet Box for Student */}
+                        <View style={{
+                          flexDirection: 'row', alignItems: 'center',
+                          backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10,
+                          paddingHorizontal: 12, paddingVertical: 8, marginTop: 12,
+                        }}>
+                          <Ionicons name="videocam-outline" size={16} color="#FFB703" />
+                          <TouchableOpacity style={{ flex: 1, marginHorizontal: 8 }} onPress={() => Linking.openURL(meetUrl)}>
+                            <Text style={{ fontSize: 12, color: '#FFF', fontWeight: '600' }} numberOfLines={1}>
+                              {meetUrl}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ backgroundColor: '#FFB703', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
+                            onPress={() => Linking.openURL(meetUrl)}
+                          >
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#1F2937' }}>Join Class</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })
+              )}
+            </View>
+          )}
 
           {/* 6. RECORDINGS & STUDY MATERIALS TABS */}
-        <ResourceTabsSection enrollments={enrollments} />
+          <ResourceTabsSection enrollments={enrollments} />
 
-        <View style={styles.bottomSpacer} />
+          <View style={styles.bottomSpacer} />
         </ScrollView>
       </SafeAreaView>
     </View>
