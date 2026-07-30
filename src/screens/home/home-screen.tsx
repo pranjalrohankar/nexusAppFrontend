@@ -397,6 +397,22 @@ interface Enrollment {
 
 const TODAY_NAME = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
 
+function isClassLiveNow(classTimings?: string): boolean {
+  if (!classTimings) return false;
+  const match = classTimings.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?\s*[-–]\s*(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) return false;
+  const toMins = (h: number, m: number, ampm?: string) => {
+    let hrs = h;
+    if (ampm) { if (ampm.toUpperCase() === 'PM' && h !== 12) hrs += 12; if (ampm.toUpperCase() === 'AM' && h === 12) hrs = 0; }
+    return hrs * 60 + m;
+  };
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const start = toMins(+match[1], +match[2], match[3]);
+  const end = toMins(+match[4], +match[5], match[6]);
+  return nowMins >= start && nowMins <= end;
+}
+
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
 // ── Inline Video Modal ──────────────────────────────────────────────────
@@ -829,7 +845,7 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
     const todayMatch = Array.isArray(e.classDays) && e.classDays.some(
       d => d.trim().toLowerCase().startsWith(TODAY_NAME.substring(0, 3))
     );
-    return todayMatch;
+    return todayMatch && isClassLiveNow(e.classTimings);
   });
   return (
     <View style={styles.section}>
@@ -891,7 +907,14 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
                 </View>
                 <TouchableOpacity
                   style={[styles.joinNowButton, !enr.googleMeetLink && { backgroundColor: '#9CA3AF' }]}
-                  onPress={() => enr.googleMeetLink && Linking.openURL(enr.googleMeetLink)}
+                  onPress={() => {
+                    if (!enr.googleMeetLink) return;
+                    if (Platform.OS === 'web') {
+                      window.open(enr.googleMeetLink, '_blank');
+                    } else {
+                      Linking.openURL(enr.googleMeetLink);
+                    }
+                  }}
                   disabled={!enr.googleMeetLink}
                 >
                   <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
