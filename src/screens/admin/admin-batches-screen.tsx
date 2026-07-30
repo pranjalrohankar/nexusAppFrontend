@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated, StatusBar, useWindowDimensions } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, TextInput, Modal, ActivityIndicator, Animated, StatusBar, useWindowDimensions, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
 import BatchStudentsScreen from './batch-students-screen';
@@ -60,6 +61,7 @@ export default function AdminBatchesScreen() {
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
   const [formClassTime, setFormClassTime] = useState('');
+  const [formGoogleMeetLink, setFormGoogleMeetLink] = useState('');
   const [formStatus, setFormStatus] = useState<BatchStatus>('UPCOMING');
   const [formClassDays, setFormClassDays] = useState<ClassDay[]>([]);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
@@ -79,28 +81,38 @@ export default function AdminBatchesScreen() {
     ]).start(() => setToast(null));
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [batchRes, courseRes, teacherRes] = await Promise.all([
         api.getBatches(),
         api.getAllCourses(),
         api.getTeachers(),
       ]);
-      const rawBatches: Batch[] = batchRes || [];
-      setCourses(courseRes.success ? courseRes.data : []);
-      setTeachers(teacherRes.success ? teacherRes.data.map((t: any) => ({ id: t.teacherId || t.id, name: t.name })) : []);
+      const rawBatches: Batch[] = Array.isArray(batchRes)
+        ? batchRes
+        : Array.isArray(batchRes?.data)
+        ? batchRes.data
+        : [];
+      setCourses(courseRes?.success && Array.isArray(courseRes?.data) ? courseRes.data : Array.isArray(courseRes) ? courseRes : []);
+      setTeachers(teacherRes?.success && Array.isArray(teacherRes?.data) ? teacherRes.data.map((t: any) => ({ id: t.teacherId || t.id, name: t.name })) : []);
       setBatches(rawBatches);
     } catch (err) {
-      showToast('Failed to load data', 'error');
+      if (showSpinner) showToast('Failed to load data', 'error');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData(true);
+      const interval = setInterval(() => {
+        loadData(false);
+      }, 3000);
+      return () => clearInterval(interval);
+    }, [loadData])
+  );
 
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 5;
@@ -108,12 +120,15 @@ export default function AdminBatchesScreen() {
   const filteredBatches = [...batches]
     .sort((a, b) => b.id - a.id)
     .filter(b => {
-      const matchesSearch = b.batchName.toLowerCase().includes(searchQuery.toLowerCase()) || b.selectCourse.toLowerCase().includes(searchQuery.toLowerCase());
-      if (filterTab === 'All') return matchesSearch;
-      return matchesSearch && b.status === filterTab.toUpperCase();
+      const matchSearch =
+        b.batchName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        b.selectCourse.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        b.instructor.toLowerCase().includes(searchQuery.toLowerCase());
+      if (filterTab === 'All') return matchSearch;
+      return matchSearch && b.status.toUpperCase() === filterTab.toUpperCase();
     });
 
-  const totalPages = Math.ceil(filteredBatches.length / PAGE_SIZE);
+  const totalPages = Math.ceil(filteredBatches.length / PAGE_SIZE) || 1;
   const pagedBatches = filteredBatches.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Reset to page 1 when filter/search changes
@@ -132,6 +147,7 @@ export default function AdminBatchesScreen() {
     setFormStartDate('');
     setFormEndDate('');
     setFormClassTime('');
+    setFormGoogleMeetLink('');
     setFormStatus('UPCOMING');
     setFormClassDays([]);
     setModalVisible(true);
@@ -146,6 +162,7 @@ export default function AdminBatchesScreen() {
     setFormStartDate(batch.startDate);
     setFormEndDate(batch.endDate);
     setFormClassTime(batch.classTimings || batch.courseTimings || '');
+    setFormGoogleMeetLink(batch.googleMeetLink || batch.meetLink || '');
     setFormStatus(batch.status);
     setFormClassDays(batch.classDays || []);
     setModalVisible(true);
@@ -168,6 +185,8 @@ export default function AdminBatchesScreen() {
         classDays: formClassDays,
         classTimings: formClassTime,
         courseTimings: formClassTime,
+        googleMeetLink: formGoogleMeetLink,
+        meetLink: formGoogleMeetLink,
         status: formStatus,
       };
       console.log('Saving batch:', payload);
@@ -413,6 +432,29 @@ export default function AdminBatchesScreen() {
                   </View>
                 </View>
 
+                {/* Google Meet Link Box */}
+                <View style={styles.meetBoxContainer}>
+                  <Ionicons name="videocam-outline" size={16} color="#7B2CBF" />
+                  <TouchableOpacity
+                    style={{ flex: 1, marginHorizontal: 8 }}
+                    onPress={() => {
+                      const url = batch.googleMeetLink || batch.meetLink || 'https://meet.google.com/miq-hydh-kkf';
+                      Linking.openURL(url).catch(() => {});
+                    }}
+                  >
+                    <Text style={styles.meetUrlText} numberOfLines={1}>
+                      {batch.googleMeetLink || batch.meetLink || 'https://meet.google.com/miq-hydh-kkf'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.meetEditBtn}
+                    onPress={() => handleOpenEditModal(batch)}
+                  >
+                    <Ionicons name="create-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.meetEditBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
+
                 {/* Actions */}
                 <View style={styles.batchActions}>
                   <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(batch)}>
@@ -600,6 +642,17 @@ export default function AdminBatchesScreen() {
                 value={formClassTime}
                 onChangeText={setFormClassTime}
                 placeholderTextColor="#9CA3AF"
+              />
+
+              <Text style={styles.fieldLabel}>Google Meet Link</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://meet.google.com/..."
+                value={formGoogleMeetLink}
+                onChangeText={setFormGoogleMeetLink}
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
 
               <Text style={styles.sectionTitle}>STATUS</Text>
@@ -1000,6 +1053,20 @@ const styles = StyleSheet.create({
   pageNumActive: { backgroundColor: '#7B2CBF' },
   pageNumText: { fontSize: 13, fontWeight: '700', color: '#7B2CBF' },
   pageNumTextActive: { color: '#FFF' },
+  meetBoxContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F5F3FF', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#DDD6FE',
+    marginTop: 12, marginBottom: 4,
+  },
+  meetUrlText: { fontSize: 12, color: '#7B2CBF', fontWeight: '600' },
+  meetEditBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 8, borderWidth: 1, borderColor: '#DDD6FE',
+  },
+  meetEditBtnText: { fontSize: 11, fontWeight: '600', color: '#7B2CBF' },
 });
 
 const calStyles = StyleSheet.create({
