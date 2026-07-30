@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   StyleSheet,
   Text,
@@ -20,6 +21,7 @@ interface Teacher {
   name: string;
   joinedDate: string;
   status: 'Active' | 'Inactive';
+  onlineStatus?: 'online' | 'offline' | 'always_online';
   email: string;
   phone: string;
   rating: number;
@@ -39,6 +41,7 @@ const mapTeachers = (data: any[]): Teacher[] =>
     name: t.name || '',
     joinedDate: t.joinDate || '',
     status: (t.status === 'Active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
+    onlineStatus: ((t.onlineStatus === 'online' || t.onlineStatus === 'always_online') ? 'online' : 'offline') as 'online' | 'offline' | 'always_online',
     email: t.email || '',
     phone: t.phone || '',
     rating: t.rating ?? 5.0,
@@ -98,30 +101,26 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     ]).start(() => setToast(null));
   }, [toastOpacity]);
 
-  const fetchTeachers = useCallback(async () => {
-    setLoading(true);
+  const fetchTeachers = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     try {
       const res = await api.getTeachers();
-      console.log('[fetchTeachers] raw response:', JSON.stringify(res));
       const raw: any[] = Array.isArray(res)
         ? res
         : Array.isArray(res?.data)
           ? res.data
           : [];
-      console.log('[fetchTeachers] mapped raw count:', raw.length, 'first item:', raw[0]);
       adminDataCache.teachers = raw;
       const list = mapTeachers(raw).slice().sort((a, b) => Number(b.id) - Number(a.id));
-      console.log('[fetchTeachers] final list count:', list.length);
       setTeachers(list);
       if (onCountChange) onCountChange(list.length);
       setTotalStudents(res?.totalStudents ?? 0);
     } catch (e) {
       console.error('[fetchTeachers] error:', e);
-      showToast('Failed to load teachers.', 'error');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
-  }, [onCountChange, showToast]);
+  }, [onCountChange]);
 
   const fetchCourses = useCallback(async () => {
     if (adminDataCache.courses.length > 0) {
@@ -160,10 +159,16 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setIsModalVisible(true);
   }, [fetchCourses]);
 
-  useEffect(() => {
-    fetchTeachers();
-    fetchCourses();
-  }, [fetchTeachers, fetchCourses]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchTeachers(true);
+      fetchCourses();
+      const interval = setInterval(() => {
+        fetchTeachers(false);
+      }, 3000);
+      return () => clearInterval(interval);
+    }, [fetchTeachers, fetchCourses])
+  );
 
   // Register the add modal opener with the parent — re-register whenever it changes
   useEffect(() => {
@@ -173,13 +178,17 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   const filteredTeachers = teachers.filter(teacher => {
     const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       teacher.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const isLogged = teacher.onlineStatus === 'online' || teacher.onlineStatus === 'always_online';
     if (activeTab === 'All') return matchesSearch;
-    return matchesSearch && teacher.status === activeTab;
+    if (activeTab === 'Active') return matchesSearch && isLogged;
+    if (activeTab === 'Inactive') return matchesSearch && !isLogged;
+    return matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredTeachers.length / PAGE_SIZE);
   const paginatedTeachers = filteredTeachers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const activeCount = teachers.filter(t => t.status === 'Active').length;
+  const activeCount = teachers.filter(t => t.onlineStatus === 'online' || t.onlineStatus === 'always_online').length;
+  const inactiveCount = teachers.filter(t => t.onlineStatus !== 'online' && t.onlineStatus !== 'always_online').length;
 
   const handleOpenEditModal = async (teacher: Teacher) => {
     setSelectedTeacher(teacher);
@@ -437,15 +446,29 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                 <View style={styles.cardHeader}>
                   <View style={styles.avatarCircle}>
                     <Text style={styles.avatarText}>{item.name[0]}</Text>
+                    <View style={[
+                      styles.avatarOnlineDot,
+                      item.onlineStatus === 'online' ? styles.dotGreen : styles.dotGray
+                    ]} />
                   </View>
                   <View style={styles.metaCol}>
                     <Text style={styles.teacherName}>{item.name}</Text>
                     <Text style={styles.joinedText}>Joined {item.joinedDate}</Text>
                   </View>
-                  <View style={styles.ratingBadge}>
-                    <Ionicons name="star" size={12} color="#FFB703" />
-                    <Text style={styles.ratingText}>{item.rating}</Text>
-                  </View>
+                  {(() => {
+                    const isLogged = item.onlineStatus === 'online' || item.onlineStatus === 'always_online';
+                    return (
+                      <View style={[
+                        styles.statusBadge,
+                        isLogged ? styles.statusActive : styles.statusInactive
+                      ]}>
+                        <Text style={[
+                          styles.statusBadgeText,
+                          isLogged ? styles.statusTextActive : styles.statusTextInactive
+                        ]}>{isLogged ? 'Active' : 'Inactive'}</Text>
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 <View style={styles.infoBlock}>
@@ -472,6 +495,34 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                 </View>
 
                 <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleStatusBtn,
+                      item.status === 'Active' ? styles.deactivateBtn : styles.activateBtn
+                    ]}
+                    onPress={async () => {
+                      const newStatus = item.status === 'Active' ? 'Inactive' : 'Active';
+                      try {
+                        await api.updateTeacher(item.id, { status: newStatus });
+                        setTeachers(prev => prev.map(t => t.id === item.id ? { ...t, status: newStatus } : t));
+                        showToast(`Teacher status updated to ${newStatus}`, 'success');
+                      } catch {
+                        showToast('Failed to update teacher status', 'error');
+                      }
+                    }}
+                  >
+                    <Ionicons
+                      name={item.status === 'Active' ? 'pause-circle-outline' : 'play-circle-outline'}
+                      size={14}
+                      color={item.status === 'Active' ? '#EF4444' : '#10B981'}
+                    />
+                    <Text style={[
+                      styles.toggleStatusText,
+                      { color: item.status === 'Active' ? '#EF4444' : '#10B981' }
+                    ]}>
+                      {item.status === 'Active' ? 'Deactivate' : 'Activate'}
+                    </Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(item)}>
                     <Ionicons name="create-outline" size={14} color="#7B2CBF" />
                     <Text style={styles.editBtnText}>Edit</Text>
@@ -723,11 +774,31 @@ const styles = StyleSheet.create({
   },
   miniStatVal: { fontSize: 13, fontWeight: 'bold', color: '#1F2937' },
   miniStatLabel: { fontSize: 9, color: '#6B7280', fontWeight: '500', marginTop: 2 },
+  avatarOnlineDot: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 12, height: 12, borderRadius: 6,
+    borderWidth: 2, borderColor: '#FFF',
+  },
+  dotGreen: { backgroundColor: '#10B981' },
+  dotGray: { backgroundColor: '#9CA3AF' },
+  statusBadge: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8 },
+  statusActive: { backgroundColor: '#ECFDF5' },
+  statusInactive: { backgroundColor: '#FEE2E2' },
+  statusBadgeText: { fontSize: 10, fontWeight: 'bold' },
+  statusTextActive: { color: '#10B981' },
+  statusTextInactive: { color: '#EF4444' },
   cardActions: {
     flexDirection: 'row', justifyContent: 'flex-end',
     borderTopWidth: 1, borderTopColor: '#F3F4F6',
-    marginTop: 12, paddingTop: 12, gap: 12,
+    marginTop: 12, paddingTop: 12, gap: 10,
   },
+  toggleStatusBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, gap: 4,
+  },
+  activateBtn: { backgroundColor: '#ECFDF5' },
+  deactivateBtn: { backgroundColor: '#FEE2E2' },
+  toggleStatusText: { fontSize: 11, fontWeight: 'bold' },
   editBtn: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F3E8FF', paddingVertical: 6,

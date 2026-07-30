@@ -271,7 +271,10 @@ export const api = {
 
   getTeacherProfile: () => get("/teachers/profile"),
   updateTeacherProfile: (data: object) => put("/teachers/profile", data),
-  getMyBatches: () => get("/teachers/my-batches"),
+  getMyBatches: (status?: string) =>
+    get(
+      `/teachers/my-batches${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    ),
   getMyCoursesBatches: (course?: string) =>
     get(
       `/teachers/my-courses-batches${course ? `?course=${encodeURIComponent(course)}` : ""}`,
