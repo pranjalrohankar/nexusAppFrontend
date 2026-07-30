@@ -435,13 +435,13 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
         ) : (
           // Student Courses
           <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
+            {/* <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>My Courses</Text>
               <TouchableOpacity>
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
-            </View>
-            <View style={styles.coursesList}>
+            </View> */}
+            {/* <View style={styles.coursesList}>
               {studentEnrollments.length === 0 ? (
                 <View style={styles.courseCard}>
                   <Text style={{ color: '#9CA3AF', fontSize: 13, textAlign: 'center' }}>No enrollments yet.</Text>
@@ -477,7 +477,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                   );
                 })
               )}
-            </View>
+            </View> */}
           </View>
         )}
 

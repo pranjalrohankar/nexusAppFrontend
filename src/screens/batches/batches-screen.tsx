@@ -16,7 +16,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import GenBatchDetails from './gen-batch-details';
 import BatchInfoScreen from './batch-info-screen';
 import { api } from '../../services/api';
 
@@ -32,14 +31,16 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
   const [activeTab, setActiveTab] = useState<SubTabType>('Ongoing');
-  const [selectedGenBatch, setSelectedGenBatch] = useState<string | null>(null);
   const [viewingBatchInfo, setViewingBatchInfo] = useState<any | null>(null);
   const [ongoingBatches, setOngoingBatches] = useState<any[]>([]);
+  const [upcomingBatches, setUpcomingBatches] = useState<any[]>([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [teacherPhotos, setTeacherPhotos] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchEnrollments();
+    fetchUpcomingBatches();
     loadTeacherPhotos();
   }, []);
 
@@ -58,6 +59,23 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
       if (userPhoto) photos['user'] = userPhoto;
       setTeacherPhotos(photos);
     } catch (_) {}
+  };
+
+  const fetchUpcomingBatches = async () => {
+    try {
+      setUpcomingLoading(true);
+      const data: any = await api.getBatches();
+      const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      const upcoming = list.filter((b: any) => {
+        const status = typeof b.status === 'string' ? b.status : b.status?.name?.() ?? '';
+        return status === 'UPCOMING';
+      });
+      setUpcomingBatches(upcoming);
+    } catch (err) {
+      console.error('Failed to fetch upcoming batches:', err);
+    } finally {
+      setUpcomingLoading(false);
+    }
   };
 
   const fetchEnrollments = async () => {
@@ -104,29 +122,11 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
     }
   };
 
-  // Gen Batches data
-  const genBatches = [
-    {
-      id: 'gb1',
-      title: 'Gen Batch 2025-A',
-      status: 'upcoming',
-      dateRange: 'Jan 10, 2025 - Jan 25, 2025',
-      coursesCount: 12,
-    },
-    {
-      id: 'gb2',
-      title: 'Gen Batch 2025-B',
-      status: 'upcoming',
-      dateRange: 'Feb 01, 2025 - Feb 15, 2025',
-      coursesCount: 8,
-    }
-  ];
-
   const handleEnrollSuccess = (_batch: any) => {
-    setSelectedGenBatch(null);
     setViewingBatchInfo(null);
     setActiveTab('Ongoing');
     fetchEnrollments();
+    fetchUpcomingBatches();
   };
 
   if (viewingBatchInfo) {
@@ -134,15 +134,6 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
       <BatchInfoScreen 
         onBack={() => setViewingBatchInfo(null)} 
         batch={viewingBatchInfo}
-      />
-    );
-  }
-
-  if (selectedGenBatch) {
-    return (
-      <GenBatchDetails 
-        onBack={() => setSelectedGenBatch(null)} 
-        onEnrollSuccess={handleEnrollSuccess}
       />
     );
   }
@@ -201,11 +192,11 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
             <Text style={styles.statValue}>{ongoingBatches.filter(b => b.status === 'COMPLETED').length}</Text>
             <Text style={styles.statLabel}>Completed</Text>
           </View>
-          {/* Card 3: Live Now */}
+          {/* Card 3: Upcoming */}
           <View style={styles.statCard}>
-            <Ionicons name="time-outline" size={24} color="#7B2CBF" style={styles.statIcon} />
-            <Text style={styles.statValue}>{ongoingBatches.filter(b => b.isLive).length}</Text>
-            <Text style={styles.statLabel}>Live Now</Text>
+            <Ionicons name="calendar-outline" size={24} color="#7B2CBF" style={styles.statIcon} />
+            <Text style={styles.statValue}>{upcomingBatches.length}</Text>
+            <Text style={styles.statLabel}>Upcoming</Text>
           </View>
         </View>
 
@@ -345,10 +336,10 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
                           <Text style={styles.nextClassLabel}>Next Class</Text>
                           <Text style={styles.nextClassTime}>{batch.nextClass}</Text>
                         </View>
-                        <TouchableOpacity style={styles.joinStandardButton}>
+                        {/* <TouchableOpacity style={styles.joinStandardButton}>
                           <Ionicons name="videocam" size={16} color="#FFF" style={styles.buttonIcon} />
                           <Text style={styles.joinStandardButtonText}>Join Class</Text>
-                        </TouchableOpacity>
+                        </TouchableOpacity> */}
                       </View>
                     )}
 
@@ -367,37 +358,70 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
           </View>
         ) : (
           <View style={[styles.listContainer, { flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }]}>
-            {/* Gen Batches Header */}
+            {/* Upcoming Batches Header */}
             <View style={[styles.genBatchesHeader, { width: '100%' }]}>
-              <Text style={styles.genBatchesTitle}>Gen Batches</Text>
-              <Text style={styles.genBatchesSubtitle}>View all available batches and their courses</Text>
+              <Text style={styles.genBatchesTitle}>Upcoming Batches</Text>
+              <Text style={styles.genBatchesSubtitle}>Batches starting soon — enroll before they go live</Text>
             </View>
 
-            {genBatches.map((batch) => (
-              <TouchableOpacity 
-                key={batch.id} 
-                style={[styles.genBatchCard, { width: isDesktop ? '48.8%' : '100%' }]}
-                onPress={() => setSelectedGenBatch(batch.id)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.genBatchCardTop}>
-                  <Text style={styles.genBatchCardTitle}>{batch.title}</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </View>
-                <View style={styles.genBatchBadge}>
-                  <Text style={styles.genBatchBadgeText}>{batch.status}</Text>
-                </View>
-                
-                <View style={styles.genBatchInfoRow}>
-                  <Ionicons name="calendar-outline" size={16} color="#9CA3AF" />
-                  <Text style={styles.genBatchInfoText}>{batch.dateRange}</Text>
-                </View>
-                <View style={styles.genBatchInfoRow}>
-                  <Ionicons name="book-outline" size={16} color="#9CA3AF" />
-                  <Text style={styles.genBatchInfoText}>{batch.coursesCount} Courses</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {upcomingLoading ? (
+              <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 40 }} />
+            ) : upcomingBatches.length === 0 ? (
+              <Text style={styles.emptyText}>No upcoming batches at the moment.</Text>
+            ) : (
+              upcomingBatches.map((batch: any) => {
+                const startDate = batch.startDate
+                  ? new Date(batch.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'TBD';
+                const endDate = batch.endDate
+                  ? new Date(batch.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'TBD';
+                const days: string[] = Array.isArray(batch.classDays) ? batch.classDays : [];
+
+                return (
+                  <View
+                    key={String(batch.id)}
+                    style={[styles.genBatchCard, { width: isDesktop ? '48.8%' : '100%' }]}
+                  >
+                    <View style={styles.genBatchCardTop}>
+                      <Text style={styles.genBatchCardTitle}>{batch.batchName || 'Unnamed Batch'}</Text>
+                      <View style={[styles.genBatchBadge, { backgroundColor: '#FEF3C7' }]}>
+                        <Text style={[styles.genBatchBadgeText, { color: '#D97706' }]}>upcoming</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.genBatchInfoRow}>
+                      <Ionicons name="book-outline" size={16} color="#9CA3AF" />
+                      <Text style={styles.genBatchInfoText}>{batch.selectCourse || 'N/A'}</Text>
+                    </View>
+
+                    <View style={styles.genBatchInfoRow}>
+                      <Ionicons name="person-outline" size={16} color="#9CA3AF" />
+                      <Text style={styles.genBatchInfoText}>{batch.instructor || 'TBD'}</Text>
+                    </View>
+
+                    <View style={styles.genBatchInfoRow}>
+                      <Ionicons name="calendar-outline" size={16} color="#9CA3AF" />
+                      <Text style={styles.genBatchInfoText}>{startDate} – {endDate}</Text>
+                    </View>
+
+                    {days.length > 0 && (
+                      <View style={styles.genBatchInfoRow}>
+                        <Ionicons name="time-outline" size={16} color="#9CA3AF" />
+                        <Text style={styles.genBatchInfoText}>
+                          {days.join(', ')}{batch.classTimings ? ` at ${batch.classTimings}` : ''}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.genBatchInfoRow}>
+                      <Ionicons name="people-outline" size={16} color="#9CA3AF" />
+                      <Text style={styles.genBatchInfoText}>{batch.studentsCount ?? 0} Students enrolled</Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         )}
         <View style={styles.bottomSpacer} />

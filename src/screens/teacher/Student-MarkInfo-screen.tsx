@@ -49,16 +49,27 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
       setCourses(assignedCourses);
 
       if (assignedCourses.length > 0) {
+        // Use enrollments endpoint — properly filters by courseTitle on the backend
         const results = await Promise.all(
           assignedCourses.map((c: any) =>
-            api.getStudentsByCourse(c.title).catch(() => ({ data: [] }))
+            api.getEnrollmentsByCourse(c.title).catch(() => [])
           )
         );
         const map: Record<string, any[]> = {};
         assignedCourses.forEach((c: any, i: number) => {
           const raw = results[i];
           const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
-          map[c.title] = list;
+          // Normalise: enrollment response uses `studentId` as the student's PK
+          map[c.title] = list.map((e: any) => ({
+            id: e.studentId ?? e.id,
+            studentId: e.studentId ?? e.id,
+            name: e.name ?? e.studentName ?? 'Unnamed',
+            email: e.email ?? '',
+            phone: e.phone ?? '',
+            enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
+            paymentStatus: e.paymentStatus ?? '',
+            course: c.title,
+          }));
         });
         setStudentsByCourse(map);
       }
@@ -74,11 +85,11 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
   // Merge + dedupe all students across courses for the "All" tab
   const allStudents = useMemo(() => {
     const seen = new Map<string, any>();
-    Object.entries(studentsByCourse).forEach(([courseTitle, list]) => {
+    Object.entries(studentsByCourse).forEach(([_courseTitle, list]) => {
       list.forEach((s: any) => {
-        const key = s.id ?? s.studentId ?? s.email;
+        const key = String(s.studentId ?? s.id ?? s.email);
         if (!seen.has(key)) {
-          seen.set(key, { ...s, course: s.course ?? courseTitle });
+          seen.set(key, s);
         }
       });
     });
@@ -104,7 +115,8 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
     setShowStudentModal(true);
     setMarksLoading(true);
     try {
-      const res = await api.getStudentMarks(student.id ?? student.studentId).catch(() => ({ data: [] }));
+      const id = student.studentId ?? student.id;
+      const res = await api.getStudentMarks(id).catch(() => ({ data: [] }));
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       setStudentMarks(list);
     } catch {
@@ -242,7 +254,7 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
               <View style={styles.infoRow}>
                 <Ionicons name="calendar-outline" size={16} color="#7B2CBF" />
                 <Text style={styles.infoText}>
-                  Enrolled: {selectedStudent?.enrolledDate ?? selectedStudent?.enrollmentDate ?? '—'}
+                  Enrolled: {selectedStudent?.enrollmentDate || '—'}
                 </Text>
               </View>
 
