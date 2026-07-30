@@ -819,7 +819,13 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
   setSelectedCourse: (c: CourseData | null) => void;
   InstructorAvatar: React.FC<{ name: string; courseKey?: string }>;
 }) {
-  const liveClasses = enrollments.filter(e => e.status !== 'COMPLETED');
+  const liveClasses = enrollments.filter(e => {
+    if (e.status === 'COMPLETED') return false;
+    const todayMatch = Array.isArray(e.classDays) && e.classDays.some(
+      d => d.trim().toLowerCase().startsWith(TODAY_NAME.substring(0, 3))
+    );
+    return todayMatch;
+  });
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Join Classes</Text>
@@ -830,67 +836,66 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
           <Text style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center' }}>Your enrolled classes and Google Meet links will appear here</Text>
         </View>
       ) : (
-        liveClasses.map((enr, idx) => {
-          const meetUrl = enr.googleMeetLink || 'https://meet.google.com/miq-hydh-kkf';
-          return (
-            <View
-              key={idx}
-              style={[styles.classCard, { padding: 0, overflow: 'hidden', marginBottom: idx < liveClasses.length - 1 ? 12 : 0 }]}
-            >
-              <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
-                <View style={styles.cardHeaderRow}>
-                  <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
-                  <View style={styles.livePillBadge}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 5 }} />
-                    <Text style={styles.livePillText}>LIVE</Text>
-                  </View>
+        liveClasses.map((enr, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={[styles.classCard, { padding: 0, overflow: 'hidden', marginBottom: idx < liveClasses.length - 1 ? 12 : 0 }]}
+            onPress={() => setSelectedCourse(coursesData[enr.courseTitle] ?? null)}
+            activeOpacity={0.8}
+          >
+            <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
+                <View style={styles.livePillBadge}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 5 }} />
+                  <Text style={styles.livePillText}>LIVE</Text>
                 </View>
-                {enr.classDays && enr.classDays.length > 0 ? (
-                  <View style={styles.classTimeRow}>
-                    <Ionicons name="time-outline" size={16} color="#E9D5FF" />
-                    <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>
-                      {enr.classDays.join(', ')}{enr.classTimings ? ` - ${enr.classTimings}` : ''}
-                    </Text>
-                  </View>
-                ) : null}
               </View>
-
-              <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
-                {enr.instructor ? (
-                  <View style={styles.instructorRow}>
-                    <InstructorAvatar name={enr.instructor} courseKey={enr.courseTitle} />
-                    <View>
-                      <Text style={styles.instructorLabel}>Instructor</Text>
-                      <Text style={styles.instructorName}>{enr.instructor}</Text>
-                    </View>
-                  </View>
-                ) : null}
-                <View style={styles.progressContainer}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.progressLabel}>Progress</Text>
-                    <Text style={styles.progressValue}>8/50 Classes</Text>
-                  </View>
-                  <View style={styles.progressBarBg}>
-                    <View style={[styles.progressBarFill, { width: '16%' }]} />
+              {enr.classDays && enr.classDays.length > 0 ? (
+                <View style={styles.classTimeRow}>
+                  <Ionicons name="time-outline" size={16} color="#E9D5FF" />
+                  <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>
+                    {enr.classDays.join(', ')}{enr.classTimings ? ` - ${enr.classTimings}` : ''}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+              {enr.instructor ? (
+                <View style={styles.instructorRow}>
+                  <InstructorAvatar name={enr.instructor} courseKey={enr.courseTitle} />
+                  <View>
+                    <Text style={styles.instructorLabel}>Instructor</Text>
+                    <Text style={styles.instructorName}>{enr.instructor}</Text>
                   </View>
                 </View>
-                <View style={[styles.cardFooter, styles.rowBetween]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                    <Text style={styles.liveNowText}>{enr.classTimings || 'Today'}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.joinNowButton}
-                    onPress={() => Linking.openURL(meetUrl).catch(() => { })}
-                  >
-                    <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
-                    <Text style={styles.joinNowText}>Join Now</Text>
-                  </TouchableOpacity>
+              ) : null}
+              <View style={styles.progressContainer}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.progressLabel}>Progress</Text>
+                  <Text style={styles.progressValue}>8/50 Classes</Text>
                 </View>
+                <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, { width: '16%' }]} />
+                </View>
+              </View>
+              <View style={[styles.cardFooter, styles.rowBetween]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                  <Text style={styles.liveNowText}>{enr.classTimings || 'Today'}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.joinNowButton, !enr.googleMeetLink && { backgroundColor: '#9CA3AF' }]}
+                  onPress={() => enr.googleMeetLink && Linking.openURL(enr.googleMeetLink)}
+                  disabled={!enr.googleMeetLink}
+                >
+                  <Ionicons name="play" size={13} color="#FFF" style={styles.playIcon} />
+                  <Text style={styles.joinNowText}>{enr.googleMeetLink ? 'Join Now' : 'No Link'}</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          );
-        })
+          </TouchableOpacity>
+        ))
       )}
     </View>
   );
