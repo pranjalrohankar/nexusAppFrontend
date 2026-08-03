@@ -540,9 +540,6 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
                 >
                   <Ionicons name="notifications-outline" size={20} color="#4B5563" />
                   <Text style={styles.settingsItemText}>Notifications</Text>
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>3</Text>
-                  </View>
                   <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
                 </TouchableOpacity>
               )}

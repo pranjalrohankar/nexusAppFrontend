@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api } from '../../services/api';
 import { parseMcqsFromText } from '@/utils/pdf-mcq-parser';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -266,13 +267,28 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
     const passed = percentScore >= passScorePercent;
     const obtainedMarks = Math.round((score / questionsList.length) * totalMarks);
 
+    let studentName = 'Student User';
+    let studentEmail = 'student@nexus.com';
+    try {
+      const pRes = await api.getStudentProfile().catch(() => null);
+      const pData = pRes?.data ?? pRes;
+      if (pData?.name && String(pData.name).trim()) {
+        studentName = String(pData.name).trim();
+      } else if (pData?.firstName) {
+        studentName = `${pData.firstName} ${pData.lastName || ''}`.trim();
+      }
+      if (pData?.email) {
+        studentEmail = pData.email;
+      }
+    } catch (_) {}
+
     try {
       const newSub = {
         id: `sub-${Date.now()}`,
         testId: testInfo.id || `test-${Date.now()}`,
         testTitle: testInfo.title,
-        studentName: 'Student User',
-        studentEmail: 'student@nexus.com',
+        studentName: studentName,
+        studentEmail: studentEmail,
         submittedAt: new Date().toLocaleString(),
         status: 'GRADED',
         obtainedMarks: obtainedMarks,

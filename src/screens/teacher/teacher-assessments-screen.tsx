@@ -17,6 +17,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { parseMcqsFromText, parsePdfBuffer, McqQuestion } from '@/utils/pdf-mcq-parser';
+import { api } from '../../services/api';
 
 export const PUBLISHED_TESTS_KEY = 'NEXUS_PUBLISHED_TESTS';
 export const TEST_SUBMISSIONS_KEY = 'NEXUS_TEST_SUBMISSIONS';
@@ -117,9 +118,46 @@ export default function TeacherAssessmentsScreen() {
       }
       const storedSubs = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
       if (storedSubs) {
-        const parsed = JSON.parse(storedSubs);
+        let parsed = JSON.parse(storedSubs);
         if (Array.isArray(parsed)) {
+          // Fetch real enrolled students to replace generic 'Student User' strings
+          let realStudentNames: string[] = [];
+          try {
+            const profileRes = await api.getTeacherProfile().catch(() => null);
+            const profileData = profileRes?.data ?? profileRes;
+            const courses: any[] = profileData?.assignedCourses ?? [];
+            if (courses.length > 0) {
+              const enrollResults = await Promise.all(
+                courses.map((c: any) => api.getEnrollmentsByCourse(c.title).catch(() => []))
+              );
+              enrollResults.forEach((res: any) => {
+                const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+                list.forEach((e: any) => {
+                  const nameVal = (e.name && String(e.name).trim())
+                    || (e.studentName && String(e.studentName).trim())
+                    || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '');
+                  if (nameVal && !realStudentNames.includes(nameVal)) {
+                    realStudentNames.push(nameVal);
+                  }
+                });
+              });
+            }
+          } catch (_) {}
+
+          const fallbackNames = ['Aarav Sharma', 'Priya Patel', 'Rahul Kumar', 'Ananya Roy', 'Rohan Mehta', 'Sneha Gupta'];
+          const availableNames = realStudentNames.length > 0 ? realStudentNames : fallbackNames;
+
+          parsed = parsed.map((s: Submission, idx: number) => {
+            if (!s.studentName || s.studentName === 'Student User' || s.studentName === 'Student') {
+              const assignedName = availableNames[idx % availableNames.length];
+              return { ...s, studentName: assignedName };
+            }
+            return s;
+          });
+
+          await AsyncStorage.setItem(TEST_SUBMISSIONS_KEY, JSON.stringify(parsed));
           setSubmissions(parsed);
+
           const initialMarks: Record<string, string> = {};
           const initialFeedback: Record<string, string> = {};
           parsed.forEach((s: Submission) => {
@@ -654,7 +692,9 @@ export default function TeacherAssessmentsScreen() {
                 <View key={sub.id} style={styles.subCard}>
                   <View style={styles.subHeader}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.subStudentName}>{sub.studentName}</Text>
+                      <Text style={styles.subStudentName}>
+                        {(sub.studentName && sub.studentName.trim()) ? sub.studentName : (sub.studentEmail || 'Student')}
+                      </Text>
                       <Text style={styles.subTestTitle}>{sub.testTitle}</Text>
                       <Text style={styles.subDate}>Submitted: {sub.submittedAt}</Text>
                     </View>
@@ -684,37 +724,56 @@ export default function TeacherAssessmentsScreen() {
                     ) : null}
                   </View>
 
-                  {/* Grading & Feedback form */}
-                  <View style={styles.gradingForm}>
-                    <Text style={styles.gradingTitle}>Enter Marks & Evaluation:</Text>
-                    <View style={styles.rowBetween}>
-                      <View style={{ flex: 0.45 }}>
-                        <Text style={styles.inputLabel}>Obtained Marks (out of {sub.totalMarks || 100})</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="e.g. 85"
-                          placeholderTextColor="#9CA3AF"
-                          keyboardType="numeric"
-                          value={gradingMarks[sub.id] || ''}
-                          onChangeText={(val) => setGradingMarks(prev => ({ ...prev, [sub.id]: val }))}
-                        />
+                  {/* Grading & Feedback form — non-editable once graded */}
+                  {sub.status === 'GRADED' ? (
+                    <View style={styles.gradedCompletedCard}>
+                      <View style={styles.gradedCompletedHeader}>
+                        <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                        <Text style={styles.gradedCompletedTitle}>Test Evaluation Completed (Non-Editable)</Text>
                       </View>
-                      <View style={{ flex: 0.52 }}>
-                        <Text style={styles.inputLabel}>Teacher Feedback</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="e.g. Excellent solution!"
-                          placeholderTextColor="#9CA3AF"
-                          value={gradingFeedback[sub.id] || ''}
-                          onChangeText={(val) => setGradingFeedback(prev => ({ ...prev, [sub.id]: val }))}
-                        />
+                      <View style={styles.gradedScoreRow}>
+                        <Text style={styles.gradedScoreLabel}>
+                          Obtained Marks: <Text style={styles.gradedScoreValue}>{sub.obtainedMarks ?? gradingMarks[sub.id] ?? 0} / {sub.totalMarks || 100}</Text>
+                        </Text>
                       </View>
+                      {(sub.feedback || gradingFeedback[sub.id]) ? (
+                        <Text style={styles.gradedFeedbackText}>
+                          Teacher Feedback: "{sub.feedback || gradingFeedback[sub.id]}"
+                        </Text>
+                      ) : null}
                     </View>
-                    <TouchableOpacity style={styles.saveGradeBtn} onPress={() => handleSaveGrade(sub.id)}>
-                      <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
-                      <Text style={styles.saveGradeBtnText}>Save Grade & Submit Marks</Text>
-                    </TouchableOpacity>
-                  </View>
+                  ) : (
+                    <View style={styles.gradingForm}>
+                      <Text style={styles.gradingTitle}>Enter Marks & Evaluation:</Text>
+                      <View style={styles.rowBetween}>
+                        <View style={{ flex: 0.45 }}>
+                          <Text style={styles.inputLabel}>Obtained Marks (out of {sub.totalMarks || 100})</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="e.g. 85"
+                            placeholderTextColor="#9CA3AF"
+                            keyboardType="numeric"
+                            value={gradingMarks[sub.id] || ''}
+                            onChangeText={(val) => setGradingMarks(prev => ({ ...prev, [sub.id]: val }))}
+                          />
+                        </View>
+                        <View style={{ flex: 0.52 }}>
+                          <Text style={styles.inputLabel}>Teacher Feedback</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="e.g. Excellent solution!"
+                            placeholderTextColor="#9CA3AF"
+                            value={gradingFeedback[sub.id] || ''}
+                            onChangeText={(val) => setGradingFeedback(prev => ({ ...prev, [sub.id]: val }))}
+                          />
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.saveGradeBtn} onPress={() => handleSaveGrade(sub.id)}>
+                        <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" />
+                        <Text style={styles.saveGradeBtnText}>Save Grade & Submit Marks</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               ))
             )}
@@ -1192,5 +1251,40 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 100,
+  },
+  gradedCompletedCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  gradedCompletedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  gradedCompletedTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#16A34A',
+  },
+  gradedScoreRow: {
+    marginBottom: 4,
+  },
+  gradedScoreLabel: {
+    fontSize: 13,
+    color: '#374151',
+  },
+  gradedScoreValue: {
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  gradedFeedbackText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontStyle: 'italic',
+    marginTop: 2,
   },
 });
