@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,12 +11,14 @@ import {
   Modal,
   Linking,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import { api, getApiBaseUrl } from '@/services/api';
+import { parseSyllabus } from '@/utils/syllabus-parser';
 
 interface StudyMaterialsScreenProps {
   onClose?: () => void;
@@ -29,12 +31,11 @@ interface Material {
   type: string;
   course: string;
   batch: string;
+  moduleName?: string;
   fileName: string;
   fileUri: string;
   downloads: number;
 }
-
-const API_BASE_URL = getApiBaseUrl().replace('/api', '');
 
 const ACCENT_COLORS: any = [
   'rgba(0,0,0,0)', 'rgba(9,2,0,0.14)', 'rgba(41,18,1,0.286)',
@@ -45,6 +46,14 @@ const ACCENT_COLORS: any = [
 ];
 const ACCENT_LOCS: any = [0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1];
 
+const DEFAULT_MODULE_OPTIONS = [
+  'Module 1: Core Fundamentals & Introduction',
+  'Module 2: Core Concepts & Syntax',
+  'Module 3: Advanced Applications & Frameworks',
+  'Module 4: Practical Projects & Assignments',
+  'Module 5: Industry Case Studies & Evaluation',
+];
+
 const TYPE_ICON: Record<string, { name: any; color: string; bg: string }> = {
   PDF: { name: 'document-text', color: '#EF4444', bg: '#FEE2E2' },
   PPT: { name: 'easel', color: '#F97316', bg: '#FFEDD5' },
@@ -54,48 +63,133 @@ const TYPE_ICON: Record<string, { name: any; color: string; bg: string }> = {
   ZIP: { name: 'archive', color: '#64748B', bg: '#F1F5F9' },
 };
 
+function normalizeModString(str: string): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[\:\–\—\-\|]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getModuleNumber(str: string): string | null {
+  const match = str.match(/module\s*(\d+)/i);
+  return match ? match[1] : null;
+}
+
+function findCanonicalModuleTitle(materialModName: string, adminModuleTitles: string[]): string {
+  if (!materialModName) return adminModuleTitles[0] || 'Module 1';
+
+  const normMat = normalizeModString(materialModName);
+  const matNum = getModuleNumber(materialModName);
+
+  for (const adminTitle of adminModuleTitles) {
+    const normAdmin = normalizeModString(adminTitle);
+    const adminNum = getModuleNumber(adminTitle);
+
+    if (normMat === normAdmin) return adminTitle;
+    if (matNum && adminNum && matNum === adminNum) return adminTitle;
+  }
+
+  return materialModName;
+}
+
 export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenProps) {
+  // Navigation Hierarchy State: 'COURSES' -> 'BATCHES' -> 'MODULES'
+  const [navStep, setNavStep] = useState<'COURSES' | 'BATCHES' | 'MODULES'>('COURSES');
+  const [selectedCourseCard, setSelectedCourseCard] = useState<string | null>(null);
+  const [selectedBatchCard, setSelectedBatchCard] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('All');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // form state
+  // Form State
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [course, setCourse] = useState('');
   const [batch, setBatch] = useState('');
   const [fileType, setFileType] = useState('PDF');
+
+  // Module Selection State
+  const [selectedModule, setSelectedModule] = useState(DEFAULT_MODULE_OPTIONS[0]);
+  const [customModuleName, setCustomModuleName] = useState('');
+  const [isCustomModule, setIsCustomModule] = useState(false);
+  const [showModuleDropdown, setShowModuleDropdown] = useState(false);
+  const [availableModules, setAvailableModules] = useState<string[]>(DEFAULT_MODULE_OPTIONS);
+
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
-  const [courseOptions, setCourseOptions] = useState<{ id: number; title: string }[]>([]);
-  const [batchOptions, setBatchOptions] = useState<{ id: number; batchName: string }[]>([]);
+  const [courseOptions, setCourseOptions] = useState<any[]>([]);
+  const [batchOptions, setBatchOptions] = useState<any[]>([]);
+  const [allTeacherBatches, setAllTeacherBatches] = useState<any[]>([]);
 
   const fileTypes = ['PDF', 'DOC', 'PPT', 'VIDEO', 'IMAGE', 'ZIP'];
 
   useEffect(() => {
     loadMaterials();
-    loadCourses();
+    loadCoursesAndBatches();
   }, []);
 
-  const loadCourses = async () => {
+  const loadCoursesAndBatches = async () => {
     try {
-      const res = await api.getMyCoursesBatches();
-      if (res?.courses) setCourseOptions(res.courses);
+      const [cbRes, allCoursesRes, myBatchesRes] = await Promise.all([
+        api.getMyCoursesBatches().catch(() => null),
+        api.getAllCourses().catch(() => null),
+        api.getMyBatches().catch(() => null),
+      ]);
+
+      const myCoursesList = cbRes?.courses ?? [];
+      const allCoursesList = Array.isArray(allCoursesRes?.data) ? allCoursesRes.data : Array.isArray(allCoursesRes) ? allCoursesRes : [];
+      const rawBatches = Array.isArray(myBatchesRes?.data) ? myBatchesRes.data : Array.isArray(myBatchesRes) ? myBatchesRes : [];
+
+      setAllTeacherBatches(rawBatches);
+
+      // Merge courses with full admin properties (including syllabusTopics added by admin)
+      const mergedCourses = myCoursesList.map((c: any) => {
+        const full = allCoursesList.find((ac: any) => ac.title?.toLowerCase() === c.title?.toLowerCase());
+        return {
+          id: c.id,
+          title: c.title,
+          category: full?.category || c.category || 'Professional Training',
+          syllabusTopics: full?.syllabusTopics || c.syllabusTopics || '',
+        };
+      });
+
+      setCourseOptions(mergedCourses.length > 0 ? mergedCourses : myCoursesList);
     } catch (e) {
-      console.error('Failed to load teacher courses', e);
+      console.error('Failed to load courses & batches', e);
     }
   };
 
-  const handleCourseSelect = async (selectedCourse: string) => {
-    setCourse(selectedCourse);
+  const handleCourseSelectInForm = async (selectedCourseName: string) => {
+    setCourse(selectedCourseName);
     setBatch('');
     setBatchOptions([]);
     setShowCourseDropdown(false);
+
+    // Extract modules added by admin for selected course
+    const courseObj = courseOptions.find(c => c.title === selectedCourseName);
+    let adminMods: string[] = [];
+    if (courseObj && courseObj.syllabusTopics) {
+      const parsedMods = parseSyllabus(courseObj.syllabusTopics);
+      if (parsedMods && parsedMods.length > 0) {
+        adminMods = parsedMods.map((m, idx) =>
+          m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+        );
+      }
+    }
+
+    if (adminMods.length > 0) {
+      setAvailableModules(adminMods);
+      setSelectedModule(adminMods[0]); // Module 1 selected by default
+      setIsCustomModule(false);
+    } else {
+      setAvailableModules(DEFAULT_MODULE_OPTIONS);
+      setSelectedModule(DEFAULT_MODULE_OPTIONS[0]); // Module 1 selected by default
+      setIsCustomModule(false);
+    }
+
     try {
-      const res = await api.getMyCoursesBatches(selectedCourse);
+      const res = await api.getMyCoursesBatches(selectedCourseName);
       if (res?.batches) setBatchOptions(res.batches);
     } catch (e) {
       console.error('Failed to load batches for course', e);
@@ -106,13 +200,14 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     try {
       setIsLoading(true);
       const data = await api.getStudyMaterials();
-      const mapped = (data || []).map((item: any) => ({
+      const mapped = (data || []).map((item: any, idx: number) => ({
         id: item.id,
-        title: item.title || 'Untitled',
-        description: item.description || '',
+        title: item.title || '',
+        description: (item.description === 'No description provided.' ? '' : item.description) || '',
         type: (item.fileType || item.type || 'PDF').toUpperCase(),
         course: item.course || '',
         batch: item.batch || '',
+        moduleName: item.moduleName || item.module || item.topic || item.chapter || DEFAULT_MODULE_OPTIONS[0],
         fileName: item.fileName || 'file',
         fileUri: item.id ? api.getMaterialDownloadUrl(item.id) : '',
         downloads: item.downloads || 0,
@@ -127,27 +222,161 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
   const totalDownloads = materials.reduce((sum, m) => sum + m.downloads, 0);
 
-  // Filter tabs: "All" + unique course names from teacher's assigned courses
-  const filterTabs = [
-    'All',
-    ...Array.from(new Set(materials.map(m => m.course).filter(Boolean))),
-  ];
+  // ── Hierarchy Filtering ──────────────────────────────────────────────────
+  // Filter materials based on selected Course Card and selected Batch Card
+  const filteredMaterials = useMemo(() => {
+    return materials.filter(item => {
+      const search = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !search ||
+        item.title.toLowerCase().includes(search) ||
+        item.description.toLowerCase().includes(search) ||
+        item.course.toLowerCase().includes(search) ||
+        (item.moduleName ?? '').toLowerCase().includes(search) ||
+        item.batch.toLowerCase().includes(search);
 
-  const filteredMaterials = materials.filter(item => {
-    const search = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      item.title.toLowerCase().includes(search) ||
-      item.description.toLowerCase().includes(search) ||
-      item.course.toLowerCase().includes(search) ||
-      item.batch.toLowerCase().includes(search);
-    const matchesFilter = activeFilter === 'All' || item.course === activeFilter;
-    return matchesSearch && matchesFilter;
-  });
+      const matchesCourse =
+        !selectedCourseCard ||
+        selectedCourseCard === 'ALL' ||
+        item.course.trim().toLowerCase() === selectedCourseCard.trim().toLowerCase();
+
+      const matchesBatch =
+        !selectedBatchCard ||
+        selectedBatchCard === 'ALL' ||
+        item.batch.trim().toLowerCase() === selectedBatchCard.trim().toLowerCase();
+
+      return matchesSearch && matchesCourse && matchesBatch;
+    });
+  }, [materials, searchQuery, selectedCourseCard, selectedBatchCard]);
+
+  // Group materials module-wise for the final step
+  const groupedByModule = useMemo(() => {
+    const groups: Record<string, Material[]> = {};
+
+    // Get admin syllabus modules if a course card is selected
+    const activeCourseObj = courseOptions.find(
+      c => c.title.trim().toLowerCase() === (selectedCourseCard || '').trim().toLowerCase()
+    );
+    let adminModuleTitles: string[] = [];
+    if (activeCourseObj && activeCourseObj.syllabusTopics) {
+      const parsed = parseSyllabus(activeCourseObj.syllabusTopics);
+      if (parsed && parsed.length > 0) {
+        adminModuleTitles = parsed.map((m, idx) =>
+          m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+        );
+      }
+    }
+
+    // Initialize admin module sections
+    adminModuleTitles.forEach(t => { groups[t] = []; });
+
+    filteredMaterials.forEach(m => {
+      const rawMod = m.moduleName || (adminModuleTitles.length > 0 ? adminModuleTitles[0] : DEFAULT_MODULE_OPTIONS[0]);
+      const canonicalMod = findCanonicalModuleTitle(rawMod, adminModuleTitles);
+      if (!groups[canonicalMod]) groups[canonicalMod] = [];
+      groups[canonicalMod].push(m);
+    });
+
+    // Remove empty admin module sections if other modules contain files, preventing duplicate empty cards
+    const finalGroups: Record<string, Material[]> = {};
+    const entries = Object.entries(groups);
+    const hasAnyFiles = entries.some(([_, items]) => items.length > 0);
+
+    entries.forEach(([modTitle, items]) => {
+      if (items.length > 0 || !hasAnyFiles) {
+        finalGroups[modTitle] = items;
+      }
+    });
+
+    return finalGroups;
+  }, [filteredMaterials, selectedCourseCard, courseOptions]);
+
+  // ── Step Navigation Handlers ─────────────────────────────────────────────
+  const handleOpenUploadModal = async () => {
+    setTitle('');
+    setDescription('');
+    setSelectedFile(null);
+    setFileType('PDF');
+    setIsCustomModule(false);
+    setCustomModuleName('');
+
+    // Determine Default Course (active selected course card or first assigned course)
+    let initialCourse = '';
+    if (selectedCourseCard && selectedCourseCard !== 'ALL') {
+      initialCourse = selectedCourseCard;
+    } else if (courseOptions.length > 0) {
+      initialCourse = courseOptions[0].title;
+    }
+
+    if (initialCourse) {
+      setCourse(initialCourse);
+
+      // Populate Admin Modules for initialCourse
+      const courseObj = courseOptions.find(c => c.title === initialCourse);
+      let adminMods: string[] = [];
+      if (courseObj && courseObj.syllabusTopics) {
+        const parsedMods = parseSyllabus(courseObj.syllabusTopics);
+        if (parsedMods && parsedMods.length > 0) {
+          adminMods = parsedMods.map((m, idx) =>
+            m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+          );
+        }
+      }
+      if (adminMods.length > 0) {
+        setAvailableModules(adminMods);
+        setSelectedModule(adminMods[0]);
+      } else {
+        setAvailableModules(DEFAULT_MODULE_OPTIONS);
+        setSelectedModule(DEFAULT_MODULE_OPTIONS[0]);
+      }
+
+      // Fetch and pre-select Batch for initialCourse
+      try {
+        const res = await api.getMyCoursesBatches(initialCourse);
+        const batches = res?.batches || [];
+        setBatchOptions(batches);
+
+        let initialBatch = '';
+        if (selectedBatchCard && selectedBatchCard !== 'ALL') {
+          initialBatch = selectedBatchCard;
+        } else if (batches.length > 0) {
+          initialBatch = batches[0].batchName;
+        } else if (allTeacherBatches.length > 0) {
+          initialBatch = allTeacherBatches[0].batchName || allTeacherBatches[0].name || '';
+        }
+        setBatch(initialBatch);
+      } catch (e) {
+        console.error('Failed to load initial batch options', e);
+      }
+    }
+
+    setShowUploadModal(true);
+  };
+
+  const handleSelectCourseCard = async (courseTitle: string) => {
+    setSelectedCourseCard(courseTitle);
+    setSelectedBatchCard(null);
+    setNavStep('BATCHES');
+
+    if (courseTitle !== 'ALL') {
+      try {
+        const res = await api.getMyCoursesBatches(courseTitle);
+        if (res?.batches) setBatchOptions(res.batches);
+      } catch (_) {}
+    }
+  };
+
+  const handleSelectBatchCard = (batchName: string) => {
+    setSelectedBatchCard(batchName);
+    setNavStep('MODULES');
+  };
 
   const handleFileSelect = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: ['*/*'], copyToCacheDirectory: true });
-      if (!result.canceled && result.assets?.length > 0) setSelectedFile(result.assets[0]);
+      if (!result.canceled && result.assets?.length > 0) {
+        setSelectedFile(result.assets[0]);
+      }
     } catch {
       Alert.alert('Error', 'Failed to select file');
     }
@@ -156,33 +385,40 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   const resetForm = () => {
     setTitle(''); setDescription(''); setSelectedFile(null);
     setCourse(''); setBatch(''); setBatchOptions([]); setFileType('PDF');
-    setShowCourseDropdown(false); setShowBatchDropdown(false);
+    setSelectedModule(DEFAULT_MODULE_OPTIONS[0]); setCustomModuleName(''); setIsCustomModule(false);
+    setShowCourseDropdown(false); setShowBatchDropdown(false); setShowModuleDropdown(false);
   };
 
   const handleUploadMaterial = async () => {
-    if (!title.trim()) return Alert.alert('Error', 'Please enter title');
-    if (!selectedFile) return Alert.alert('Error', 'Please select file');
+    if (!selectedFile) return Alert.alert('Error', 'Please select a file to upload');
     if (!course.trim()) return Alert.alert('Error', 'Please select course');
     if (!batch.trim()) return Alert.alert('Error', 'Please select batch');
+
+    const uploadTitle = title.trim() || selectedFile.name || 'Study Material';
+    const finalModule = isCustomModule ? (customModuleName.trim() || 'Custom Module') : selectedModule;
 
     try {
       const fileBlob = await (await fetch(selectedFile.uri)).blob();
       const formData = new FormData();
       formData.append('file', fileBlob, selectedFile.name || 'material');
-      formData.append('title', title.trim());
-      formData.append('description', description.trim() || 'No description provided.');
+      formData.append('title', uploadTitle);
+      formData.append('description', description.trim());
       formData.append('course', course.trim());
       formData.append('batch', batch.trim());
+      formData.append('moduleName', finalModule);
+      formData.append('module', finalModule);
+      formData.append('topic', finalModule);
       formData.append('fileType', fileType);
 
       const res = await api.uploadStudyMaterial(formData);
       setMaterials(prev => [{
         id: res?.id || Date.now(),
-        title: res?.title || title.trim(),
-        description: res?.description || description.trim() || '',
+        title: res?.title || uploadTitle,
+        description: res?.description || description.trim(),
         type: (res?.fileType || fileType).toUpperCase(),
         course: res?.course || course.trim(),
         batch: res?.batch || batch.trim(),
+        moduleName: res?.moduleName || res?.module || finalModule,
         fileName: res?.fileName || selectedFile.name || 'material',
         fileUri: res?.id ? api.getMaterialDownloadUrl(res.id) : '',
         downloads: 0,
@@ -241,16 +477,14 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER BANNER ── */}
       <View style={styles.header}>
-        {/* Gold accent line — same as dashboard */}
         <LinearGradient
           colors={ACCENT_COLORS} locations={ACCENT_LOCS}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
           style={styles.headerAccentLine}
         />
 
-        {/* Title row */}
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -261,7 +495,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
               {materials.length} files · {totalDownloads} total downloads
             </Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowUploadModal(true)}>
+          <TouchableOpacity style={styles.addButton} onPress={handleOpenUploadModal}>
             <Ionicons name="add" size={26} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -272,96 +506,256 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
             <Ionicons name="search" size={18} color="#B39DDB" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search materials..."
+              placeholder="Search materials, modules, courses..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
         </View>
-
-        {/* ── FILTER TABS inside header (same purple bg) ── */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-          style={styles.filterScrollView}
-        >
-          {filterTabs.map((tab) => {
-            const count = tab === 'All'
-              ? materials.length
-              : materials.filter(m => m.course === tab).length;
-            const label = tab === 'All' ? `All (${count})` : `${tab} (${count})`;
-            const active = activeFilter === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-                onPress={() => setActiveFilter(tab)}
-              >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
       </View>
 
-      {/* ── MATERIALS LIST ── */}
+      {/* ── BREADCRUMB & NAVIGATION BAR ── */}
+      <View style={styles.breadcrumbBar}>
+        <TouchableOpacity
+          style={[styles.crumbChip, navStep === 'COURSES' && styles.crumbChipActive]}
+          onPress={() => { setNavStep('COURSES'); setSelectedCourseCard(null); setSelectedBatchCard(null); }}
+        >
+          <Ionicons name="school" size={14} color={navStep === 'COURSES' ? '#7B2CBF' : '#64748B'} />
+          <Text style={[styles.crumbText, navStep === 'COURSES' && styles.crumbTextActive]}>
+            Ongoing Courses
+          </Text>
+        </TouchableOpacity>
+
+        {selectedCourseCard && (
+          <>
+            <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+            <TouchableOpacity
+              style={[styles.crumbChip, navStep === 'BATCHES' && styles.crumbChipActive]}
+              onPress={() => { setNavStep('BATCHES'); setSelectedBatchCard(null); }}
+            >
+              <Ionicons name="people" size={14} color={navStep === 'BATCHES' ? '#7B2CBF' : '#64748B'} />
+              <Text style={[styles.crumbText, navStep === 'BATCHES' && styles.crumbTextActive]} numberOfLines={1}>
+                {selectedCourseCard === 'ALL' ? 'All Batches' : selectedCourseCard}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {selectedBatchCard && (
+          <>
+            <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+            <View style={[styles.crumbChip, styles.crumbChipActive]}>
+              <Ionicons name="cube" size={14} color="#7B2CBF" />
+              <Text style={[styles.crumbText, styles.crumbTextActive]} numberOfLines={1}>
+                {selectedBatchCard === 'ALL' ? 'All Modules' : selectedBatchCard}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
+
+      {/* ── SCREEN BODY CONTENT ── */}
       <ScrollView style={styles.container} contentContainerStyle={styles.listContent}>
         {isLoading ? (
-          <Text style={styles.noResults}>Loading materials...</Text>
-        ) : filteredMaterials.length === 0 ? (
-          <Text style={styles.noResults}>
-            {searchQuery ? 'No materials found' : 'No materials available'}
-          </Text>
-        ) : (
-          filteredMaterials.map(item => {
-            const icon = getIcon(item.type);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.materialCard}
-                activeOpacity={0.85}
-                onPress={() => handleOpenMaterial(item)}
-              >
-                {/* Top row: icon + title/meta */}
-                <View style={styles.cardTop}>
-                  <View style={[styles.iconBox, { backgroundColor: icon.bg }]}>
-                    <Ionicons name={icon.name} size={28} color={icon.color} />
-                  </View>
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.cardMeta}>{item.course} · {item.batch}</Text>
-                    {!!item.description && (
-                      <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
-                    )}
-                  </View>
-                </View>
+          <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 60 }} />
+        ) : navStep === 'COURSES' ? (
 
-                {/* Bottom row: type badge + downloads + delete */}
-                <View style={styles.cardBottom}>
-                  <View style={[styles.typeBadge, { backgroundColor: icon.bg }]}>
-                    <Text style={[styles.typeText, { color: icon.color }]}>{item.type}</Text>
-                  </View>
-                  <View style={styles.downloadsBadge}>
-                    <Ionicons name="download-outline" size={13} color="#64748B" />
-                    <Text style={styles.downloadsText}>{item.downloads} downloads</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(item.id)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                  </TouchableOpacity>
+          /* STEP 1: ONGOING COURSES CARDS */
+          <View>
+            <View style={styles.stepHeaderRow}>
+              <Text style={styles.stepSectionTitle}>Select Ongoing Course</Text>
+              <Text style={styles.stepSectionSubtitle}>Choose a course to view its ongoing batches & module materials</Text>
+            </View>
+
+            <View style={styles.cardGrid}>
+              {/* All Courses Card */}
+              <TouchableOpacity
+                style={[styles.courseCard, selectedCourseCard === 'ALL' && styles.cardSelectedBorder]}
+                activeOpacity={0.8}
+                onPress={() => handleSelectCourseCard('ALL')}
+              >
+                <View style={[styles.courseCardIconBox, { backgroundColor: '#EDE9FE' }]}>
+                  <Ionicons name="apps" size={26} color="#7B2CBF" />
+                </View>
+                <Text style={styles.courseCardTitle}>All Ongoing Courses</Text>
+                <Text style={styles.courseCardMeta}>View materials across all courses</Text>
+                <View style={styles.cardFooterRow}>
+                  <Text style={styles.activeTag}>ONGOING</Text>
+                  <Ionicons name="arrow-forward-circle" size={22} color="#7B2CBF" />
                 </View>
               </TouchableOpacity>
-            );
-          })
+
+              {courseOptions.map((c: any) => {
+                const count = materials.filter(m => m.course.toLowerCase() === c.title.toLowerCase()).length;
+                return (
+                  <TouchableOpacity
+                    key={c.id || c.title}
+                    style={styles.courseCard}
+                    activeOpacity={0.8}
+                    onPress={() => handleSelectCourseCard(c.title)}
+                  >
+                    <View style={styles.courseCardIconBox}>
+                      <Ionicons name="book" size={24} color="#7B2CBF" />
+                    </View>
+                    <Text style={styles.courseCardTitle} numberOfLines={1}>{c.title}</Text>
+                    <Text style={styles.courseCardMeta}>{c.category || 'Professional Training'} · {count} files</Text>
+                    <View style={styles.cardFooterRow}>
+                      <Text style={styles.activeTag}>ACTIVE</Text>
+                      <Ionicons name="arrow-forward-circle" size={22} color="#7B2CBF" />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+        ) : navStep === 'BATCHES' ? (
+
+          /* STEP 2: ONGOING BATCHES CARDS */
+          <View>
+            <TouchableOpacity style={styles.backStepBtn} onPress={() => { setNavStep('COURSES'); setSelectedCourseCard(null); }}>
+              <Ionicons name="arrow-back" size={16} color="#7B2CBF" />
+              <Text style={styles.backStepBtnText}>Back to Ongoing Courses</Text>
+            </TouchableOpacity>
+
+            <View style={styles.stepHeaderRow}>
+              <Text style={styles.stepSectionTitle}>👥 Select Ongoing Batch</Text>
+              <Text style={styles.stepSectionSubtitle}>Course: {selectedCourseCard === 'ALL' ? 'All Courses' : selectedCourseCard}</Text>
+            </View>
+
+            <View style={styles.cardGrid}>
+              {/* All Batches Option */}
+              <TouchableOpacity
+                style={styles.batchCard}
+                activeOpacity={0.8}
+                onPress={() => handleSelectBatchCard('ALL')}
+              >
+                <View style={[styles.batchCardIconBox, { backgroundColor: '#FFEDD5' }]}>
+                  <Ionicons name="people" size={24} color="#EA580C" />
+                </View>
+                <Text style={styles.batchCardTitle}>All Batches in Course</Text>
+                <Text style={styles.batchCardMeta}>Show materials for all active batches</Text>
+                <View style={styles.cardFooterRow}>
+                  <Text style={[styles.activeTag, { color: '#EA580C', backgroundColor: '#FFEDD5' }]}>ALL BATCHES</Text>
+                  <Ionicons name="arrow-forward-circle" size={22} color="#EA580C" />
+                </View>
+              </TouchableOpacity>
+
+              {(batchOptions.length > 0 ? batchOptions : allTeacherBatches).map((b: any, idx: number) => {
+                const bName = b.batchName ?? `Batch ${idx + 1}`;
+                const count = materials.filter(m => m.batch.toLowerCase() === bName.toLowerCase()).length;
+                return (
+                  <TouchableOpacity
+                    key={b.id || idx}
+                    style={styles.batchCard}
+                    activeOpacity={0.8}
+                    onPress={() => handleSelectBatchCard(bName)}
+                  >
+                    <View style={styles.batchCardIconBox}>
+                      <Ionicons name="people" size={22} color="#7B2CBF" />
+                    </View>
+                    <Text style={styles.batchCardTitle} numberOfLines={1}>{bName}</Text>
+                    <Text style={styles.batchCardMeta}>{b.classTimings || 'Ongoing Batch'} · {count} files</Text>
+                    <View style={styles.cardFooterRow}>
+                      <Text style={styles.activeTag}>ONGOING</Text>
+                      <Ionicons name="arrow-forward-circle" size={22} color="#7B2CBF" />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+        ) : (
+
+          /* STEP 3: MODULE-WISE STUDY MATERIALS */
+          <View>
+            <TouchableOpacity style={styles.backStepBtn} onPress={() => { setNavStep('BATCHES'); setSelectedBatchCard(null); }}>
+              <Ionicons name="arrow-back" size={16} color="#7B2CBF" />
+              <Text style={styles.backStepBtnText}>Back to Ongoing Batches</Text>
+            </TouchableOpacity>
+
+            <View style={styles.stepHeaderRow}>
+              <Text style={styles.stepSectionTitle}>📦 Module-Wise Study Materials</Text>
+              <Text style={styles.stepSectionSubtitle}>
+                Course: {selectedCourseCard}  •  Batch: {selectedBatchCard}
+              </Text>
+            </View>
+
+            {Object.keys(groupedByModule).length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Ionicons name="folder-open-outline" size={36} color="#9CA3AF" />
+                <Text style={styles.emptyTitle}>No Materials Found</Text>
+                <Text style={styles.emptySubtitle}>Upload new study materials or select a different batch/course.</Text>
+              </View>
+            ) : (
+              Object.entries(groupedByModule).map(([moduleTitle, items]) => (
+                <View key={moduleTitle} style={styles.moduleSectionCard}>
+                  <View style={styles.moduleHeaderRow}>
+                    <View style={styles.moduleIconBox}>
+                      <Ionicons name="folder-open" size={18} color="#7B2CBF" />
+                    </View>
+                    <Text style={styles.moduleHeaderTitle} numberOfLines={1}>{moduleTitle}</Text>
+                    <View style={styles.moduleCountBadge}>
+                      <Text style={styles.moduleCountText}>{items.length} {items.length === 1 ? 'file' : 'files'}</Text>
+                    </View>
+                  </View>
+
+                  {items.length === 0 ? (
+                    <Text style={styles.emptyModuleText}>No files uploaded for this module unit yet.</Text>
+                  ) : (
+                    items.map(item => {
+                      const icon = getIcon(item.type);
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.materialCard}
+                          activeOpacity={0.85}
+                          onPress={() => handleOpenMaterial(item)}
+                        >
+                          <View style={styles.cardTop}>
+                            <View style={[styles.iconBox, { backgroundColor: icon.bg }]}>
+                              <Ionicons name={icon.name} size={28} color={icon.color} />
+                            </View>
+                            <View style={styles.cardInfo}>
+                              <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+                              <Text style={styles.cardMeta}>{item.course} · {item.batch}</Text>
+                              {!!item.description && item.description !== 'No description provided.' && (
+                                <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
+                              )}
+                            </View>
+                          </View>
+
+                          <View style={styles.cardBottom}>
+                            <View style={[styles.typeBadge, { backgroundColor: icon.bg }]}>
+                              <Text style={[styles.typeText, { color: icon.color }]}>{item.type}</Text>
+                            </View>
+                            <View style={styles.downloadsBadge}>
+                              <Ionicons name="download-outline" size={13} color="#64748B" />
+                              <Text style={styles.downloadsText}>{item.downloads} downloads</Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.deleteBtn}
+                              onPress={() => handleDelete(item.id)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </View>
+              ))
+            )}
+          </View>
+
         )}
       </ScrollView>
 
-      {/* ── UPLOAD MODAL ── */}
+      {/* ── UPLOAD MODAL FORM ── */}
       <Modal visible={showUploadModal} animationType="slide" transparent onRequestClose={() => { setShowUploadModal(false); resetForm(); }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -380,17 +774,30 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                 {selectedFile && <Text style={styles.selectedFileText}>✓ {selectedFile.name}</Text>}
               </TouchableOpacity>
 
-              <Text style={styles.label}>Title <Text style={styles.required}>*</Text></Text>
-              <TextInput style={styles.input} placeholder="e.g. Python Basics Week 1" value={title} onChangeText={setTitle} />
+              <Text style={styles.label}>Title</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Python Basics Week 1"
+                placeholderTextColor="#94A3B8"
+                value={title}
+                onChangeText={setTitle}
+              />
 
               <Text style={styles.label}>Description</Text>
-              <TextInput style={[styles.input, styles.textArea]} placeholder="What does this material cover?" value={description} onChangeText={setDescription} multiline />
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="What does this material cover?"
+                placeholderTextColor="#94A3B8"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+              />
 
               <View style={styles.row}>
                 {/* Course dropdown */}
                 <View style={styles.half}>
                   <Text style={styles.label}>Course <Text style={styles.required}>*</Text></Text>
-                  <TouchableOpacity style={styles.dropdownButton} onPress={() => { setShowCourseDropdown(p => !p); setShowBatchDropdown(false); }}>
+                  <TouchableOpacity style={styles.dropdownButton} onPress={() => { setShowCourseDropdown(p => !p); setShowBatchDropdown(false); setShowModuleDropdown(false); }}>
                     <Text style={[styles.dropdownText, !course && styles.dropdownPlaceholder]} numberOfLines={1}>
                       {course || 'Select Course'}
                     </Text>
@@ -401,7 +808,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                       {courseOptions.length === 0
                         ? <Text style={styles.dropdownEmptyText}>No courses assigned</Text>
                         : courseOptions.map(o => (
-                          <TouchableOpacity key={o.id} style={styles.dropdownOption} onPress={() => handleCourseSelect(o.title)}>
+                          <TouchableOpacity key={o.id} style={styles.dropdownOption} onPress={() => handleCourseSelectInForm(o.title)}>
                             <Text style={styles.dropdownOptionText}>{o.title}</Text>
                           </TouchableOpacity>
                         ))}
@@ -412,7 +819,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                 {/* Batch dropdown */}
                 <View style={styles.half}>
                   <Text style={styles.label}>Batch <Text style={styles.required}>*</Text></Text>
-                  <TouchableOpacity style={[styles.dropdownButton, !course && styles.dropdownDisabled]} onPress={() => { if (!course) return; setShowBatchDropdown(p => !p); setShowCourseDropdown(false); }}>
+                  <TouchableOpacity style={[styles.dropdownButton, !course && styles.dropdownDisabled]} onPress={() => { if (!course) return; setShowBatchDropdown(p => !p); setShowCourseDropdown(false); setShowModuleDropdown(false); }}>
                     <Text style={[styles.dropdownText, !batch && styles.dropdownPlaceholder]} numberOfLines={1}>
                       {batch || (course ? 'Select Batch' : 'Course first')}
                     </Text>
@@ -431,6 +838,83 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                   )}
                 </View>
               </View>
+
+              {/* MODULE CHECKLIST DROPDOWN SELECTOR (ADMIN MODULES) */}
+              <Text style={styles.label}>Module / Syllabus Unit <Text style={styles.required}>*</Text></Text>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => {
+                  setShowModuleDropdown(p => !p);
+                  setShowCourseDropdown(false);
+                  setShowBatchDropdown(false);
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <Ionicons name="checkbox" size={18} color="#7B2CBF" />
+                  <Text style={[styles.dropdownText, !selectedModule && styles.dropdownPlaceholder]} numberOfLines={1}>
+                    {isCustomModule ? (customModuleName || 'Custom Module Name...') : selectedModule}
+                  </Text>
+                </View>
+                <Ionicons name={showModuleDropdown ? "chevron-up" : "chevron-down"} size={16} color="#64748B" />
+              </TouchableOpacity>
+
+              {/* INLINE CHECKLIST CONTAINER — Never overlays or clips at bottom! */}
+              {showModuleDropdown && (
+                <View style={styles.inlineChecklistContainer}>
+                  <Text style={styles.checklistInstructionText}>
+                    Select module added by Admin (Module 1 selected by default):
+                  </Text>
+                  {availableModules.map(mod => {
+                    const isChecked = !isCustomModule && selectedModule === mod;
+                    return (
+                      <TouchableOpacity
+                        key={mod}
+                        style={[styles.checkboxOptionRow, isChecked && styles.checkboxOptionRowSelected]}
+                        onPress={() => {
+                          setSelectedModule(mod);
+                          setIsCustomModule(false);
+                        }}
+                      >
+                        <Ionicons
+                          name={isChecked ? "checkbox" : "square-outline"}
+                          size={20}
+                          color={isChecked ? "#7B2CBF" : "#94A3B8"}
+                          style={{ marginRight: 10 }}
+                        />
+                        <Text style={[styles.checkboxOptionLabel, isChecked && styles.checkboxOptionLabelSelected]}>
+                          {mod}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* Custom option */}
+                  <TouchableOpacity
+                    style={[styles.checkboxOptionRow, isCustomModule && styles.checkboxOptionRowSelected]}
+                    onPress={() => setIsCustomModule(true)}
+                  >
+                    <Ionicons
+                      name={isCustomModule ? "checkbox" : "square-outline"}
+                      size={20}
+                      color={isCustomModule ? "#7B2CBF" : "#94A3B8"}
+                      style={{ marginRight: 10 }}
+                    />
+                    <Text style={[styles.checkboxOptionLabel, isCustomModule && styles.checkboxOptionLabelSelected]}>
+                      Enter Custom Module Name...
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {isCustomModule && (
+                <TextInput
+                  style={[styles.input, { marginTop: 8 }]}
+                  placeholder="Enter custom module name (e.g. Module 6: Special Topics)"
+                  placeholderTextColor="#94A3B8"
+                  value={customModuleName}
+                  onChangeText={setCustomModuleName}
+                />
+              )}
 
               <Text style={styles.label}>File Type</Text>
               <View style={styles.fileTypeContainer}>
@@ -460,12 +944,11 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
 
-  // ── Header ──
   header: {
     backgroundColor: '#7B2CBF',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 16 : 10,
-    paddingBottom: 18,
+    paddingBottom: 16,
   },
   headerAccentLine: { height: 4, marginBottom: 14 },
   headerTop: {
@@ -485,8 +968,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Search inside header
-  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  searchRow: { flexDirection: 'row', gap: 10 },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
@@ -494,57 +976,183 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     paddingHorizontal: 16,
-    height: 48,
+    height: 46,
   },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#1E293B' },
-  filterIconBtn: {
-    width: 48, height: 48,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    justifyContent: 'center',
+
+  // Breadcrumb Bar
+  breadcrumbBar: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FAF5FF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9D5FF',
+    flexWrap: 'wrap',
   },
-
-  // ── Filter tabs (inside header) ──
-  filterScrollView: { marginBottom: 4 },
-  filterScroll: { gap: 8, paddingRight: 4 },
-  filterChip: {
-    paddingHorizontal: 18, paddingVertical: 9,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 22,
+  crumbChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  filterChipActive: { backgroundColor: '#FFFFFF' },
-  filterText: { color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 13 },
-  filterTextActive: { color: '#7B2CBF', fontWeight: '700' },
+  crumbChipActive: {
+    backgroundColor: '#F3E8FF',
+    borderColor: '#7B2CBF',
+  },
+  crumbText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
+  crumbTextActive: { color: '#7B2CBF', fontWeight: '700' },
 
-  // ── List ──
+  // List Container
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  listContent: { padding: 16, paddingBottom: 32 },
+  listContent: { padding: 16, paddingBottom: 40 },
 
-  // ── Material Card ──
+  stepHeaderRow: { marginBottom: 16 },
+  stepSectionTitle: { fontSize: 18, fontWeight: '700', color: '#1E293B' },
+  stepSectionSubtitle: { fontSize: 13, color: '#64748B', marginTop: 4 },
+
+  backStepBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+    paddingVertical: 6,
+  },
+  backStepBtnText: { color: '#7B2CBF', fontSize: 13, fontWeight: '700' },
+
+  // Cards Grid
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  courseCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 3,
+    marginBottom: 12,
+  },
+  cardSelectedBorder: {
+    borderColor: '#7B2CBF',
+    borderWidth: 2,
+  },
+  courseCardIconBox: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12,
+  },
+  courseCardTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginBottom: 4 },
+  courseCardMeta: { fontSize: 12, color: '#64748B', marginBottom: 12 },
+
+  batchCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 6, elevation: 3,
+    marginBottom: 12,
+  },
+  batchCardIconBox: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 12,
+  },
+  batchCardTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginBottom: 4 },
+  batchCardMeta: { fontSize: 12, color: '#64748B', marginBottom: 12 },
+
+  cardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 'auto',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  activeTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#16A34A',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+
+  // Module Section Card
+  moduleSectionCard: {
+    marginBottom: 20,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  moduleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  moduleIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: '#F3E8FF',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  moduleHeaderTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  moduleCountBadge: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  moduleCountText: { fontSize: 11, fontWeight: '700', color: '#7B2CBF' },
+  emptyModuleText: { fontSize: 12, color: '#94A3B8', fontStyle: 'italic', paddingVertical: 10, paddingHorizontal: 6 },
+
+  // Material Card
   materialCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 14,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   iconBox: {
-    width: 52, height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 48, height: 48, borderRadius: 14,
+    justifyContent: 'center', alignItems: 'center',
     marginRight: 12,
   },
   cardInfo: { flex: 1 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginBottom: 3 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 3 },
   cardMeta: { fontSize: 12, color: '#7B2CBF', fontWeight: '600', marginBottom: 4 },
-  cardDesc: { fontSize: 12, color: '#64748B', lineHeight: 17 },
+  cardDesc: { fontSize: 12, color: '#64748B', lineHeight: 16 },
 
   cardBottom: {
     flexDirection: 'row',
@@ -554,10 +1162,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     gap: 8,
   },
-  typeBadge: {
-    paddingHorizontal: 10, paddingVertical: 3,
-    borderRadius: 8,
-  },
+  typeBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
   typeText: { fontSize: 11, fontWeight: '700' },
   downloadsBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
   downloadsText: { fontSize: 12, color: '#64748B' },
@@ -565,16 +1170,23 @@ const styles = StyleSheet.create({
     width: 32, height: 32,
     backgroundColor: '#FEF2F2',
     borderRadius: 8,
-    justifyContent: 'center',
+    justifyContent: 'center', alignItems: 'center',
+  },
+
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 36,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginVertical: 20,
   },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#334155', marginTop: 10 },
+  emptySubtitle: { fontSize: 13, color: '#94A3B8', textAlign: 'center', marginTop: 4 },
 
-  noResults: {
-    textAlign: 'center', color: '#94A3B8',
-    fontSize: 15, marginTop: 60, fontWeight: '500',
-  },
-
-  // ── Modal ──
+  // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -589,9 +1201,9 @@ const styles = StyleSheet.create({
 
   dropZone: {
     backgroundColor: '#F8FAFC', borderRadius: 16,
-    paddingVertical: 36, alignItems: 'center',
+    paddingVertical: 28, alignItems: 'center',
     borderWidth: 2, borderStyle: 'dashed', borderColor: '#CBD5E1',
-    marginBottom: 20, gap: 6,
+    marginBottom: 16, gap: 6,
   },
   dropText: { fontSize: 15, fontWeight: '600', color: '#1E2937' },
   supportedTypes: { fontSize: 12, color: '#64748B' },
@@ -603,9 +1215,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0',
     borderRadius: 12, padding: 13, fontSize: 14, marginBottom: 4,
   },
-  textArea: { height: 76, textAlignVertical: 'top' },
+  textArea: { height: 70, textAlignVertical: 'top' },
 
-  row: { flexDirection: 'row', gap: 12, zIndex: 20, overflow: 'visible' },
+  row: { flexDirection: 'row', gap: 12, zIndex: 20 },
   half: { flex: 1, position: 'relative', zIndex: 20 },
 
   dropdownButton: {
@@ -617,11 +1229,9 @@ const styles = StyleSheet.create({
   dropdownText: { fontSize: 13, color: '#1E2937', flex: 1 },
   dropdownPlaceholder: { color: '#94A3B8' },
   inlineDropdownList: {
-    position: 'absolute', top: '100%', left: 0, right: 0,
-    zIndex: 1000, marginTop: 2,
     borderWidth: 1, borderColor: '#E2E8F0',
     borderRadius: 12, backgroundColor: '#FFFFFF',
-    overflow: 'hidden', maxHeight: 180,
+    overflow: 'hidden', marginTop: 4, marginBottom: 8,
   },
   dropdownOption: {
     paddingVertical: 11, paddingHorizontal: 12,
@@ -629,6 +1239,47 @@ const styles = StyleSheet.create({
   },
   dropdownOptionText: { fontSize: 13, color: '#334155' },
   dropdownEmptyText: { padding: 12, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' },
+
+  // Inline Checklist Container for Modules (Never overlaps or clips at bottom!)
+  inlineChecklistContainer: {
+    backgroundColor: '#FAF5FF',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  checklistInstructionText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  checkboxOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  checkboxOptionRowSelected: {
+    borderColor: '#7B2CBF',
+    backgroundColor: '#F3E8FF',
+  },
+  checkboxOptionLabel: {
+    fontSize: 13,
+    color: '#334155',
+    flex: 1,
+  },
+  checkboxOptionLabelSelected: {
+    fontWeight: '700',
+    color: '#7B2CBF',
+  },
 
   fileTypeContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20, marginTop: 4 },
   fileTypeChip: {

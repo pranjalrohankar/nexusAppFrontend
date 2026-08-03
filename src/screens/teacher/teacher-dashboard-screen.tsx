@@ -249,29 +249,6 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
           </>
         )}
 
-        {/* GOOGLE MEET LINK FOR TEACHERS/ADMINS */}
-        <Text style={styles.sectionTitle}>Classroom Meeting</Text>
-        <View style={styles.meetCard}>
-          <View style={styles.meetHeaderRow}>
-            <View style={styles.meetIconContainer}>
-              <Ionicons name="videocam" size={24} color="#7B2CBF" />
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.meetTitle}>Live Google Meet Class</Text>
-              <Text style={styles.meetSubtitle} numberOfLines={1}>
-                {meetLink || 'No Meet link configured yet.'}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.meetEditBtn} onPress={() => { setInputLink(meetLink); setShowMeetModal(true); }}>
-              <Ionicons name="pencil" size={16} color="#7B2CBF" />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.meetJoinBtn} onPress={openMeetLink}>
-            <Ionicons name="logo-google" size={18} color="#FFF" style={{ marginRight: 6 }} />
-            <Text style={styles.meetJoinBtnText}>Start Live Class</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* QUICK ACTIONS */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.quickActionsRow}>
@@ -327,33 +304,6 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
 
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* EDIT MEET LINK MODAL */}
-      <Modal visible={showMeetModal} transparent animationType="fade" onRequestClose={() => setShowMeetModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Set Google Meet Link</Text>
-            <Text style={styles.modalDesc}>Paste the Google Meet class URL below so teachers and admins can join/start classes.</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. meet.google.com/abc-defg-hij"
-              placeholderTextColor="#9CA3AF"
-              value={inputLink}
-              onChangeText={setInputLink}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={[styles.modalBtn, styles.modalCancelBtn]} onPress={() => setShowMeetModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.modalSaveBtn]} onPress={saveMeetLink}>
-                <Text style={styles.modalSaveText}>Save Link</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

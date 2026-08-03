@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api, getApiBaseUrl } from '@/services/api';
+import { parseSyllabus } from '@/utils/syllabus-parser';
 
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
@@ -27,7 +28,7 @@ const ACCENT_COLORS: any = [
   'rgba(160,86,19,0.714)', 'rgba(118,62,11,0.573)', 'rgba(78,39,5,0.427)',
   'rgba(41,18,1,0.286)', 'rgba(9,2,0,0.14)', 'rgba(0,0,0,0)',
 ];
-const ACCENT_LOCS: any = [0,0.0714,0.1429,0.2143,0.2857,0.3571,0.4286,0.5,0.5714,0.6429,0.7143,0.7857,0.8571,0.9286,1];
+const ACCENT_LOCS: any = [0, 0.0714, 0.1429, 0.2143, 0.2857, 0.3571, 0.4286, 0.5, 0.5714, 0.6429, 0.7143, 0.7857, 0.8571, 0.9286, 1];
 
 export interface RealMaterial {
   id: number;
@@ -36,6 +37,7 @@ export interface RealMaterial {
   course: string;
   batch: string;
   topic: string;
+  moduleName?: string;
   fileType: string;
   fileName: string;
   fileUrl: string;
@@ -54,8 +56,8 @@ function getFileIcon(fileType: string): { icon: any; bg: string; color: string }
     case 'PDF': return { icon: 'document-text', bg: '#FEE2E2', color: '#EF4444' };
     case 'PPT': return { icon: 'easel', bg: '#FFF7ED', color: '#F97316' };
     case 'DOC': return { icon: 'document', bg: '#E0F2FE', color: '#0284C7' };
-    case 'VIDEO': return { icon: 'videocam', bg: '#FAF0FD', color: '#7B2CBF' };
-    case 'IMAGE': return { icon: 'image', bg: '#F0FDF4', color: '#16A34A' };
+    case 'VIDEO': return { icon: 'videocam', bg: '#EDE9FE', color: '#8B5CF6' };
+    case 'IMAGE': return { icon: 'image', bg: '#D1FAE5', color: '#10B981' };
     case 'ZIP': return { icon: 'archive', bg: '#FEF3C7', color: '#D97706' };
     default: return { icon: 'document', bg: '#F3F4F6', color: '#6B7280' };
   }
@@ -69,18 +71,47 @@ function isImageType(fileType: string, fileName: string): boolean {
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '';
-  try { return new Date(dateStr).toLocaleDateString(); } catch { return dateStr; }
+  try { return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return dateStr; }
+}
+
+function normalizeModString(str: string): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[\:\–\—\-\|]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getModuleNumber(str: string): string | null {
+  const match = str.match(/module\s*(\d+)/i);
+  return match ? match[1] : null;
+}
+
+function findCanonicalModuleTitle(materialModName: string, adminModuleTitles: string[]): string {
+  if (!materialModName) return adminModuleTitles[0] || 'Module 1';
+
+  const normMat = normalizeModString(materialModName);
+  const matNum = getModuleNumber(materialModName);
+
+  for (const adminTitle of adminModuleTitles) {
+    const normAdmin = normalizeModString(adminTitle);
+    const adminNum = getModuleNumber(adminTitle);
+
+    if (normMat === normAdmin) return adminTitle;
+    if (matNum && adminNum && matNum === adminNum) return adminTitle;
+  }
+
+  return materialModName;
 }
 
 function normalizeMaterial(item: any): RealMaterial {
+  const rawMod = item.moduleName || item.module || item.topic || item.chapter || 'Module 1';
   return {
     id: Number(item.id),
-    title: item.title || 'Untitled',
-    description: item.description || '',
+    title: item.title || item.fileName || 'Untitled',
+    description: (item.description === 'No description provided.' ? '' : item.description) || '',
     course: item.course || '',
     batch: item.batch || '',
-    topic: item.topic?.trim() || 'General',
-    fileType: (item.fileType || item.type || 'FILE').toUpperCase(),
+    topic: rawMod,
+    moduleName: rawMod,
+    fileType: (item.fileType || item.type || 'PDF').toUpperCase(),
     fileName: item.fileName || '',
     fileUrl: item.fileUrl || '',
     uploadedByEmail: item.uploadedByEmail || '',
@@ -88,21 +119,31 @@ function normalizeMaterial(item: any): RealMaterial {
   };
 }
 
-function groupByTopic(materials: RealMaterial[]): Record<string, RealMaterial[]> {
-  const result: Record<string, RealMaterial[]> = {};
-  materials.forEach(material => {
-    const topicName = material.topic?.trim() || 'General';
-    if (!result[topicName]) result[topicName] = [];
-    result[topicName].push(material);
-  });
-  return result;
-}
-
 export default function CourseTopicsScreen({ courseTitle, materials, onBack }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [previewItem, setPreviewItem] = useState<RealMaterial | null>(null);
+  const [adminSyllabusModules, setAdminSyllabusModules] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Fetch course details to parse admin syllabus modules
+    api.getAllCourses().then((res: any) => {
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      const match = list.find((c: any) => c.title?.trim().toLowerCase() === courseTitle.trim().toLowerCase());
+      if (match && match.syllabusTopics) {
+        const parsed = parseSyllabus(match.syllabusTopics);
+        if (parsed && parsed.length > 0) {
+          const titles = parsed.map((m, idx) =>
+            m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+          );
+          setAdminSyllabusModules(titles);
+        }
+      }
+    }).catch(() => {});
+  }, [courseTitle]);
+
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState('All Batches');
 
   const courseMaterials = useMemo(() => {
     const sel = courseTitle.trim().toLowerCase();
@@ -110,28 +151,63 @@ export default function CourseTopicsScreen({ courseTitle, materials, onBack }: P
       .map(normalizeMaterial)
       .filter(item => {
         const mat = item.course.trim().toLowerCase();
-        // partial match — "Java" matches "Java Full Stack Development" and vice versa
         return mat === sel || mat.includes(sel) || sel.includes(mat);
       });
   }, [materials, courseTitle]);
 
+  const availableBatches = useMemo(() => {
+    const set = new Set(courseMaterials.map(m => m.batch).filter(Boolean));
+    return ['All Batches', ...Array.from(set)];
+  }, [courseMaterials]);
+
   const filteredMaterials = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return courseMaterials.filter(item => {
-      if (!q) return true;
-      return (
+      const matchSearch =
+        !q ||
         item.title.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q) ||
         item.course.toLowerCase().includes(q) ||
         item.batch.toLowerCase().includes(q) ||
         item.topic.toLowerCase().includes(q) ||
-        item.fileType.toLowerCase().includes(q)
-      );
-    });
-  }, [courseMaterials, searchQuery]);
+        item.fileType.toLowerCase().includes(q);
 
-  const topicGroups = useMemo(() => groupByTopic(filteredMaterials), [filteredMaterials]);
-  const topicNames = useMemo(() => Object.keys(topicGroups).sort((a, b) => a.localeCompare(b)), [topicGroups]);
+      const matchBatch =
+        selectedBatchFilter === 'All Batches' ||
+        item.batch.trim().toLowerCase() === selectedBatchFilter.trim().toLowerCase();
+
+      return matchSearch && matchBatch;
+    });
+  }, [courseMaterials, searchQuery, selectedBatchFilter]);
+
+  // Group materials module-wise using canonical module matching
+  const topicGroups = useMemo(() => {
+    const result: Record<string, RealMaterial[]> = {};
+
+    // Initialize admin module titles if present
+    adminSyllabusModules.forEach(t => { result[t] = []; });
+
+    filteredMaterials.forEach(m => {
+      const canonicalMod = findCanonicalModuleTitle(m.topic, adminSyllabusModules);
+      if (!result[canonicalMod]) result[canonicalMod] = [];
+      result[canonicalMod].push(m);
+    });
+
+    // Remove empty admin modules if other modules contain files
+    const finalGroups: Record<string, RealMaterial[]> = {};
+    const entries = Object.entries(result);
+    const hasAnyFiles = entries.some(([_, items]) => items.length > 0);
+
+    entries.forEach(([modTitle, items]) => {
+      if (items.length > 0 || !hasAnyFiles) {
+        finalGroups[modTitle] = items;
+      }
+    });
+
+    return finalGroups;
+  }, [filteredMaterials, adminSyllabusModules]);
+
+  const topicNames = useMemo(() => Object.keys(topicGroups), [topicGroups]);
   const topicMaterials = selectedTopic ? topicGroups[selectedTopic] || [] : [];
 
   const getFileUrl = (item: RealMaterial) => {
@@ -177,8 +253,8 @@ export default function CourseTopicsScreen({ courseTitle, materials, onBack }: P
               <Ionicons name="chevron-back" size={22} color="#FFF" />
             </TouchableOpacity>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.headerTitle}>{selectedTopic}</Text>
-              <Text style={styles.headerSubtitle}>{topicMaterials.length} materials</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>{selectedTopic}</Text>
+              <Text style={styles.headerSubtitle}>{topicMaterials.length} materials in this module</Text>
             </View>
           </View>
         </View>
@@ -198,16 +274,20 @@ export default function CourseTopicsScreen({ courseTitle, materials, onBack }: P
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.materialTitle}>{item.title}</Text>
-                      {!!item.description && <Text style={styles.materialDesc}>{item.description}</Text>}
+                      {!!item.description && item.description !== 'No description provided.' && (
+                        <Text style={styles.materialDesc}>{item.description}</Text>
+                      )}
                       <View style={styles.infoRow}>
                         <View style={styles.infoChip}>
                           <Ionicons name="school-outline" size={12} color="#64748B" />
                           <Text style={styles.infoText}>{item.course}</Text>
                         </View>
-                        <View style={styles.infoChip}>
-                          <Ionicons name="people-outline" size={12} color="#64748B" />
-                          <Text style={styles.infoText}>{item.batch}</Text>
-                        </View>
+                        {!!item.batch && (
+                          <View style={styles.infoChip}>
+                            <Ionicons name="people-outline" size={12} color="#64748B" />
+                            <Text style={styles.infoText}>{item.batch}</Text>
+                          </View>
+                        )}
                       </View>
                     </View>
                   </View>
@@ -264,26 +344,60 @@ export default function CourseTopicsScreen({ courseTitle, materials, onBack }: P
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle}>{courseTitle}</Text>
-            <Text style={styles.headerSubtitle}>{topicNames.length} topics · {filteredMaterials.length} files</Text>
+            <Text style={styles.headerSubtitle}>{topicNames.length} modules · {filteredMaterials.length} files</Text>
           </View>
         </View>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={18} color="#9CA3AF" />
-          <TextInput style={styles.searchInput} placeholder="Search topic or material..." placeholderTextColor="#9CA3AF" value={searchQuery} onChangeText={setSearchQuery} />
+          <TextInput style={styles.searchInput} placeholder="Search modules or materials..." placeholderTextColor="#9CA3AF" value={searchQuery} onChangeText={setSearchQuery} />
         </View>
+
+        {availableBatches.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 8 }}>
+            {availableBatches.map(b => {
+              const active = selectedBatchFilter === b;
+              return (
+                <TouchableOpacity
+                  key={b}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 16,
+                    backgroundColor: active ? '#FFFFFF' : 'rgba(255,255,255,0.2)',
+                    borderWidth: 1,
+                    borderColor: active ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  onPress={() => setSelectedBatchFilter(b)}
+                >
+                  <Ionicons name="people" size={13} color={active ? '#7B2CBF' : '#FFFFFF'} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#7B2CBF' : '#FFFFFF' }}>
+                    {b}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
 
       <ScrollView style={styles.listBg} contentContainerStyle={styles.listPad}>
         <View style={styles.statsRow}>
-          <View style={styles.statCard}><Text style={styles.statVal}>{topicNames.length}</Text><Text style={styles.statLabel}>Topics</Text></View>
+          <View style={styles.statCard}><Text style={styles.statVal}>{topicNames.length}</Text><Text style={styles.statLabel}>Modules</Text></View>
           <View style={styles.statCard}><Text style={styles.statVal}>{filteredMaterials.length}</Text><Text style={styles.statLabel}>Materials</Text></View>
           <View style={styles.statCard}><Text style={styles.statVal}>{filteredMaterials.filter(m => m.id || m.fileUrl).length}</Text><Text style={styles.statLabel}>Downloadable</Text></View>
         </View>
 
+        <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F2937', marginBottom: 12 }}>
+          📦 Course Modules & Study Materials
+        </Text>
+
         {topicNames.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="folder-open-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No topics available for this course</Text>
+            <Text style={styles.emptyText}>No module materials available for this course</Text>
           </View>
         ) : topicNames.map((topicName, index) => {
           const items = topicGroups[topicName];
@@ -291,14 +405,14 @@ export default function CourseTopicsScreen({ courseTitle, materials, onBack }: P
           const colors = ['#7B2CBF', '#F97316', '#0284C7', '#16A34A', '#DC2626', '#D97706'];
           const color = colors[index % colors.length];
           return (
-            <TouchableOpacity key={topicName} style={styles.topicCard} onPress={() => setSelectedTopic(topicName)}>
+            <TouchableOpacity key={topicName} style={styles.topicCard} onPress={() => setSelectedTopic(topicName)} activeOpacity={0.85}>
               <View style={[styles.topicStrip, { backgroundColor: color }]}>
                 <Ionicons name="folder-open" size={22} color="#FFF" />
               </View>
               <View style={styles.topicContent}>
-                <Text style={styles.topicName}>{topicName}</Text>
+                <Text style={styles.topicName} numberOfLines={2}>{topicName}</Text>
                 <View style={styles.topicMetaRow}>
-                  <Text style={styles.topicCountText}>{items.length} files</Text>
+                  <Text style={styles.topicCountText}>{items.length} {items.length === 1 ? 'file' : 'files'}</Text>
                   {types.slice(0, 3).map(type => {
                     const icon = getFileIcon(type);
                     return <View key={type} style={[styles.typeChip, { backgroundColor: icon.bg }]}><Text style={[styles.typeChipText, { color: icon.color }]}>{type}</Text></View>;
