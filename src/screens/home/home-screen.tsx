@@ -607,8 +607,9 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       const map: Record<string, string[]> = {};
       list.forEach((c: any) => {
-        if (c.title && c.syllabusTopics) {
-          const parsed = parseSyllabus(c.syllabusTopics);
+        const rawSyl = c.syllabusTopics || c.syllabus || c.whatYouWillLearn || '';
+        if (c.title && rawSyl) {
+          const parsed = parseSyllabus(rawSyl);
           if (parsed && parsed.length > 0) {
             map[c.title.trim().toLowerCase()] = parsed.map((m, idx) =>
               m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
@@ -634,12 +635,12 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
     const moduleMap = new Map<string, any[]>();
 
     const targetCourses = activeFilter === 'All'
-      ? Array.from(new Set(recordings.map((r: any) => r.course).filter(Boolean)))
-      : [activeFilter];
+      ? Array.from(new Set([...enrolledCourses.map(e => e.trim().toLowerCase()), ...Object.keys(coursesMap)]))
+      : [activeFilter.trim().toLowerCase()];
 
     const adminModuleTitles: string[] = [];
     targetCourses.forEach(c => {
-      const titles = coursesMap[c.trim().toLowerCase()] ?? [];
+      const titles = coursesMap[c] ?? [];
       titles.forEach(t => {
         if (!adminModuleTitles.includes(t)) adminModuleTitles.push(t);
       });
@@ -668,7 +669,7 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
     });
 
     return groups;
-  }, [filtered, coursesMap, activeFilter, recordings]);
+  }, [filtered, coursesMap, activeFilter, recordings, enrolledCourses]);
 
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -772,12 +773,6 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                                     <Ionicons name="calendar-outline" size={11} color="#6B7280" />
                                     <Text style={rs.meta}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
-                                  </View>
-                                )}
-                                {rec.duration && (
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                                    <Ionicons name="time-outline" size={11} color="#6B7280" />
-                                    <Text style={rs.meta}>{rec.duration}</Text>
                                   </View>
                                 )}
                               </View>

@@ -29,7 +29,6 @@ export const CourseCardItem = React.memo(({ item, onEdit, onDelete }: CourseCard
       <View style={styles.cardHeader}>
         <View style={styles.titleCol}>
           <Text style={styles.courseTitle}>{item.title}</Text>
-          <Text style={styles.instructorName}>Instructor: {item.instructor}</Text>
         </View>
         <View
           style={[
