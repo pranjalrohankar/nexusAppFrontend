@@ -226,14 +226,6 @@ export default function TeacherScheduleScreen() {
                           <Text style={styles.metaText}>{cls.studentsCount} students</Text>
                         </View>
                       </View>
-                      <TouchableOpacity
-                        style={[styles.meetBtn, !cls.meetLink && styles.meetBtnDisabled]}
-                        onPress={() => cls.meetLink && Linking.openURL(cls.meetLink)}
-                        disabled={!cls.meetLink}
-                      >
-                        <Ionicons name="videocam-outline" size={14} color="#FFF" />
-                        <Text style={styles.meetBtnText}>Join Google Meet</Text>
-                      </TouchableOpacity>
                     </View>
                   ))
                 )}

@@ -59,17 +59,23 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
         assignedCourses.forEach((c: any, i: number) => {
           const raw = results[i];
           const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
-          // Normalise: enrollment response uses `studentId` as the student's PK
-          map[c.title] = list.map((e: any) => ({
-            id: e.studentId ?? e.id,
-            studentId: e.studentId ?? e.id,
-            name: e.name ?? e.studentName ?? 'Unnamed',
-            email: e.email ?? '',
-            phone: e.phone ?? '',
-            enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
-            paymentStatus: e.paymentStatus ?? '',
-            course: c.title,
-          }));
+          map[c.title] = list.map((e: any) => {
+            const nameVal = (e.name && String(e.name).trim())
+              || (e.studentName && String(e.studentName).trim())
+              || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '')
+              || (e.email && String(e.email).trim())
+              || 'Student';
+            return {
+              id: e.studentId ?? e.id,
+              studentId: e.studentId ?? e.id,
+              name: nameVal,
+              email: e.email ?? '',
+              phone: e.phone ?? '',
+              enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
+              paymentStatus: e.paymentStatus ?? '',
+              course: c.title,
+            };
+          });
         });
         setStudentsByCourse(map);
       }

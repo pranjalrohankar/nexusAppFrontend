@@ -225,7 +225,7 @@ export default function AccountSettingsScreen({
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Avatar Card */}
         <View style={styles.avatarCard}>
-          <TouchableOpacity style={styles.avatarWrapper} onPress={handleChangePhoto} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.avatarWrapper} onPress={handleChangePhoto} activeOpacity={0.85} disabled={userRole === 'student'}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.avatarImage} onError={handlePhotoError} />
             ) : (
@@ -233,13 +233,15 @@ export default function AccountSettingsScreen({
                 <Text style={styles.avatarInitials}>{initials}</Text>
               </View>
             )}
-            <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={15} color="#FFF" />
-            </View>
+            {userRole !== 'student' && (
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={15} color="#FFF" />
+              </View>
+            )}
           </TouchableOpacity>
           <Text style={styles.avatarName}>{name || '—'}</Text>
           <Text style={styles.avatarRole}>{roleLabel}</Text>
-          {photoUri && (
+          {photoUri && userRole !== 'student' && (
             <TouchableOpacity
               onPress={async () => { setPhotoUri(null); await AsyncStorage.removeItem(PROFILE_PHOTO_KEY); }}
               style={styles.removePhotoBtn}
@@ -253,16 +255,20 @@ export default function AccountSettingsScreen({
         <Text style={styles.sectionTitle}>Personal Information</Text>
         <View style={styles.infoCard}>
 
-          {/* Full Name — editable */}
+          {/* Full Name */}
           <View style={styles.row}>
             <View style={[styles.iconBox, { backgroundColor: '#EDE9FF' }]}>
               <Ionicons name="person-outline" size={18} color="#7B2CBF" />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Full Name</Text>
-              <TextInput style={styles.rowInput} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#C4C4C4" />
+              {userRole === 'student' ? (
+                <Text style={styles.rowValue}>{name || '—'}</Text>
+              ) : (
+                <TextInput style={styles.rowInput} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#C4C4C4" />
+              )}
             </View>
-            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
+            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
           </View>
           <View style={styles.divider} />
 
@@ -278,42 +284,54 @@ export default function AccountSettingsScreen({
           </View>
           <View style={styles.divider} />
 
-          {/* Phone — editable */}
+          {/* Phone */}
           <View style={styles.row}>
             <View style={[styles.iconBox, { backgroundColor: '#E8FFF3' }]}>
               <Ionicons name="call-outline" size={18} color="#22C55E" />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Phone</Text>
-              <TextInput style={styles.rowInput} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="Enter phone number" placeholderTextColor="#C4C4C4" />
+              {userRole === 'student' ? (
+                <Text style={styles.rowValue}>{phone || '—'}</Text>
+              ) : (
+                <TextInput style={styles.rowInput} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="Enter phone number" placeholderTextColor="#C4C4C4" />
+              )}
             </View>
-            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
+            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
           </View>
           <View style={styles.divider} />
 
-          {/* City — editable */}
+          {/* City */}
           <View style={styles.row}>
             <View style={[styles.iconBox, { backgroundColor: '#EEF4FF' }]}>
               <Ionicons name="location-outline" size={18} color="#6B8FFF" />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>City</Text>
-              <TextInput style={styles.rowInput} value={city} onChangeText={setCity} placeholder="Enter city" placeholderTextColor="#C4C4C4" />
+              {userRole === 'student' ? (
+                <Text style={styles.rowValue}>{city || '—'}</Text>
+              ) : (
+                <TextInput style={styles.rowInput} value={city} onChangeText={setCity} placeholder="Enter city" placeholderTextColor="#C4C4C4" />
+              )}
             </View>
-            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
+            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
           </View>
           <View style={styles.divider} />
 
-          {/* State — editable */}
+          {/* State */}
           <View style={styles.row}>
             <View style={[styles.iconBox, { backgroundColor: '#EEF4FF' }]}>
               <Ionicons name="map-outline" size={18} color="#6B8FFF" />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>State</Text>
-              <TextInput style={styles.rowInput} value={state} onChangeText={setState} placeholder="Enter state" placeholderTextColor="#C4C4C4" />
+              {userRole === 'student' ? (
+                <Text style={styles.rowValue}>{state || '—'}</Text>
+              ) : (
+                <TextInput style={styles.rowInput} value={state} onChangeText={setState} placeholder="Enter state" placeholderTextColor="#C4C4C4" />
+              )}
             </View>
-            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
+            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
           </View>
           <View style={styles.divider} />
 
@@ -330,9 +348,11 @@ export default function AccountSettingsScreen({
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveChanges} activeOpacity={0.85} disabled={saving}>
-          {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
-        </TouchableOpacity>
+        {userRole !== 'student' && (
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveChanges} activeOpacity={0.85} disabled={saving}>
+            {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+          </TouchableOpacity>
+        )}
 
         {/* Delete Account — admin only */}
         {userRole === 'admin' && (
