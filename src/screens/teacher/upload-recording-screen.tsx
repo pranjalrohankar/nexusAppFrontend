@@ -21,6 +21,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api, getApiBaseUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
@@ -69,26 +70,7 @@ interface ClassRecording {
   uploadedAt?: string;
 }
 
-// Duration probe using expo-video
-function DurationProbe({ uri, onDuration }: { uri: string; onDuration: (d: string) => void }) {
-  const player = useVideoPlayer(uri, p => { p.muted = true; });
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (player.duration && player.duration > 0) {
-        clearInterval(interval);
-        const totalSec = Math.floor(player.duration);
-        const h = Math.floor(totalSec / 3600).toString().padStart(2, '0');
-        const m = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
-        const s = (totalSec % 60).toString().padStart(2, '0');
-        onDuration(`${h}:${m}:${s}`);
-      }
-    }, 300);
-    return () => clearInterval(interval);
-  }, [player]);
-
-  return null;
-}
+// Duration probe unused
 
 const SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 function formatTime(secs: number) {
@@ -296,12 +278,9 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const [description, setDescription] = useState('');
   const [classDate, setClassDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [duration, setDuration] = useState('');
   const [course, setCourse] = useState('');
   const [batch, setBatch] = useState('');
   const [selectedFile, setSelectedFile] = useState<any>(null);
-  const [probeUri, setProbeUri] = useState<string | null>(null);
-  const [probeFetching, setProbeFetching] = useState(false);
 
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
@@ -313,9 +292,15 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const [batchOptions, setBatchOptions] = useState<{ id: number; batchName: string }[]>([]);
   const [selectedModule, setSelectedModule] = useState('');
   const [moduleOptions, setModuleOptions] = useState<string[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [topicOptions, setTopicOptions] = useState<string[]>([]);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
   const [showModuleDropdown, setShowModuleDropdown] = useState(false);
+  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
+
+  const [courseSyllabusMap, setCourseSyllabusMap] = useState<Record<string, string[]>>({});
+  const [courseModuleTopicsMap, setCourseModuleTopicsMap] = useState<Record<string, Record<string, string[]>>>({});
 
   useEffect(() => {
     fetchRecentUploads();
@@ -324,8 +309,46 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
   const loadCourses = async () => {
     try {
-      const res = await api.getMyCoursesBatches();
-      if (res?.courses) setCourseOptions(res.courses);
+      const [cbRes, allCoursesRes] = await Promise.all([
+        api.getMyCoursesBatches().catch(() => null),
+        api.getAllCourses().catch(() => null),
+      ]);
+
+      const myCoursesList = cbRes?.courses ?? [];
+      const allCoursesList = Array.isArray(allCoursesRes?.data) ? allCoursesRes.data : Array.isArray(allCoursesRes) ? allCoursesRes : [];
+
+      const map: Record<string, string[]> = {};
+      const modTopicsMap: Record<string, Record<string, string[]>> = {};
+
+      const allList = [...allCoursesList, ...myCoursesList];
+      allList.forEach((c: any) => {
+        const title = (c.title || c.courseTitle || '').trim();
+        if (!title) return;
+
+        const rawSyl = c.syllabusTopics || c.syllabus || c.whatYouWillLearn || '';
+        if (rawSyl) {
+          const parsed = parseSyllabus(rawSyl);
+          if (parsed && parsed.length > 0) {
+            const modTitles: string[] = [];
+            const topicsByMod: Record<string, string[]> = {};
+
+            parsed.forEach((m, idx) => {
+              const formattedTitle = m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`;
+              modTitles.push(formattedTitle);
+              topicsByMod[formattedTitle.toLowerCase()] = m.topics || [];
+              topicsByMod[m.title.toLowerCase()] = m.topics || [];
+            });
+
+            map[title.toLowerCase()] = modTitles;
+            modTopicsMap[title.toLowerCase()] = topicsByMod;
+          }
+        }
+      });
+
+      // Strictly set course options to teacher's assigned courses
+      setCourseOptions(myCoursesList);
+      setCourseSyllabusMap(map);
+      setCourseModuleTopicsMap(modTopicsMap);
     } catch {}
   };
 
@@ -334,6 +357,8 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     setBatch('');
     setBatchOptions([]);
     setSelectedModule('');
+    setSelectedTopic('');
+    setTopicOptions([]);
     setShowCourseDropdown(false);
 
     try {
@@ -341,24 +366,24 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       if (res?.batches) setBatchOptions(res.batches);
     } catch {}
 
-    try {
-      const coursesRes = await api.getAllCourses();
-      const courseList = Array.isArray(coursesRes?.data) ? coursesRes.data : Array.isArray(coursesRes) ? coursesRes : [];
-      const match = courseList.find((c: any) => c.title?.trim().toLowerCase() === sel.trim().toLowerCase());
-      if (match && match.syllabusTopics) {
-        const parsed = parseSyllabus(match.syllabusTopics);
-        if (parsed && parsed.length > 0) {
-          const titles = parsed.map((m, idx) => m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`);
-          setModuleOptions(titles);
-        } else {
-          setModuleOptions(['Module 1', 'Module 2', 'Module 3', 'Module 4']);
-        }
-      } else {
-        setModuleOptions(['Module 1', 'Module 2', 'Module 3', 'Module 4']);
-      }
-    } catch {
+    const normSel = sel.trim().toLowerCase();
+    const modules = courseSyllabusMap[normSel] || [];
+    if (modules.length > 0) {
+      setModuleOptions(modules);
+    } else {
       setModuleOptions(['Module 1', 'Module 2', 'Module 3', 'Module 4']);
     }
+  };
+
+  const handleModuleSelect = (modTitle: string) => {
+    setSelectedModule(modTitle);
+    setShowModuleDropdown(false);
+    setSelectedTopic('');
+
+    const normCourse = course.trim().toLowerCase();
+    const courseTopics = courseModuleTopicsMap[normCourse] || {};
+    const topics = courseTopics[modTitle.toLowerCase()] || [];
+    setTopicOptions(topics);
   };
 
   const handleFileSelect = async () => {
@@ -369,11 +394,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       });
       if (result.canceled) return;
       const asset = result.assets?.[0];
-      if (!asset) return;
       setSelectedFile(asset);
-      setDuration('');
-      setProbeFetching(true);
-      setProbeUri(asset.uri);
     } catch {
       Alert.alert('Error', 'Failed to pick video');
     }
@@ -439,31 +460,38 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       // On native, append URI directly — React Native FormData handles it
       formData.append('file', { uri: selectedFile.uri, name: fileName, type: selectedFile.mimeType || 'video/mp4' } as any);
     }
-    const titleVal = title.trim() || 'Class Session';
+    const topicText = selectedTopic.trim();
+    const titleVal = topicText || title.trim() || 'Class Session';
     const finalTitle = selectedModule
       ? (titleVal.toLowerCase().includes('module') ? titleVal : `[${selectedModule}] ${titleVal}`)
       : titleVal;
 
+    try {
+      const userStr = await AsyncStorage.getItem('@nexus_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u?.email) formData.append('uploadedByEmail', u.email);
+      }
+    } catch {}
+
     formData.append('title', finalTitle);
-    formData.append('description', selectedModule ? `Module: ${selectedModule}\n${description.trim()}` : description.trim());
+    formData.append('description', selectedModule ? `Module: ${selectedModule}${topicText ? `\nTopic: ${topicText}` : ''}\n${description.trim()}` : description.trim());
     formData.append('classDate', classDate.toISOString().slice(0, 10));
-    formData.append('duration', duration.trim() || '00:00:00');
     formData.append('course', course.trim());
     formData.append('batch', batch.trim());
 
     try {
       setLoading(true);
       await api.uploadClassRecording(formData);
-      await fetchRecentUploads();
       setSelectedFile(null);
-      setProbeUri(null);
-      setProbeFetching(false);
       setTitle('');
       setDescription('');
-      setDuration('');
       setCourse('');
       setBatch('');
       setBatchOptions([]);
+      setSelectedModule('');
+      setSelectedTopic('');
+      setTopicOptions([]);
       showToast('Recording uploaded successfully!', 'success');
     } catch (err: any) {
       Alert.alert('Upload failed', err?.message || 'Please try again.');
@@ -480,22 +508,10 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const formatDate = (d: Date) =>
     d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-  const formatDuration = (text: string) => {
-    let f = text.replace(/[^0-9:]/g, '');
-    if (f.length > 8) f = f.slice(0, 8);
-    setDuration(f);
-  };
-
   return (
     <SafeAreaView style={s.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
       <ToastView />
-      {probeUri && (
-        <DurationProbe
-          uri={probeUri}
-          onDuration={(d) => { setDuration(d); setProbeUri(null); setProbeFetching(false); }}
-        />
-      )}
 
       <View style={s.header}>
         <LinearGradient
@@ -560,35 +576,19 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
             numberOfLines={4}
           />
 
-          <View style={s.row}>
-            <View style={s.half}>
-              <Text style={s.label}>Class Date <Text style={s.req}>*</Text></Text>
-              <TouchableOpacity style={s.input} onPress={() => setShowDatePicker(true)}>
-                <Text style={{ color: '#1E2937', fontSize: 15 }}>{formatDate(classDate)}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={s.half}>
-              <Text style={s.label}>
-                Duration (HH:MM:SS)
-                {probeFetching && <Text style={{ color: '#7B2CBF', fontSize: 11 }}> fetching…</Text>}
-              </Text>
-              <TextInput
-                style={s.input}
-                placeholder={probeFetching ? 'Fetching...' : 'Auto-fetched from video'}
-                value={duration}
-                onChangeText={formatDuration}
-                keyboardType="numbers-and-punctuation"
-                maxLength={8}
-              />
-            </View>
+          <View style={{ marginBottom: 16 }}>
+            <Text style={s.label}>Class Date <Text style={s.req}>*</Text></Text>
+            <TouchableOpacity style={s.input} onPress={() => setShowDatePicker(true)}>
+              <Text style={{ color: '#1E2937', fontSize: 15 }}>{formatDate(classDate)}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* Assign to Class */}
-        <View style={[s.section, { zIndex: 30 }]}>
+        <View style={[s.section, { zIndex: (showCourseDropdown || showBatchDropdown || showModuleDropdown) ? 100 : 1 }]}>
           <Text style={s.sectionTitle}>ASSIGN TO CLASS</Text>
-          <View style={s.row}>
-            <View style={[s.half, { zIndex: 30 }]}>
+          <View style={[s.row, { zIndex: (showCourseDropdown || showBatchDropdown) ? 90 : 1 }]}>
+            <View style={[s.half, { zIndex: showCourseDropdown ? 100 : 1 }]}>
               <Text style={s.label}>Course <Text style={s.req}>*</Text></Text>
               <TouchableOpacity
                 style={s.dropBtn}
@@ -601,18 +601,20 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
               </TouchableOpacity>
               {showCourseDropdown && (
                 <View style={s.dropList}>
-                  {courseOptions.length === 0
-                    ? <Text style={s.dropEmpty}>No courses assigned</Text>
-                    : courseOptions.map(o => (
-                      <TouchableOpacity key={o.id} style={s.dropItem} onPress={() => handleCourseSelect(o.title)}>
-                        <Text style={s.dropItemText}>{o.title}</Text>
-                      </TouchableOpacity>
-                    ))}
+                  <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                    {courseOptions.length === 0
+                      ? <Text style={s.dropEmpty}>No courses assigned</Text>
+                      : courseOptions.map(o => (
+                        <TouchableOpacity key={o.id} style={s.dropItem} onPress={() => handleCourseSelect(o.title)}>
+                          <Text style={s.dropItemText}>{o.title}</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
                 </View>
               )}
             </View>
 
-            <View style={[s.half, { zIndex: 20 }]}>
+            <View style={[s.half, { zIndex: showBatchDropdown ? 100 : 1 }]}>
               <Text style={s.label}>Batch <Text style={s.req}>*</Text></Text>
               <TouchableOpacity
                 style={[s.dropBtn, !course && s.dropDisabled]}
@@ -625,39 +627,87 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
               </TouchableOpacity>
               {showBatchDropdown && (
                 <View style={s.dropList}>
-                  {batchOptions.length === 0
-                    ? <Text style={s.dropEmpty}>No batches for this course</Text>
-                    : batchOptions.map(o => (
-                      <TouchableOpacity key={o.id} style={s.dropItem} onPress={() => { setBatch(o.batchName); setShowBatchDropdown(false); }}>
-                        <Text style={s.dropItemText}>{o.batchName}</Text>
-                      </TouchableOpacity>
-                    ))}
+                  <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                    {batchOptions.length === 0
+                      ? <Text style={s.dropEmpty}>No batches for this course</Text>
+                      : batchOptions.map(o => (
+                        <TouchableOpacity key={o.id} style={s.dropItem} onPress={() => { setBatch(o.batchName); setShowBatchDropdown(false); }}>
+                          <Text style={s.dropItemText}>{o.batchName}</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
                 </View>
               )}
             </View>
           </View>
 
           {/* Module Selection */}
-          <View style={{ marginTop: 14, zIndex: 10 }}>
-            <Text style={s.label}>Module / Topic <Text style={s.req}>*</Text></Text>
+          <View style={{ marginTop: 14, zIndex: showModuleDropdown ? 100 : 1, position: 'relative' }}>
+            <Text style={s.label}>Module <Text style={s.req}>*</Text></Text>
             <TouchableOpacity
               style={[s.dropBtn, !course && s.dropDisabled]}
-              onPress={() => { if (!course) return; setShowModuleDropdown(p => !p); setShowCourseDropdown(false); setShowBatchDropdown(false); }}
+              onPress={() => { if (!course) return; setShowModuleDropdown(p => !p); setShowCourseDropdown(false); setShowBatchDropdown(false); setShowTopicDropdown(false); }}
             >
               <Text style={[s.dropText, !selectedModule && s.dropPlaceholder]} numberOfLines={1}>
                 {selectedModule || (course ? 'Select Module' : 'Course first')}
               </Text>
               <Ionicons name="chevron-down" size={16} color="#64748B" />
             </TouchableOpacity>
+
             {showModuleDropdown && (
               <View style={s.dropList}>
-                {moduleOptions.length === 0
-                  ? <Text style={s.dropEmpty}>No modules found</Text>
-                  : moduleOptions.map((mod, idx) => (
-                    <TouchableOpacity key={idx} style={s.dropItem} onPress={() => { setSelectedModule(mod); setShowModuleDropdown(false); }}>
-                      <Text style={s.dropItemText}>{mod}</Text>
-                    </TouchableOpacity>
-                  ))}
+                <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                  {moduleOptions.length === 0
+                    ? <Text style={s.dropEmpty}>No modules found for this course</Text>
+                    : moduleOptions.map((mod, idx) => (
+                      <TouchableOpacity key={idx} style={s.dropItem} onPress={() => handleModuleSelect(mod)}>
+                        <Text style={s.dropItemText}>{mod}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+
+          {/* Topic Selection */}
+          <View style={{ marginTop: 14, zIndex: showTopicDropdown ? 100 : 1, position: 'relative' }}>
+            <Text style={s.label}>Topic / Title</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+              <TextInput
+                style={[
+                  s.input,
+                  { flex: 1, marginBottom: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+                  !selectedModule && s.dropDisabled
+                ]}
+                placeholder={selectedModule ? 'Select or type Topic...' : 'Module first'}
+                placeholderTextColor="#94A3B8"
+                value={selectedTopic}
+                onChangeText={setSelectedTopic}
+                editable={!!selectedModule}
+              />
+              <TouchableOpacity
+                style={[
+                  s.dropBtn,
+                  { width: 44, paddingHorizontal: 0, justifyContent: 'center', alignItems: 'center', marginBottom: 0, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 },
+                  !selectedModule && s.dropDisabled
+                ]}
+                onPress={() => { if (!selectedModule) return; setShowTopicDropdown(p => !p); setShowCourseDropdown(false); setShowBatchDropdown(false); setShowModuleDropdown(false); }}
+              >
+                <Ionicons name="chevron-down" size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {showTopicDropdown && (
+              <View style={[s.dropList, { top: 72 }]}>
+                <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                  {topicOptions.length === 0
+                    ? <Text style={s.dropEmpty}>Type custom topic or select</Text>
+                    : topicOptions.map((top, idx) => (
+                      <TouchableOpacity key={idx} style={s.dropItem} onPress={() => { setSelectedTopic(top); setShowTopicDropdown(false); }}>
+                        <Text style={s.dropItemText}>{top}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
               </View>
             )}
           </View>
@@ -697,7 +747,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                   <Text style={s.recentMeta}>{item.course}</Text>
                   <Text style={s.recentBatch}>{item.batch}</Text>
                   <Text style={s.recentMetaSmall}>
-                    {item.duration || '00:00:00'} • {item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString('en-GB') : ''}
+                    {item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString('en-GB') : ''}
                   </Text>
                 </View>
                 <View style={s.cardActions}>
@@ -838,17 +888,22 @@ const s = StyleSheet.create({
   dropPlaceholder: { color: '#94A3B8' },
   dropList: {
     position: 'absolute',
-    top: '100%',
+    top: 72,
     left: 0,
     right: 0,
-    zIndex: 1000,
-    marginTop: -12,
+    zIndex: 9999,
+    marginTop: 0,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
     borderRadius: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
-    maxHeight: 180,
+    maxHeight: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
   },
   dropItem: {
     paddingVertical: 12,

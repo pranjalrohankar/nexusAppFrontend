@@ -554,8 +554,9 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       const map: Record<string, string[]> = {};
       list.forEach((c: any) => {
-        if (c.title && c.syllabusTopics) {
-          const parsed = parseSyllabus(c.syllabusTopics);
+        const rawSyl = c.syllabusTopics || c.syllabus || c.whatYouWillLearn || '';
+        if (c.title && rawSyl) {
+          const parsed = parseSyllabus(rawSyl);
           if (parsed && parsed.length > 0) {
             map[c.title.trim().toLowerCase()] = parsed.map((m, idx) =>
               m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
@@ -610,12 +611,12 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
     const moduleMap = new Map<string, RecordingItem[]>();
 
     const targetCourses = selectedCategory === 'All'
-      ? Array.from(new Set(recordings.map(r => r.course).filter(Boolean)))
-      : [selectedCategory];
+      ? Array.from(new Set([...Object.keys(coursesMap), ...recordings.map(r => r.course.trim().toLowerCase()).filter(Boolean)]))
+      : [selectedCategory.trim().toLowerCase()];
 
     const adminModuleTitles: string[] = [];
     targetCourses.forEach(c => {
-      const titles = coursesMap[c.trim().toLowerCase()] ?? [];
+      const titles = coursesMap[c] ?? [];
       titles.forEach(t => {
         if (!adminModuleTitles.includes(t)) adminModuleTitles.push(t);
       });
@@ -787,12 +788,6 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
                                       <View style={s.statItem}>
                                         <Ionicons name="calendar-outline" size={12} color="#6B7280" />
                                         <Text style={s.statText}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
-                                      </View>
-                                    )}
-                                    {rec.duration && (
-                                      <View style={s.statItem}>
-                                        <Ionicons name="time-outline" size={12} color="#6B7280" />
-                                        <Text style={s.statText}>{rec.duration}</Text>
                                       </View>
                                     )}
                                     <View style={s.statItem}>
