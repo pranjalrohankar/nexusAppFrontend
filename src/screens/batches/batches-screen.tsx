@@ -85,11 +85,20 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
       const mapped = data.map((e: any) => {
         const start = e.startDate ? new Date(e.startDate) : null;
         const end = e.endDate ? new Date(e.endDate) : null;
-        let duration = '3 Months';
-        if (start && end) {
+        let duration = e.duration || '';
+        if (!duration && start && end) {
           const months = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30));
           duration = `${months} Month${months !== 1 ? 's' : ''}`;
         }
+        if (!duration) duration = 'Duration TBD';
+
+        const startDateFormatted = e.startDate
+          ? new Date(e.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '';
+        const endDateFormatted = e.endDate
+          ? new Date(e.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '';
+
         const days: string[] = e.classDays || [];
         const nextClass = days.length > 0
           ? `${days.join(', ')} at ${e.classTimings || 'TBD'}`
@@ -99,14 +108,16 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
           title: e.courseTitle || e.selectCourse || e.batchName || 'Enrolled Course',
           subtitle: e.batchName || 'Active Enrolled Batch',
           duration,
-          startDate: e.startDate ? new Date(e.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'June 15, 2026',
+          startDate: startDateFormatted,
+          endDate: endDateFormatted,
           instructor: e.instructor || 'TBD',
           schedule: nextClass,
-          classDays: e.classDays || [],
+          classDays: days,
           classTiming: e.classTimings || 'TBD',
+          googleMeetLink: e.googleMeetLink || '',
           syllabusTopics: e.syllabusTopics || e.syllabus || '',
           isLive: false,
-          teacher: { name: e.instructor || 'TBD', emoji: '👨💻' },
+          teacher: { name: e.instructor || 'TBD', emoji: '👨‍💻' },
           progress: '0/0',
           progressPercent: 0,
           topics: [],
@@ -164,7 +175,6 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
             <View style={styles.headerIcons}>
               <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
                 <Ionicons name="notifications-outline" size={22} color="#FFF" />
-                <View style={styles.badgeDot} />
               </TouchableOpacity>
             </View>
           </View>
@@ -215,7 +225,6 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
               <Text style={[styles.tabButtonText, activeTab === 'Ongoing' && styles.activeTabButtonText]}>
                 Ongoing
               </Text>
-              {activeTab === 'Ongoing' && <View style={styles.tabIndicatorDot} />}
             </View>
           </TouchableOpacity>
 
@@ -250,8 +259,11 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
                   <View style={styles.batchCardHeader}>
                     <View style={styles.batchHeaderLeft}>
                       <Text style={styles.batchTitle}>{batch.title}</Text>
+                      {!!batch.subtitle && batch.subtitle !== batch.title && (
+                        <Text style={{ fontSize: 12, color: '#F3E8FF', fontWeight: '500', marginTop: 2 }}>{batch.subtitle}</Text>
+                      )}
                       <View style={styles.batchDurationRow}>
-                        <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
+                        <Ionicons name="time-outline" size={14} color="#E9D5FF" />
                         <Text style={styles.batchDurationText}>{batch.duration}</Text>
                       </View>
                     </View>
@@ -264,6 +276,14 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
 
                   {/* Card Body (White Area) */}
                   <View style={styles.batchCardBody}>
+                    {(!!batch.startDate || !!batch.endDate) && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, backgroundColor: '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#F1F5F9' }}>
+                        <Ionicons name="calendar-outline" size={14} color="#7B2CBF" />
+                        <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
+                          {batch.startDate}{batch.endDate ? ` – ${batch.endDate}` : ''}
+                        </Text>
+                      </View>
+                    )}
                     {/* Teacher profile */}
                     <View style={styles.profilesRow}>
                       {/* Student */}
@@ -405,11 +425,12 @@ export default function BatchesScreen({ onOpenNotifications }: BatchesScreenProp
                       <Text style={styles.genBatchInfoText}>{startDate} – {endDate}</Text>
                     </View>
 
-                    {days.length > 0 && (
+                    {(days.length > 0 || !!batch.classTimings) && (
                       <View style={styles.genBatchInfoRow}>
                         <Ionicons name="time-outline" size={16} color="#9CA3AF" />
                         <Text style={styles.genBatchInfoText}>
-                          {days.join(', ')}{batch.classTimings ? ` at ${batch.classTimings}` : ''}
+                          {days.length > 0 ? days.join(', ') : ''}
+                          {batch.classTimings ? (days.length > 0 ? ` at ${batch.classTimings}` : batch.classTimings) : ''}
                         </Text>
                       </View>
                     )}

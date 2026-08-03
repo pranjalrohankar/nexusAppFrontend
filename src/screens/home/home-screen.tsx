@@ -1,6 +1,7 @@
 import CourseDetails, { CourseData } from '@/screens/courses/course-details';
 import ExploreCourses, { ExploreCourseItem } from '@/screens/courses/explore-courses';
 import ClassRecordingsScreen from '@/screens/home/class-recordings-screen';
+import CourseTopicsScreen from '@/screens/tests/Course-topics-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
@@ -682,7 +683,7 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
   );
 }
 
-function MaterialsSection() {
+function MaterialsSection({ enrollments, onSelectCourse }: { enrollments?: Enrollment[]; onSelectCourse?: (title: string) => void }) {
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -695,9 +696,16 @@ function MaterialsSection() {
   }, []);
 
   const categories = ['All', ...Array.from(new Set(materials.map((m: any) => m.course).filter(Boolean)))];
+
+  const filteredEnrollments = (enrollments || []).filter(enr => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase().trim();
+    return (enr.courseTitle || '').toLowerCase().includes(q) || (enr.batchName || '').toLowerCase().includes(q);
+  });
+
   const filtered = materials.filter((m: any) => {
-    const q = search.toLowerCase();
-    const matchQ = m.title?.toLowerCase().includes(q) || m.course?.toLowerCase().includes(q);
+    const q = search.toLowerCase().trim();
+    const matchQ = !q || m.title?.toLowerCase().includes(q) || m.course?.toLowerCase().includes(q) || m.fileName?.toLowerCase().includes(q);
     const matchCat = activeFilter === 'All' || m.course === activeFilter;
     return matchQ && matchCat;
   });
@@ -716,33 +724,72 @@ function MaterialsSection() {
 
   return (
     <View>
-      <View style={rs.searchBox}>
+      {/* 1. SEARCH BAR AT TOP */}
+      <View style={[rs.searchBox, { marginBottom: 16 }]}>
         <Ionicons name="search-outline" size={16} color="#9CA3AF" />
         <TextInput
           style={rs.searchInput}
-          placeholder="Search materials..."
+          placeholder="Search courses or study materials..."
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
         />
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
-        {categories.map(cat => (
-          <TouchableOpacity
-            key={cat}
-            style={[rs.chip, activeFilter === cat && rs.chipActive]}
-            onPress={() => setActiveFilter(cat)}
-          >
-            <Text style={[rs.chipText, activeFilter === cat && rs.chipTextActive]}>{cat}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+
+      {/* 2. COURSES & TOPIC MATERIALS CARDS BELOW SEARCH BAR */}
+      {filteredEnrollments && filteredEnrollments.length > 0 && onSelectCourse ? (
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 10 }}>
+            Courses & Topic Materials
+          </Text>
+          {filteredEnrollments.map((enr, i) => (
+            <TouchableOpacity
+              key={i}
+              style={{
+                backgroundColor: '#7B2CBF',
+                borderRadius: 16,
+                padding: 16,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}
+              onPress={() => onSelectCourse(enr.courseTitle)}
+              activeOpacity={0.88}
+            >
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFF' }}>{enr.courseTitle}</Text>
+                <Text style={{ fontSize: 11, color: '#E9D5FF', marginTop: 2 }}>Tap to view topicwise slides & notes</Text>
+              </View>
+              <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="arrow-forward" size={16} color="#FFF" />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      {/* 3. CATEGORY CHIPS & MATERIAL FILES BELOW */}
+      {categories.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+          {categories.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[rs.chip, activeFilter === cat && rs.chipActive]}
+              onPress={() => setActiveFilter(cat)}
+            >
+              <Text style={[rs.chipText, activeFilter === cat && rs.chipTextActive]}>{cat}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       {loading ? (
         <ActivityIndicator color="#7B2CBF" style={{ marginVertical: 24 }} />
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && filteredEnrollments.length === 0 ? (
         <View style={rs.empty}>
           <Ionicons name="document-outline" size={36} color="#D1D5DB" />
-          <Text style={rs.emptyText}>No materials found</Text>
+          <Text style={rs.emptyText}>No materials or courses found</Text>
         </View>
       ) : (
         filtered.map((mat: any) => (
@@ -782,7 +829,7 @@ function MaterialsSection() {
   );
 }
 
-function ResourceTabsSection({ enrollments }: { enrollments: Enrollment[] }) {
+function ResourceTabsSection({ enrollments, onSelectCourse }: { enrollments: Enrollment[]; onSelectCourse?: (title: string) => void }) {
   const [activeResTab, setActiveResTab] = useState<'recordings' | 'materials'>('recordings');
   const enrolledCourses = enrollments.map(e => e.courseTitle);
   return (
@@ -794,10 +841,7 @@ function ResourceTabsSection({ enrollments }: { enrollments: Enrollment[] }) {
           onPress={() => setActiveResTab('recordings')}
         >
           <Ionicons name="videocam-outline" size={16} color={activeResTab === 'recordings' ? '#FFF' : '#4B5563'} style={styles.tabIcon} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={[styles.toggleTabText, activeResTab === 'recordings' && styles.toggleTabTextActive]}>Recording</Text>
-            {activeResTab === 'recordings' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />}
-          </View>
+          <Text style={[styles.toggleTabText, activeResTab === 'recordings' && styles.toggleTabTextActive]}>Recording</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toggleTab, activeResTab === 'materials' && styles.toggleTabActive]}
@@ -809,7 +853,7 @@ function ResourceTabsSection({ enrollments }: { enrollments: Enrollment[] }) {
       </View>
       {activeResTab === 'recordings'
         ? <RecordingsSection enrolledCourses={enrolledCourses} />
-        : <MaterialsSection />}
+        : <MaterialsSection enrollments={enrollments} onSelectCourse={onSelectCourse} />}
     </View>
   );
 }
@@ -819,13 +863,7 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
   setSelectedCourse: (c: CourseData | null) => void;
   InstructorAvatar: React.FC<{ name: string; courseKey?: string }>;
 }) {
-  const liveClasses = enrollments.filter(e => {
-    if (e.status === 'COMPLETED') return false;
-    const todayMatch = Array.isArray(e.classDays) && e.classDays.some(
-      d => d.trim().toLowerCase().startsWith(TODAY_NAME.substring(0, 3))
-    );
-    return todayMatch;
-  });
+  const liveClasses = enrollments.filter(e => e.status !== 'COMPLETED');
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Join Classes</Text>
@@ -845,17 +883,23 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
           >
             <View style={{ backgroundColor: '#7B2CBF', padding: 20 }}>
               <View style={styles.cardHeaderRow}>
-                <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={[styles.classTitle, { color: '#FFFFFF' }]}>{enr.courseTitle}</Text>
+                  {!!enr.batchName && (
+                    <Text style={{ color: '#E9D5FF', fontSize: 12, fontWeight: '500', marginTop: 2 }}>{enr.batchName}</Text>
+                  )}
+                </View>
                 <View style={styles.livePillBadge}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 5 }} />
                   <Text style={styles.livePillText}>LIVE</Text>
                 </View>
               </View>
-              {enr.classDays && enr.classDays.length > 0 ? (
+              {(enr.classDays && enr.classDays.length > 0) || !!enr.classTimings ? (
                 <View style={styles.classTimeRow}>
                   <Ionicons name="time-outline" size={16} color="#E9D5FF" />
                   <Text style={[styles.classTimeText, { color: '#E9D5FF' }]}>
-                    {enr.classDays.join(', ')}{enr.classTimings ? ` - ${enr.classTimings}` : ''}
+                    {enr.classDays && enr.classDays.length > 0 ? enr.classDays.join(', ') : ''}
+                    {enr.classTimings ? ` · ${enr.classTimings}` : ''}
                   </Text>
                 </View>
               ) : null}
@@ -904,10 +948,13 @@ function LiveClassesView({ enrollments, setSelectedCourse, InstructorAvatar }: {
 export default function HomeScreen({ onOpenNotifications, userName }: HomeScreenProps) {
   const [activeTab, setActiveTab] = useState<TabType>('JOIN_CLASS');
   const [selectedCourse, setSelectedCourse] = useState<CourseData | null>(null);
+  const [selectedCourseForMaterials, setSelectedCourseForMaterials] = useState<string | null>(null);
   const [isExploring, setIsExploring] = useState(false);
   const [isViewingRecordings, setIsViewingRecordings] = useState(false);
   const [liveExploreList, setLiveExploreList] = useState<ExploreCourseItem[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [allMaterials, setAllMaterials] = useState<any[]>([]);
+  const [recordingsList, setRecordingsList] = useState<any[]>([]);
 
   useEffect(() => {
     api.getActiveCourses().then((data: any) => {
@@ -927,7 +974,55 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
       const list = Array.isArray(data) ? data : [];
       setEnrollments(list);
     }).catch(() => { });
+
+    api.getStudentMaterials().then((data: any) => {
+      setAllMaterials(Array.isArray(data) ? data : []);
+    }).catch(() => { });
+
+    api.getStudentRecordings().then((data: any) => {
+      setRecordingsList(Array.isArray(data) ? data : []);
+    }).catch(() => { });
   }, []);
+
+  const computeHoursLearned = () => {
+    let totalMins = 0;
+    if (Array.isArray(recordingsList) && recordingsList.length > 0) {
+      recordingsList.forEach((r: any) => {
+        const durStr = (r.duration || '').toLowerCase();
+        const hourMatch = durStr.match(/(\d+(?:\.\d+)?)\s*(?:h|hour)/);
+        const minMatch = durStr.match(/(\d+)\s*(?:m|min)/);
+        if (hourMatch) totalMins += parseFloat(hourMatch[1]) * 60;
+        if (minMatch) totalMins += parseInt(minMatch[1], 10);
+        if (!hourMatch && !minMatch) {
+          const num = parseFloat(durStr);
+          if (!isNaN(num)) {
+            totalMins += num < 10 ? num * 60 : num;
+          }
+        }
+      });
+    }
+    if (totalMins === 0) {
+      const count = enrollments?.length || 1;
+      return String(count * 24);
+    }
+    const hours = (totalMins / 60).toFixed(1);
+    return hours.endsWith('.0') ? hours.slice(0, -2) : hours;
+  };
+
+  if (selectedCourseForMaterials !== null) {
+    const courseMaterials = allMaterials.filter(m => {
+      const mat = (m.course ?? '').toLowerCase().trim();
+      const sel = selectedCourseForMaterials.toLowerCase().trim();
+      return mat === sel || mat.includes(sel) || sel.includes(mat);
+    });
+    return (
+      <CourseTopicsScreen
+        courseTitle={selectedCourseForMaterials}
+        materials={courseMaterials}
+        onBack={() => setSelectedCourseForMaterials(null)}
+      />
+    );
+  }
 
   if (isViewingRecordings) {
     return (
@@ -1007,7 +1102,6 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
               <View style={styles.headerIcons}>
                 <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
                   <Ionicons name="notifications-outline" size={22} color="#FFF" />
-                  <View style={styles.badgeDot} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1035,7 +1129,7 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
               </View>
               <View style={styles.statsBox}>
                 <Text style={styles.statsLabel}>Hours Learned</Text>
-                <Text style={styles.statsValue}>24</Text>
+                <Text style={styles.statsValue}>{computeHoursLearned()}</Text>
               </View>
             </View>
           </View>
@@ -1052,12 +1146,9 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
                 color={activeTab === 'JOIN_CLASS' ? '#FFF' : '#4B5563'}
                 style={styles.tabIcon}
               />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={[styles.toggleTabText, activeTab === 'JOIN_CLASS' && styles.toggleTabTextActive]}>
-                  Join Class
-                </Text>
-                {activeTab === 'JOIN_CLASS' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />}
-              </View>
+              <Text style={[styles.toggleTabText, activeTab === 'JOIN_CLASS' && styles.toggleTabTextActive]}>
+                Join Class
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1073,7 +1164,6 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
               <Text style={[styles.toggleTabText, activeTab === 'UPCOMING' && styles.toggleTabTextActive]}>
                 Upcoming
               </Text>
-              {activeTab === 'UPCOMING' && <View style={styles.activeDot} />}
             </TouchableOpacity>
           </View>
 
@@ -1146,7 +1236,7 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
           )}
 
           {/* 6. RECORDINGS & STUDY MATERIALS TABS */}
-          <ResourceTabsSection enrollments={enrollments} />
+          <ResourceTabsSection enrollments={enrollments} onSelectCourse={(title) => setSelectedCourseForMaterials(title)} />
 
           <View style={styles.bottomSpacer} />
         </ScrollView>
