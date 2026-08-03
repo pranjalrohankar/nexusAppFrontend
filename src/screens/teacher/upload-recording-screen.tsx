@@ -23,6 +23,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Linking from 'expo-linking';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api, getApiBaseUrl } from '@/services/api';
+import { parseSyllabus } from '@/utils/syllabus-parser';
 
 const API_BASE = getApiBaseUrl().replace('/api', '');
 const IS_WEB = Platform.OS === 'web';
@@ -310,8 +311,11 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
   const [courseOptions, setCourseOptions] = useState<{ id: number; title: string }[]>([]);
   const [batchOptions, setBatchOptions] = useState<{ id: number; batchName: string }[]>([]);
+  const [selectedModule, setSelectedModule] = useState('');
+  const [moduleOptions, setModuleOptions] = useState<string[]>([]);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
+  const [showModuleDropdown, setShowModuleDropdown] = useState(false);
 
   useEffect(() => {
     fetchRecentUploads();
@@ -329,11 +333,32 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
     setCourse(sel);
     setBatch('');
     setBatchOptions([]);
+    setSelectedModule('');
     setShowCourseDropdown(false);
+
     try {
       const res = await api.getMyCoursesBatches(sel);
       if (res?.batches) setBatchOptions(res.batches);
     } catch {}
+
+    try {
+      const coursesRes = await api.getAllCourses();
+      const courseList = Array.isArray(coursesRes?.data) ? coursesRes.data : Array.isArray(coursesRes) ? coursesRes : [];
+      const match = courseList.find((c: any) => c.title?.trim().toLowerCase() === sel.trim().toLowerCase());
+      if (match && match.syllabusTopics) {
+        const parsed = parseSyllabus(match.syllabusTopics);
+        if (parsed && parsed.length > 0) {
+          const titles = parsed.map((m, idx) => m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`);
+          setModuleOptions(titles);
+        } else {
+          setModuleOptions(['Module 1', 'Module 2', 'Module 3', 'Module 4']);
+        }
+      } else {
+        setModuleOptions(['Module 1', 'Module 2', 'Module 3', 'Module 4']);
+      }
+    } catch {
+      setModuleOptions(['Module 1', 'Module 2', 'Module 3', 'Module 4']);
+    }
   };
 
   const handleFileSelect = async () => {
@@ -414,8 +439,13 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       // On native, append URI directly — React Native FormData handles it
       formData.append('file', { uri: selectedFile.uri, name: fileName, type: selectedFile.mimeType || 'video/mp4' } as any);
     }
-    formData.append('title', title.trim() || 'Untitled Recording');
-    formData.append('description', description.trim());
+    const titleVal = title.trim() || 'Class Session';
+    const finalTitle = selectedModule
+      ? (titleVal.toLowerCase().includes('module') ? titleVal : `[${selectedModule}] ${titleVal}`)
+      : titleVal;
+
+    formData.append('title', finalTitle);
+    formData.append('description', selectedModule ? `Module: ${selectedModule}\n${description.trim()}` : description.trim());
     formData.append('classDate', classDate.toISOString().slice(0, 10));
     formData.append('duration', duration.trim() || '00:00:00');
     formData.append('course', course.trim());
@@ -562,7 +592,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
               <Text style={s.label}>Course <Text style={s.req}>*</Text></Text>
               <TouchableOpacity
                 style={s.dropBtn}
-                onPress={() => { setShowCourseDropdown(p => !p); setShowBatchDropdown(false); }}
+                onPress={() => { setShowCourseDropdown(p => !p); setShowBatchDropdown(false); setShowModuleDropdown(false); }}
               >
                 <Text style={[s.dropText, !course && s.dropPlaceholder]} numberOfLines={1}>
                   {course || 'Select Course'}
@@ -586,7 +616,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
               <Text style={s.label}>Batch <Text style={s.req}>*</Text></Text>
               <TouchableOpacity
                 style={[s.dropBtn, !course && s.dropDisabled]}
-                onPress={() => { if (!course) return; setShowBatchDropdown(p => !p); setShowCourseDropdown(false); }}
+                onPress={() => { if (!course) return; setShowBatchDropdown(p => !p); setShowCourseDropdown(false); setShowModuleDropdown(false); }}
               >
                 <Text style={[s.dropText, !batch && s.dropPlaceholder]} numberOfLines={1}>
                   {batch || (course ? 'Select Batch' : 'Course first')}
@@ -605,6 +635,31 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                 </View>
               )}
             </View>
+          </View>
+
+          {/* Module Selection */}
+          <View style={{ marginTop: 14, zIndex: 10 }}>
+            <Text style={s.label}>Module / Topic <Text style={s.req}>*</Text></Text>
+            <TouchableOpacity
+              style={[s.dropBtn, !course && s.dropDisabled]}
+              onPress={() => { if (!course) return; setShowModuleDropdown(p => !p); setShowCourseDropdown(false); setShowBatchDropdown(false); }}
+            >
+              <Text style={[s.dropText, !selectedModule && s.dropPlaceholder]} numberOfLines={1}>
+                {selectedModule || (course ? 'Select Module' : 'Course first')}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#64748B" />
+            </TouchableOpacity>
+            {showModuleDropdown && (
+              <View style={s.dropList}>
+                {moduleOptions.length === 0
+                  ? <Text style={s.dropEmpty}>No modules found</Text>
+                  : moduleOptions.map((mod, idx) => (
+                    <TouchableOpacity key={idx} style={s.dropItem} onPress={() => { setSelectedModule(mod); setShowModuleDropdown(false); }}>
+                      <Text style={s.dropItemText}>{mod}</Text>
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )}
           </View>
         </View>
 
