@@ -50,39 +50,14 @@ interface RealMaterial {
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
 export default function TestsScreen() {
-  const [activeTab, setActiveTab] = useState<SubTabType>('MCQ');
-  const [selectedCourseForMaterials, setSelectedCourseForMaterials] = useState<string | null>(null);
-  const [materialSearchQuery, setMaterialSearchQuery] = useState('');
   const [activeTest, setActiveTest] = useState<any>(null);
 
   // Real data
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [allMaterials, setAllMaterials] = useState<RealMaterial[]>([]);
-  const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
-  const [materialsLoading, setMaterialsLoading] = useState(false);
   const [publishedTests, setPublishedTests] = useState<any[]>([]);
   const [userSubmissions, setUserSubmissions] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     await loadToken();
-    setEnrollmentsLoading(true);
-    setMaterialsLoading(true);
-    try {
-      const enrData = await api.getStudentEnrollments();
-      setEnrollments(Array.isArray(enrData) ? enrData : []);
-    } catch (e) {
-      console.warn('Enrollments fetch failed', e);
-    } finally {
-      setEnrollmentsLoading(false);
-    }
-    try {
-      const matData = await api.getStudentMaterials();
-      setAllMaterials(Array.isArray(matData) ? matData : []);
-    } catch (e) {
-      console.warn('Materials fetch failed', e);
-    } finally {
-      setMaterialsLoading(false);
-    }
     try {
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
       if (storedTests) {
@@ -103,46 +78,6 @@ export default function TestsScreen() {
     return <ActiveTestScreen testInfo={activeTest} onClose={() => { setActiveTest(null); fetchData(); }} />;
   }
 
-  // Helper: icon config per file type
-  const getFileIcon = (fileType: string) => {
-    switch ((fileType || '').toUpperCase()) {
-      case 'PDF':    return { icon: 'document-text-outline', bg: '#FEE2E2', color: '#EF4444' };
-      case 'PPT':    return { icon: 'easel-outline',          bg: '#FFF7ED', color: '#F97316' };
-      case 'DOC':    return { icon: 'document-outline',       bg: '#E0F2FE', color: '#0284C7' };
-      case 'VIDEO':  return { icon: 'videocam-outline',       bg: '#FAF0FD', color: '#7B2CBF' };
-      case 'IMAGE':  return { icon: 'image-outline',          bg: '#F0FDF4', color: '#16A34A' };
-      case 'ZIP':    return { icon: 'archive-outline',        bg: '#FEF3C7', color: '#D97706' };
-      default:       return { icon: 'document-outline',       bg: '#F3F4F6', color: '#6B7280' };
-    }
-  };
-
-  const isImage = (fileType: string, fileName: string) => {
-    if ((fileType || '').toUpperCase() === 'IMAGE') return true;
-    const ext = (fileName || '').split('.').pop()?.toLowerCase() ?? '';
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
-  };
-
-  const handleOpenMaterial = async (item: RealMaterial) => {
-    try {
-      const url = item.id
-        ? api.getMaterialDownloadUrl(item.id)
-        : (item.fileUrl ? (item.fileUrl.startsWith('http') ? item.fileUrl : `${getApiBaseUrl().replace('/api', '')}${item.fileUrl}`) : null);
-      if (!url) { Alert.alert('Unavailable', 'No file available.'); return; }
-      if (Platform.OS === 'web') {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error();
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl; a.download = item.fileName || 'file';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        return;
-      }
-      await Linking.openURL(url);
-    } catch { Alert.alert('Error', 'Could not open file.'); }
-  };
-
   // MCQ Tests data
   const mcqTests = [
     {
@@ -150,7 +85,7 @@ export default function TestsScreen() {
       title: 'JavaScript ES6+ Assessment',
       category: 'Full Stack Development',
       badge: 'Intermediate',
-      badgeColor: '#D97706', // Yellow/brown
+      badgeColor: '#D97706',
       badgeBg: '#FEF3C7',
       icon: 'laptop-outline',
       iconBg: '#7B2CBF',
@@ -164,7 +99,7 @@ export default function TestsScreen() {
       title: 'React Advanced Patterns Test',
       category: 'Full Stack Development',
       badge: 'Advanced',
-      badgeColor: '#DC2626', // Red
+      badgeColor: '#DC2626',
       badgeBg: '#FEE2E2',
       icon: 'logo-react',
       iconBg: '#EA580C',
@@ -178,7 +113,7 @@ export default function TestsScreen() {
       title: 'UI/UX Design Fundamentals',
       category: 'UI/UX Design',
       badge: 'Beginner',
-      badgeColor: '#16A34A', // Green
+      badgeColor: '#16A34A',
       badgeBg: '#DCFCE7',
       icon: 'color-palette-outline',
       iconBg: '#7B2CBF',
@@ -192,7 +127,7 @@ export default function TestsScreen() {
       title: 'Wireframing & Prototyping Quiz',
       category: 'UI/UX Design',
       badge: 'Intermediate',
-      badgeColor: '#D97706', // Yellow
+      badgeColor: '#D97706',
       badgeBg: '#FEF3C7',
       icon: 'ruler-outline',
       iconBg: '#EA580C',
@@ -217,118 +152,27 @@ export default function TestsScreen() {
     }
   ];
 
-  // Materials for the selected course, filtered by search.
-  // Uses partial matching so "Java" matches "Java Full Stack Development" and vice versa.
-  const currentMaterialsList = selectedCourseForMaterials
-    ? allMaterials.filter(m => {
-        const matCourse = (m.course ?? '').toLowerCase().trim();
-        const selCourse = selectedCourseForMaterials.toLowerCase().trim();
-        // match if either string contains the other
-        const courseMatch = matCourse === selCourse
-          || matCourse.includes(selCourse)
-          || selCourse.includes(matCourse);
-        const q = materialSearchQuery.toLowerCase();
-        if (!q) return courseMatch;
-        return courseMatch && (
-          m.title?.toLowerCase().includes(q) ||
-          m.description?.toLowerCase().includes(q) ||
-          m.batch?.toLowerCase().includes(q)
-        );
-      })
-    : [];
-
-  const handleDeleteTest = async (testId: string) => {
-    const confirmDelete = async () => {
-      try {
-        const stored = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
-        if (stored) {
-          const testsArr = JSON.parse(stored);
-          const updatedArr = testsArr.filter((t: any) => t.id !== testId);
-          await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(updatedArr));
-          setPublishedTests(updatedArr);
-          Alert.alert('Success', 'Test deleted successfully');
-        }
-      } catch (err) {
-        console.error('Failed to delete test:', err);
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to delete this test?')) {
-        confirmDelete();
-      }
-    } else {
-      Alert.alert(
-        'Delete Test',
-        'Are you sure you want to delete this test?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-        ]
-      );
-    }
-  };
-
-  const handleBackAction = () => {
-    if (activeTab === 'StudyMaterial') {
-      setSelectedCourseForMaterials(null);
-      setMaterialSearchQuery('');
-    }
-  };
-
-  const isDetailActive = false;
-
-  // ── When a course is selected → show CourseTopicsScreen (topics → materials) ──
-  if (activeTab === 'StudyMaterial' && selectedCourseForMaterials !== null) {
-    const courseMaterials = allMaterials.filter(m => {
-      const mat = (m.course ?? '').toLowerCase().trim();
-      const sel = selectedCourseForMaterials.toLowerCase().trim();
-      return mat === sel || mat.includes(sel) || sel.includes(mat);
-    });
-    return (
-      <CourseTopicsScreen
-        courseTitle={selectedCourseForMaterials}
-        materials={courseMaterials as any}
-        onBack={() => {
-          setSelectedCourseForMaterials(null);
-          setMaterialSearchQuery('');
-        }}
-      />
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* 1. HEADER */}
       <View style={styles.header}>
         <View style={{ width: '100%', paddingHorizontal: 4 }}>
           <View style={styles.headerTopRow}>
-            {isDetailActive ? (
-              <TouchableOpacity style={styles.backButton} onPress={handleBackAction}>
-                <Ionicons name="arrow-back" size={24} color="#FFF" />
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.logoText}>
-                NE<Text style={styles.logoTextGold}>X</Text>US
-              </Text>
-            )}
+            <Text style={styles.logoText}>
+              NE<Text style={styles.logoTextGold}>X</Text>US
+            </Text>
             <View style={styles.headerIcons}>
               <TouchableOpacity style={styles.iconButton}>
                 <Ionicons name="book-outline" size={22} color="#FFF" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.iconButton}>
                 <Ionicons name="notifications-outline" size={22} color="#FFF" />
-                <View style={styles.badgeDot} />
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.headerTitle}>
-            {activeTab === 'MCQ' ? 'Tests & Assessments' : 'Study Materials'}
-          </Text>
+          <Text style={styles.headerTitle}>Tests & Assessments</Text>
           <Text style={styles.headerSubtitle}>
-            {activeTab === 'MCQ' 
-              ? 'Test your knowledge and track your progress' 
-              : 'Access notes, slides, and resources'}
+            Test your knowledge and track your progress
           </Text>
         </View>
       </View>
@@ -338,47 +182,8 @@ export default function TestsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 2. SUB-TAB SELECTOR */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'MCQ' && styles.activeTabButton]}
-            onPress={() => {
-              setActiveTab('MCQ');
-            }}
-          >
-            <View style={styles.tabButtonContent}>
-              <Text style={[styles.tabButtonText, activeTab === 'MCQ' && styles.activeTabButtonText]}>
-                MCQ Test
-              </Text>
-              <View style={styles.redDot} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'StudyMaterial' && styles.activeTabButton]}
-            onPress={() => {
-              setActiveTab('StudyMaterial');
-              setSelectedCourseForMaterials(null);
-              setMaterialSearchQuery('');
-            }}
-          >
-            <View style={styles.tabButtonContent}>
-              <Ionicons
-                name="book-outline"
-                size={16}
-                color={activeTab === 'StudyMaterial' ? '#FFF' : '#6B7280'}
-              />
-              <Text style={[styles.tabButtonText, activeTab === 'StudyMaterial' && styles.activeTabButtonText]}>
-                Study Material
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* 3. DYNAMIC CONTENT VIEW */}
-        {activeTab === 'MCQ' ? (
-          // MCQ & PDF TEST FLOW
-          <View style={styles.listContainer}>
+        {/* 2. TESTS CONTENT VIEW */}
+        <View style={styles.listContainer}>
             {(() => {
               const allTestList = [
                 ...publishedTests.map(pt => ({
@@ -508,42 +313,6 @@ export default function TestsScreen() {
               });
             })()}
           </View>
-        ) : (
-          // STUDY MATERIAL FLOW — only course list shown here;
-          // tapping a course renders CourseTopicsScreen (above, before this return)
-          <View style={styles.listContainer}>
-            {enrollmentsLoading ? (
-              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                <ActivityIndicator size="large" color="#7B2CBF" />
-                <Text style={styles.noDataText}>Loading your courses...</Text>
-              </View>
-            ) : enrollments.length === 0 ? (
-              <Text style={styles.noDataText}>You are not enrolled in any courses yet.</Text>
-            ) : (
-              enrollments.map((enr) => (
-                <TouchableOpacity
-                  key={enr.id}
-                  style={styles.courseCard}
-                  onPress={() => setSelectedCourseForMaterials(enr.courseTitle)}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.courseInfo}>
-                    <Text style={styles.courseTitle}>{enr.courseTitle}</Text>
-                    {enr.enrollmentDate ? (
-                      <View style={styles.courseScheduleRow}>
-                        <Ionicons name="calendar-outline" size={14} color="#E9D5FF" />
-                        <Text style={styles.courseScheduleText}>Enrolled: {enr.enrollmentDate}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.courseArrowBtn}>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-        )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
