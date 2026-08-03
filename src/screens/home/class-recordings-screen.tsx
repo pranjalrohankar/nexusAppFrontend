@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,12 +11,38 @@ import {
   Modal,
   useWindowDimensions,
   PanResponder,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Linking from 'expo-linking';
 import { api, getApiBaseUrl } from '@/services/api';
+import { parseSyllabus } from '@/utils/syllabus-parser';
+
+function normalizeModString(str: string): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[\:\–\—\-\|]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getModuleNumber(str: string): string | null {
+  const match = str.match(/module\s*(\d+)/i);
+  return match ? match[1] : null;
+}
+
+function findCanonicalModuleTitle(rawModName: string, adminModuleTitles: string[]): string {
+  if (!rawModName) return adminModuleTitles[0] || 'Module 1';
+  const normMat = normalizeModString(rawModName);
+  const matNum = getModuleNumber(rawModName);
+
+  for (const adminTitle of adminModuleTitles) {
+    const normAdmin = normalizeModString(adminTitle);
+    const adminNum = getModuleNumber(adminTitle);
+    if (normMat === normAdmin) return adminTitle;
+    if (matNum && adminNum && matNum === adminNum) return adminTitle;
+  }
+  return rawModName;
+}
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -509,12 +535,38 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedBatch, setSelectedBatch] = useState('All');
   const [recordings, setRecordings] = useState<RecordingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
+  const [coursesMap, setCoursesMap] = useState<Record<string, string[]>>({});
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
 
-  useEffect(() => { loadRecordings(); }, []);
+  useEffect(() => {
+    loadRecordings();
+    loadCoursesSyllabus();
+  }, []);
+
+  const loadCoursesSyllabus = async () => {
+    try {
+      const res = await api.getAllCourses();
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      const map: Record<string, string[]> = {};
+      list.forEach((c: any) => {
+        const rawSyl = c.syllabusTopics || c.syllabus || c.whatYouWillLearn || '';
+        if (c.title && rawSyl) {
+          const parsed = parseSyllabus(rawSyl);
+          if (parsed && parsed.length > 0) {
+            map[c.title.trim().toLowerCase()] = parsed.map((m, idx) =>
+              m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+            );
+          }
+        }
+      });
+      setCoursesMap(map);
+    } catch {}
+  };
 
   const loadRecordings = async () => {
     try {
@@ -533,13 +585,67 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
 
   const filterCategories = ['All', ...Array.from(new Set(recordings.map(r => r.course).filter(Boolean)))];
 
-  const filtered = recordings.filter(rec => {
-    const q = searchQuery.toLowerCase();
-    return (
-      (rec.title.toLowerCase().includes(q) || rec.course.toLowerCase().includes(q) || rec.batch.toLowerCase().includes(q)) &&
-      (selectedCategory === 'All' || rec.course === selectedCategory)
-    );
-  });
+  const availableBatches = useMemo(() => {
+    const list = ['All'];
+    recordings.forEach(r => {
+      if (r.batch && !list.includes(r.batch)) list.push(r.batch);
+    });
+    return list;
+  }, [recordings]);
+
+  const filteredRecordings = useMemo(() => {
+    return recordings.filter(rec => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q ||
+        rec.title.toLowerCase().includes(q) ||
+        rec.course.toLowerCase().includes(q) ||
+        rec.batch.toLowerCase().includes(q);
+      const matchesCategory = selectedCategory === 'All' || rec.course === selectedCategory;
+      const matchesBatch = selectedBatch === 'All' || rec.batch === selectedBatch;
+      return matchesSearch && matchesCategory && matchesBatch;
+    });
+  }, [recordings, searchQuery, selectedCategory, selectedBatch]);
+
+  const groupedModules = useMemo(() => {
+    const groups: { moduleTitle: string; recordings: RecordingItem[] }[] = [];
+    const moduleMap = new Map<string, RecordingItem[]>();
+
+    const targetCourses = selectedCategory === 'All'
+      ? Array.from(new Set([...Object.keys(coursesMap), ...recordings.map(r => r.course.trim().toLowerCase()).filter(Boolean)]))
+      : [selectedCategory.trim().toLowerCase()];
+
+    const adminModuleTitles: string[] = [];
+    targetCourses.forEach(c => {
+      const titles = coursesMap[c] ?? [];
+      titles.forEach(t => {
+        if (!adminModuleTitles.includes(t)) adminModuleTitles.push(t);
+      });
+    });
+
+    if (adminModuleTitles.length === 0) {
+      adminModuleTitles.push('Module 1: General Sessions');
+    }
+
+    adminModuleTitles.forEach(t => moduleMap.set(t, []));
+
+    filteredRecordings.forEach(rec => {
+      const titleModMatch = rec.title.match(/\[(.*?)\]/);
+      const rawMod = titleModMatch ? titleModMatch[1] : (rec.title || 'Module 1');
+      const canonical = findCanonicalModuleTitle(rawMod, adminModuleTitles);
+      const key = canonical || adminModuleTitles[0];
+
+      if (!moduleMap.has(key)) moduleMap.set(key, []);
+      moduleMap.get(key)!.push(rec);
+    });
+
+    moduleMap.forEach((recs, title) => {
+      if (recs.length > 0 || selectedCategory !== 'All') {
+        groups.push({ moduleTitle: title, recordings: recs });
+      }
+    });
+
+    return groups;
+  }, [filteredRecordings, coursesMap, selectedCategory, recordings]);
 
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
@@ -578,6 +684,8 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Course Filters */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -594,68 +702,121 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* Batch Filters */}
+          {availableBatches.length > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.chipsContent}
+              style={{ marginTop: 8 }}
+            >
+              {availableBatches.map(b => (
+                <TouchableOpacity
+                  key={b}
+                  style={[s.batchChip, selectedBatch === b && s.batchChipActive]}
+                  onPress={() => setSelectedBatch(b)}
+                >
+                  <Text style={[s.batchChipText, selectedBatch === b && s.batchChipTextActive]}>
+                    {b === 'All' ? 'All Batches' : b}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
-        {/* Cards */}
-        <View style={[s.listContainer, isDesktop && s.listDesktop]}>
+        {/* Module Accordion Cards */}
+        <View style={s.modulesList}>
           {loading ? (
-            <Text style={s.emptyText}>Loading recordings...</Text>
-          ) : filtered.length === 0 ? (
+            <ActivityIndicator size="large" color="#7B2CBF" style={{ marginTop: 40 }} />
+          ) : groupedModules.length === 0 ? (
             <View style={s.emptyContainer}>
               <Ionicons name="videocam-off-outline" size={48} color="#9CA3AF" />
               <Text style={s.emptyText}>No recordings found</Text>
               <Text style={s.emptySubtext}>Try adjusting your search or filters.</Text>
             </View>
           ) : (
-            filtered.map((rec, idx) => (
-              <View key={rec.id} style={[s.card, isDesktop && s.cardDesktop]}>
-                <View style={s.cardHeader}>
-                  <View style={s.thumbnail}>
-                    <View style={s.playCircle}>
-                      <Ionicons name="play" size={14} color="#1F2937" style={{ marginLeft: 2 }} />
-                    </View>
-                    <View style={[s.thumbnailBadge, { backgroundColor: THEME_COLORS[idx % THEME_COLORS.length] }]} />
-                  </View>
+            groupedModules.map((group) => {
+              const isExpanded = expandedModules[group.moduleTitle] !== false;
+              const cleanTitle = group.moduleTitle.replace(/^\[|\]$/g, '');
 
-                  <View style={s.cardInfo}>
-                    <Text style={s.cardTitle} numberOfLines={2}>{rec.title}</Text>
-                    <View style={s.catRow}>
-                      <Ionicons name="book-outline" size={12} color="#7B2CBF" />
-                      <Text style={s.catText}>{rec.course}</Text>
-                    </View>
-                    <View style={s.statsRow}>
-                      {(rec.classDate || rec.uploadedAt) && (
-                        <View style={s.statItem}>
-                          <Ionicons name="calendar-outline" size={12} color="#6B7280" />
-                          <Text style={s.statText}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
-                        </View>
-                      )}
-                      {rec.duration && (
-                        <View style={s.statItem}>
-                          <Ionicons name="time-outline" size={12} color="#6B7280" />
-                          <Text style={s.statText}>{rec.duration}</Text>
-                        </View>
-                      )}
-                      <View style={s.statItem}>
-                        <Ionicons name="people-outline" size={12} color="#6B7280" />
-                        <Text style={s.statText}>{rec.batch}</Text>
+              return (
+                <View key={group.moduleTitle} style={s.moduleAccordion}>
+                  <TouchableOpacity
+                    style={s.moduleAccordionHeader}
+                    activeOpacity={0.8}
+                    onPress={() => setExpandedModules(prev => ({ ...prev, [group.moduleTitle]: !isExpanded }))}
+                  >
+                    <View style={s.moduleHeaderLeft}>
+                      <View style={s.moduleIconBadge}>
+                        <Ionicons name="videocam-outline" size={18} color="#7B2CBF" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.moduleHeaderTitle} numberOfLines={1}>{cleanTitle}</Text>
+                        <Text style={s.moduleHeaderSub}>{group.recordings.length} {group.recordings.length === 1 ? 'session' : 'sessions'}</Text>
                       </View>
                     </View>
-                  </View>
-                </View>
-
-                <View style={s.cardFooter}>
-                  <TouchableOpacity
-                    style={s.watchNowBtn}
-                    activeOpacity={0.8}
-                    onPress={() => { setPreviewTitle(rec.title); setPreviewUri(getStreamUrl(rec.id)); }}
-                  >
-                    <Ionicons name="play" size={14} color="#FFF" />
-                    <Text style={s.watchNowText}>Watch Now</Text>
+                    <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color="#6B7280" />
                   </TouchableOpacity>
+
+                  {isExpanded && (
+                    <View style={[s.listContainer, isDesktop && s.listDesktop, { marginTop: 12, paddingHorizontal: 12, paddingBottom: 12 }]}>
+                      {group.recordings.length === 0 ? (
+                        <Text style={s.noRecordingsText}>No recordings uploaded for this module yet.</Text>
+                      ) : (
+                        group.recordings.map((rec, idx) => {
+                          const displayTitle = rec.title.replace(/\[.*?\]\s*/, '');
+                          return (
+                            <View key={rec.id} style={[s.card, isDesktop && s.cardDesktop]}>
+                              <View style={s.cardHeader}>
+                                <View style={s.thumbnail}>
+                                  <View style={s.playCircle}>
+                                    <Ionicons name="play" size={14} color="#1F2937" style={{ marginLeft: 2 }} />
+                                  </View>
+                                  <View style={[s.thumbnailBadge, { backgroundColor: THEME_COLORS[idx % THEME_COLORS.length] }]} />
+                                </View>
+
+                                <View style={s.cardInfo}>
+                                  <Text style={s.cardTitle} numberOfLines={2}>{displayTitle || rec.title}</Text>
+                                  <View style={s.catRow}>
+                                    <Ionicons name="book-outline" size={12} color="#7B2CBF" />
+                                    <Text style={s.catText}>{rec.course}</Text>
+                                  </View>
+                                  <View style={s.statsRow}>
+                                    {(rec.classDate || rec.uploadedAt) && (
+                                      <View style={s.statItem}>
+                                        <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                                        <Text style={s.statText}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
+                                      </View>
+                                    )}
+                                    <View style={s.statItem}>
+                                      <Ionicons name="people-outline" size={12} color="#6B7280" />
+                                      <Text style={s.statText}>{rec.batch}</Text>
+                                    </View>
+                                  </View>
+                                </View>
+                              </View>
+
+                              <View style={s.cardFooter}>
+                                <TouchableOpacity
+                                  style={s.watchNowBtn}
+                                  activeOpacity={0.8}
+                                  onPress={() => { setPreviewTitle(displayTitle || rec.title); setPreviewUri(getStreamUrl(rec.id)); }}
+                                >
+                                  <Ionicons name="play" size={14} color="#FFF" />
+                                  <Text style={s.watchNowText}>Watch Now</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })
+                      )}
+                    </View>
+                  )}
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
         <View style={{ height: 100 }} />
@@ -728,6 +889,46 @@ const s = StyleSheet.create({
   chipActive: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
   chipText: { fontSize: 12, fontWeight: '600', color: '#4B5563' },
   chipTextActive: { color: '#fff' },
+
+  batchChip: {
+    paddingVertical: 6, paddingHorizontal: 12,
+    borderRadius: 14, backgroundColor: '#F9FAFB',
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  batchChipActive: { backgroundColor: '#F3E8FF', borderColor: '#7B2CBF' },
+  batchChipText: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
+  batchChipTextActive: { color: '#7B2CBF', fontWeight: '700' },
+
+  modulesList: { gap: 16 },
+  moduleAccordion: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  moduleAccordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#FAF5FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+  },
+  moduleHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  moduleIconBadge: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center',
+  },
+  moduleHeaderTitle: { fontSize: 15, fontWeight: '700', color: '#1F2937' },
+  moduleHeaderSub: { fontSize: 12, color: '#7B2CBF', marginTop: 2, fontWeight: '500' },
+  noRecordingsText: { fontSize: 13, color: '#9CA3AF', fontStyle: 'italic', paddingVertical: 12 },
 
   listContainer: { gap: 16 },
   listDesktop: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },

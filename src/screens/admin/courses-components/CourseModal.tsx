@@ -16,12 +16,12 @@ import { CourseSyllabusBuilder } from './CourseSyllabusBuilder';
 interface CourseModalProps {
   isVisible: boolean;
   selectedCourse: Course | null;
-  teachers: Teacher[];
+  teachers?: Teacher[];
   formData: CourseFormData;
-  showInstructorDropdown: boolean;
+  showInstructorDropdown?: boolean;
   onClose: () => void;
   onUpdateField: <K extends keyof CourseFormData>(key: K, value: CourseFormData[K]) => void;
-  onToggleDropdown: () => void;
+  onToggleDropdown?: () => void;
   onSubmit: () => void;
 }
 
@@ -67,44 +67,6 @@ export const CourseModal = React.memo(({
                 placeholder="e.g. Full Stack Web Development"
                 placeholderTextColor="#9CA3AF"
               />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Instructor *</Text>
-              <TouchableOpacity style={styles.dropdown} onPress={onToggleDropdown}>
-                <Ionicons name="person-outline" size={16} color="#9CA3AF" />
-                <Text style={[styles.dropdownText, !formData.instructor && styles.dropdownPlaceholder]}>
-                  {formData.instructor || 'Select Instructor'}
-                </Text>
-                <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-              </TouchableOpacity>
-              {showInstructorDropdown && (
-                <View style={styles.dropdownList}>
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
-                    {teachers.length === 0 ? (
-                      <View style={styles.dropdownItem}>
-                        <Text style={{ color: '#9CA3AF' }}>No teachers available</Text>
-                      </View>
-                    ) : (
-                      teachers.map((t) => (
-                        <TouchableOpacity
-                          key={t.id}
-                          style={styles.dropdownItem}
-                          onPress={() => {
-                            onUpdateField('instructor', t.name);
-                            onToggleDropdown();
-                          }}
-                        >
-                          <Text>{t.name}</Text>
-                          {formData.instructor === t.name && (
-                            <Ionicons name="checkmark" size={18} color="#7B2CBF" />
-                          )}
-                        </TouchableOpacity>
-                      ))
-                    )}
-                  </ScrollView>
-                </View>
-              )}
             </View>
 
             <View style={styles.formGroup}>

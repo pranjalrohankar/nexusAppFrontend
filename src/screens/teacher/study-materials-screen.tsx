@@ -111,10 +111,13 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
   // Module Selection State
   const [selectedModule, setSelectedModule] = useState(DEFAULT_MODULE_OPTIONS[0]);
-  const [customModuleName, setCustomModuleName] = useState('');
-  const [isCustomModule, setIsCustomModule] = useState(false);
   const [showModuleDropdown, setShowModuleDropdown] = useState(false);
   const [availableModules, setAvailableModules] = useState<string[]>(DEFAULT_MODULE_OPTIONS);
+
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [topicOptions, setTopicOptions] = useState<string[]>([]);
+  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
+  const [courseModuleTopicsMap, setCourseModuleTopicsMap] = useState<Record<string, Record<string, string[]>>>({});
 
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
@@ -166,26 +169,36 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     setBatchOptions([]);
     setShowCourseDropdown(false);
 
-    // Extract modules added by admin for selected course
+    // Extract modules and topics added by admin for selected course
     const courseObj = courseOptions.find(c => c.title === selectedCourseName);
     let adminMods: string[] = [];
+    const topicsMap: Record<string, string[]> = {};
+
     if (courseObj && courseObj.syllabusTopics) {
       const parsedMods = parseSyllabus(courseObj.syllabusTopics);
       if (parsedMods && parsedMods.length > 0) {
-        adminMods = parsedMods.map((m, idx) =>
-          m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
-        );
+        parsedMods.forEach((m, idx) => {
+          const modTitle = m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`;
+          adminMods.push(modTitle);
+          topicsMap[modTitle.toLowerCase()] = m.topics || [];
+          topicsMap[m.title.toLowerCase()] = m.topics || [];
+        });
       }
     }
 
+    setCourseModuleTopicsMap(prev => ({ ...prev, [selectedCourseName.toLowerCase()]: topicsMap }));
+
     if (adminMods.length > 0) {
       setAvailableModules(adminMods);
-      setSelectedModule(adminMods[0]); // Module 1 selected by default
-      setIsCustomModule(false);
+      setSelectedModule(adminMods[0]);
+      const initialTopics = topicsMap[adminMods[0].toLowerCase()] || [];
+      setTopicOptions(initialTopics);
+      setSelectedTopic('');
     } else {
       setAvailableModules(DEFAULT_MODULE_OPTIONS);
-      setSelectedModule(DEFAULT_MODULE_OPTIONS[0]); // Module 1 selected by default
-      setIsCustomModule(false);
+      setSelectedModule(DEFAULT_MODULE_OPTIONS[0]);
+      setTopicOptions([]);
+      setSelectedTopic('');
     }
 
     try {
@@ -194,6 +207,17 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     } catch (e) {
       console.error('Failed to load batches for course', e);
     }
+  };
+
+  const handleModuleSelectInForm = (modTitle: string) => {
+    setSelectedModule(modTitle);
+    setShowModuleDropdown(false);
+    setSelectedTopic('');
+
+    const normCourse = course.trim().toLowerCase();
+    const courseTopics = courseModuleTopicsMap[normCourse] || {};
+    const topics = courseTopics[modTitle.toLowerCase()] || [];
+    setTopicOptions(topics);
   };
 
   const loadMaterials = async () => {
@@ -297,8 +321,6 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     setDescription('');
     setSelectedFile(null);
     setFileType('PDF');
-    setIsCustomModule(false);
-    setCustomModuleName('');
 
     // Determine Default Course (active selected course card or first assigned course)
     let initialCourse = '';
@@ -385,8 +407,8 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   const resetForm = () => {
     setTitle(''); setDescription(''); setSelectedFile(null);
     setCourse(''); setBatch(''); setBatchOptions([]); setFileType('PDF');
-    setSelectedModule(DEFAULT_MODULE_OPTIONS[0]); setCustomModuleName(''); setIsCustomModule(false);
-    setShowCourseDropdown(false); setShowBatchDropdown(false); setShowModuleDropdown(false);
+    setSelectedModule(DEFAULT_MODULE_OPTIONS[0]); setSelectedTopic(''); setTopicOptions([]);
+    setShowCourseDropdown(false); setShowBatchDropdown(false); setShowModuleDropdown(false); setShowTopicDropdown(false);
   };
 
   const handleUploadMaterial = async () => {
@@ -394,20 +416,21 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     if (!course.trim()) return Alert.alert('Error', 'Please select course');
     if (!batch.trim()) return Alert.alert('Error', 'Please select batch');
 
-    const uploadTitle = title.trim() || selectedFile.name || 'Study Material';
-    const finalModule = isCustomModule ? (customModuleName.trim() || 'Custom Module') : selectedModule;
+    const topicText = selectedTopic.trim();
+    const uploadTitle = title.trim() || topicText || selectedFile.name || 'Study Material';
+    const finalModule = selectedModule;
 
     try {
       const fileBlob = await (await fetch(selectedFile.uri)).blob();
       const formData = new FormData();
       formData.append('file', fileBlob, selectedFile.name || 'material');
       formData.append('title', uploadTitle);
-      formData.append('description', description.trim());
+      formData.append('description', topicText ? `Topic: ${topicText}\n${description.trim()}` : description.trim());
       formData.append('course', course.trim());
       formData.append('batch', batch.trim());
       formData.append('moduleName', finalModule);
       formData.append('module', finalModule);
-      formData.append('topic', finalModule);
+      formData.append('topic', topicText || finalModule);
       formData.append('fileType', fileType);
 
       const res = await api.uploadStudyMaterial(formData);
@@ -840,40 +863,38 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
               </View>
 
               {/* MODULE CHECKLIST DROPDOWN SELECTOR (ADMIN MODULES) */}
-              <Text style={styles.label}>Module / Syllabus Unit <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.label}>Module <Text style={styles.required}>*</Text></Text>
               <TouchableOpacity
                 style={styles.dropdownButton}
                 onPress={() => {
                   setShowModuleDropdown(p => !p);
                   setShowCourseDropdown(false);
                   setShowBatchDropdown(false);
+                  setShowTopicDropdown(false);
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                   <Ionicons name="checkbox" size={18} color="#7B2CBF" />
                   <Text style={[styles.dropdownText, !selectedModule && styles.dropdownPlaceholder]} numberOfLines={1}>
-                    {isCustomModule ? (customModuleName || 'Custom Module Name...') : selectedModule}
+                    {selectedModule}
                   </Text>
                 </View>
                 <Ionicons name={showModuleDropdown ? "chevron-up" : "chevron-down"} size={16} color="#64748B" />
               </TouchableOpacity>
 
-              {/* INLINE CHECKLIST CONTAINER — Never overlays or clips at bottom! */}
+              {/* INLINE MODULE CHECKLIST CONTAINER */}
               {showModuleDropdown && (
                 <View style={styles.inlineChecklistContainer}>
                   <Text style={styles.checklistInstructionText}>
-                    Select module added by Admin (Module 1 selected by default):
+                    Select module added by Admin:
                   </Text>
                   {availableModules.map(mod => {
-                    const isChecked = !isCustomModule && selectedModule === mod;
+                    const isChecked = selectedModule === mod;
                     return (
                       <TouchableOpacity
                         key={mod}
                         style={[styles.checkboxOptionRow, isChecked && styles.checkboxOptionRowSelected]}
-                        onPress={() => {
-                          setSelectedModule(mod);
-                          setIsCustomModule(false);
-                        }}
+                        onPress={() => handleModuleSelectInForm(mod)}
                       >
                         <Ionicons
                           name={isChecked ? "checkbox" : "square-outline"}
@@ -887,33 +908,63 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                       </TouchableOpacity>
                     );
                   })}
-
-                  {/* Custom option */}
-                  <TouchableOpacity
-                    style={[styles.checkboxOptionRow, isCustomModule && styles.checkboxOptionRowSelected]}
-                    onPress={() => setIsCustomModule(true)}
-                  >
-                    <Ionicons
-                      name={isCustomModule ? "checkbox" : "square-outline"}
-                      size={20}
-                      color={isCustomModule ? "#7B2CBF" : "#94A3B8"}
-                      style={{ marginRight: 10 }}
-                    />
-                    <Text style={[styles.checkboxOptionLabel, isCustomModule && styles.checkboxOptionLabelSelected]}>
-                      Enter Custom Module Name...
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               )}
 
-              {isCustomModule && (
+              {/* TOPIC HYBRID INPUT & DROPDOWN */}
+              <Text style={[styles.label, { marginTop: 14 }]}>Topic / Title</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <TextInput
-                  style={[styles.input, { marginTop: 8 }]}
-                  placeholder="Enter custom module name (e.g. Module 6: Special Topics)"
+                  style={[
+                    styles.input,
+                    { flex: 1, marginBottom: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+                    !selectedModule && styles.dropdownDisabled
+                  ]}
+                  placeholder={selectedModule ? 'Select or type Topic...' : 'Module first'}
                   placeholderTextColor="#94A3B8"
-                  value={customModuleName}
-                  onChangeText={setCustomModuleName}
+                  value={selectedTopic}
+                  onChangeText={setSelectedTopic}
+                  editable={!!selectedModule}
                 />
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownButton,
+                    { width: 44, paddingHorizontal: 0, justifyContent: 'center', alignItems: 'center', marginBottom: 0, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 },
+                    !selectedModule && styles.dropdownDisabled
+                  ]}
+                  onPress={() => {
+                    if (!selectedModule) return;
+                    setShowTopicDropdown(p => !p);
+                    setShowCourseDropdown(false);
+                    setShowBatchDropdown(false);
+                    setShowModuleDropdown(false);
+                  }}
+                >
+                  <Ionicons name={showTopicDropdown ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              {showTopicDropdown && (
+                <View style={[styles.inlineChecklistContainer, { marginTop: -10, marginBottom: 14 }]}>
+                  {topicOptions.length === 0 ? (
+                    <Text style={styles.checklistInstructionText}>Type custom topic or select</Text>
+                  ) : (
+                    topicOptions.map((top, idx) => (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[styles.checkboxOptionRow, selectedTopic === top && styles.checkboxOptionRowSelected]}
+                        onPress={() => {
+                          setSelectedTopic(top);
+                          setShowTopicDropdown(false);
+                        }}
+                      >
+                        <Text style={[styles.checkboxOptionLabel, selectedTopic === top && styles.checkboxOptionLabelSelected]}>
+                          {top}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
               )}
 
               <Text style={styles.label}>File Type</Text>

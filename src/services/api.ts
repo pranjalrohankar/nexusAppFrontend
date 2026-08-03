@@ -350,7 +350,7 @@ export const api = {
   getStudentUpcomingClasses: () => get('/student/upcoming-classes'),
   getStudentNotifications: () => get('/notifications/student'),
   markAllStudentNotificationsRead: () => patch('/notifications/student/mark-all-read'),
-  getStudentMarks: (studentId: string | number) => get(`/student/${studentId}/marks`),
+  getStudentMarks: (studentId: string | number) => get(`/test-attempts/student/${studentId}`),
   getStudentsByCourse: (course: string) => get(`/admin/students?course=${encodeURIComponent(course)}`),
   getMaterialDownloadUrl: (id: number | string) => `${getApiBaseUrl()}/materials/download/${id}`,
   setActivityStatus: (online: boolean) => put('/student/activity-status', { online }),

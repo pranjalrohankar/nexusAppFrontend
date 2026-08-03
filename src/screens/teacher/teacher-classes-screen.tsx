@@ -11,6 +11,8 @@ import { api } from '../../services/api';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { getCompletedTopicsForCourse, toggleTopicCompleted } from '../../utils/syllabus-progress-store';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 interface BatchItem {
   id: number;
   courseId?: number;
@@ -38,6 +40,7 @@ interface Student {
   paymentStatus: string;
   active: boolean;
   onlineStatus?: 'online' | 'offline' | 'always_online';
+  testScore?: number | null;
 }
 
 interface TeacherClassesScreenProps {
@@ -94,16 +97,21 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
       try {
         const res = await api.getBatchStudents(batch.id);
         const list = Array.isArray(res) ? res : (res?.data ?? []);
-        setStudents(list.map((s: any) => ({
-          id: String(s.id ?? s.enrollmentId ?? Math.random()),
-          name: s.name || s.studentName || '—',
-          email: s.email || s.studentEmail || '—',
-          phone: s.phone || s.studentPhone || '—',
-          enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
-          paymentStatus: s.paymentStatus || '',
-          active: s.active ?? (s.paymentStatus === 'Paid'),
-          onlineStatus: s.onlineStatus,
-        })));
+        setStudents(prev => list.map((s: any) => {
+          const sId = String(s.id ?? s.enrollmentId ?? Math.random());
+          const existing = prev.find(p => p.id === sId || p.email === s.email);
+          return {
+            id: sId,
+            name: s.name || s.studentName || '—',
+            email: s.email || s.studentEmail || '—',
+            phone: s.phone || s.studentPhone || '—',
+            enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
+            paymentStatus: s.paymentStatus || '',
+            active: s.active ?? (s.paymentStatus === 'Paid'),
+            onlineStatus: s.onlineStatus,
+            testScore: existing?.testScore ?? null,
+          };
+        }));
       } catch {}
     }, 10000);
     return () => clearInterval(interval);
@@ -160,16 +168,80 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
     try {
       const res = await api.getBatchStudents(batchId);
       const list = Array.isArray(res) ? res : (res?.data ?? []);
-      setStudents(list.map((s: any) => ({
-        id: String(s.id ?? s.enrollmentId ?? Math.random()),
-        name: s.name || s.studentName || '—',
-        email: s.email || s.studentEmail || '—',
-        phone: s.phone || s.studentPhone || '—',
-        enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
-        paymentStatus: s.paymentStatus || '',
-        active: s.active ?? (s.paymentStatus === 'Paid'),
-        onlineStatus: s.onlineStatus,
-      })));
+
+      let localSubmissions: any[] = [];
+      try {
+        const storedStr = await AsyncStorage.getItem('NEXUS_TEST_SUBMISSIONS');
+        if (storedStr) localSubmissions = JSON.parse(storedStr);
+      } catch {}
+
+      const studentItems = await Promise.all(list.map(async (s: any) => {
+        const studentId = s.id ?? s.studentId ?? s.enrollmentId;
+        const sEmail = String(s.email || s.studentEmail || '').trim().toLowerCase();
+        const sName = String(s.name || s.studentName || '').trim().toLowerCase();
+        let testScore: number | null = s.testScore ?? s.score ?? null;
+
+        // 1. Check local submissions in AsyncStorage
+        const matchingSubs = localSubmissions.filter((sub: any) => {
+          const subEmail = String(sub.studentEmail || '').trim().toLowerCase();
+          const subName = String(sub.studentName || '').trim().toLowerCase();
+          return (sEmail && subEmail && sEmail === subEmail) ||
+                 (sName && subName && sName === subName);
+        });
+
+        if (matchingSubs.length > 0) {
+          let sumPct = 0;
+          let count = 0;
+          matchingSubs.forEach((sub: any) => {
+            const obt = Number(sub.obtainedMarks ?? sub.marks ?? sub.score ?? 0);
+            const tot = Number(sub.totalMarks ?? 100);
+            if (tot > 0) {
+              sumPct += (obt / tot) * 100;
+              count++;
+            }
+          });
+          if (count > 0) {
+            testScore = Math.round(sumPct / count);
+          }
+        }
+
+        // 2. Fall back to backend test attempts if testScore is still null
+        if (testScore === null && studentId) {
+          try {
+            const marksRes = await api.getStudentMarks(studentId);
+            const marksList = Array.isArray(marksRes?.data) ? marksRes.data : Array.isArray(marksRes) ? marksRes : [];
+            if (marksList.length > 0) {
+              let sumPct = 0;
+              let count = 0;
+              marksList.forEach((m: any) => {
+                const obt = Number(m.marksObtained ?? m.marks ?? m.score ?? 0);
+                const tot = Number(m.totalMarks ?? 100);
+                if (tot > 0) {
+                  sumPct += (obt / tot) * 100;
+                  count++;
+                }
+              });
+              if (count > 0) {
+                testScore = Math.round(sumPct / count);
+              }
+            }
+          } catch (err) {}
+        }
+
+        return {
+          id: String(s.id ?? s.enrollmentId ?? Math.random()),
+          name: s.name || s.studentName || '—',
+          email: s.email || s.studentEmail || '—',
+          phone: s.phone || s.studentPhone || '—',
+          enrollmentDate: s.enrollmentDate || s.joinedDate || s.createdAt || '',
+          paymentStatus: s.paymentStatus || '',
+          active: s.active ?? (s.paymentStatus === 'Paid'),
+          onlineStatus: s.onlineStatus,
+          testScore: testScore,
+        };
+      }));
+
+      setStudents(studentItems);
     } catch (e) {
       console.error('Failed to load students', e);
     } finally {
@@ -308,11 +380,6 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
               <Text style={[styles.metricVal, { color: '#10B981' }]}>{activeCount}</Text>
               <Text style={styles.metricLabel}>Active</Text>
             </View>
-            <View style={styles.metricDivider} />
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricVal, { color: '#F97316' }]}>83%</Text>
-              <Text style={styles.metricLabel}>Avg. Attendance</Text>
-            </View>
           </View>
 
           <Text style={styles.rosterTitle}>Students ({students.length})</Text>
@@ -375,33 +442,24 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                     <Text style={styles.contactText}>{s.phone}</Text>
                   </View>
 
-                  {/* Attendance + Progress bars */}
-                  <View style={styles.barsRow}>
-                    <View style={styles.barBlock}>
-                      <View style={styles.barLabelRow}>
-                        <Text style={styles.barLabel}>Attendance</Text>
-                        <Text style={[styles.barPct, { color: '#7B2CBF' }]}>92%</Text>
-                      </View>
-                      <View style={styles.barBg}>
-                        <View style={[styles.barFill, { width: '92%', backgroundColor: '#7B2CBF' }]} />
-                      </View>
+                  {/* Progress (Test Score) */}
+                  <View style={{ marginTop: 12 }}>
+                    <View style={styles.barLabelRow}>
+                      <Text style={styles.barLabel}>Progress (Test Score)</Text>
+                      <Text style={[styles.barPct, { color: s.testScore != null ? '#7B2CBF' : '#9CA3AF' }]}>
+                        {s.testScore != null ? `${s.testScore}%` : '0%'}
+                      </Text>
                     </View>
-                    <View style={styles.barBlock}>
-                      <View style={styles.barLabelRow}>
-                        <Text style={styles.barLabel}>Progress</Text>
-                        <Text style={[styles.barPct, { color: '#F97316' }]}>78%</Text>
-                      </View>
-                      <View style={styles.barBg}>
-                        <View style={[styles.barFill, { width: '78%', backgroundColor: '#F97316' }]} />
-                      </View>
+                    <View style={styles.barBg}>
+                      <View style={[
+                        styles.barFill,
+                        {
+                          width: `${s.testScore != null ? Math.min(Math.max(s.testScore, 0), 100) : 0}%`,
+                          backgroundColor: '#7B2CBF',
+                        }
+                      ]} />
                     </View>
                   </View>
-
-                  {/* Send Message */}
-                  <TouchableOpacity style={styles.messageBtn}>
-                    <Ionicons name="chatbubble-outline" size={14} color="#7B2CBF" />
-                    <Text style={styles.messageBtnText}>Send Message</Text>
-                  </TouchableOpacity>
                 </View>
               ))}
             </View>

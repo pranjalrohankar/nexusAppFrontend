@@ -4,7 +4,7 @@ export interface Course {
   id: string;
   title: string;
   category: string;
-  instructor: string;
+  instructor?: string;
   duration: string;
   studentsCount: number;
   maxCapacity: number;
@@ -29,7 +29,7 @@ export interface Teacher {
 export interface CourseFormData {
   title: string;
   category: string;
-  instructor: string;
+  instructor?: string;
   description: string;
   duration: string;
   totalSessions: string;

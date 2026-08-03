@@ -5,7 +5,7 @@ import CourseTopicsScreen from '@/screens/tests/Course-topics-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Dimensions,
   Modal,
@@ -22,10 +22,35 @@ import {
   ActivityIndicator,
   PanResponder,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { buildCourseDataFromDb } from '@/utils/syllabus-parser';
+import { parseSyllabus } from '@/utils/syllabus-parser';
+
+function normalizeModString(str: string): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[\:\–\—\-\|]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getModuleNumber(str: string): string | null {
+  const match = str.match(/module\s*(\d+)/i);
+  return match ? match[1] : null;
+}
+
+function findCanonicalModuleTitle(rawModName: string, adminModuleTitles: string[]): string {
+  if (!rawModName) return adminModuleTitles[0] || 'Module 1';
+  const normMat = normalizeModString(rawModName);
+  const matNum = getModuleNumber(rawModName);
+
+  for (const adminTitle of adminModuleTitles) {
+    const normAdmin = normalizeModString(adminTitle);
+    const adminNum = getModuleNumber(adminTitle);
+    if (normMat === normAdmin) return adminTitle;
+    if (matNum && adminNum && matNum === adminNum) return adminTitle;
+  }
+  return rawModName;
+}
 
 export const exploreCoursesList: ExploreCourseItem[] = [];
 
@@ -570,22 +595,81 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
   const [activeFilter, setActiveFilter] = useState('All');
   const [playUri, setPlayUri] = useState<string | null>(null);
   const [playTitle, setPlayTitle] = useState('');
+  const [coursesMap, setCoursesMap] = useState<Record<string, string[]>>({});
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     api.getStudentRecordings().then((data: any) => {
       setRecordings(Array.isArray(data) ? data : []);
     }).catch(() => { }).finally(() => setLoading(false));
+
+    api.getAllCourses().then((res: any) => {
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      const map: Record<string, string[]> = {};
+      list.forEach((c: any) => {
+        const rawSyl = c.syllabusTopics || c.syllabus || c.whatYouWillLearn || '';
+        if (c.title && rawSyl) {
+          const parsed = parseSyllabus(rawSyl);
+          if (parsed && parsed.length > 0) {
+            map[c.title.trim().toLowerCase()] = parsed.map((m, idx) =>
+              m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+            );
+          }
+        }
+      });
+      setCoursesMap(map);
+    }).catch(() => {});
   }, []);
 
-  // Filter chips = enrolled courses (not just courses that have recordings)
   const categories = ['All', ...enrolledCourses];
 
   const filtered = recordings.filter((r: any) => {
-    const q = search.toLowerCase();
-    const matchQ = r.title?.toLowerCase().includes(q) || r.course?.toLowerCase().includes(q);
+    const q = search.toLowerCase().trim();
+    const matchQ = !q || r.title?.toLowerCase().includes(q) || r.course?.toLowerCase().includes(q);
     const matchCat = activeFilter === 'All' || r.course === activeFilter;
     return matchQ && matchCat;
   });
+
+  const groupedModules = useMemo(() => {
+    const groups: { moduleTitle: string; recordings: any[] }[] = [];
+    const moduleMap = new Map<string, any[]>();
+
+    const targetCourses = activeFilter === 'All'
+      ? Array.from(new Set([...enrolledCourses.map(e => e.trim().toLowerCase()), ...Object.keys(coursesMap)]))
+      : [activeFilter.trim().toLowerCase()];
+
+    const adminModuleTitles: string[] = [];
+    targetCourses.forEach(c => {
+      const titles = coursesMap[c] ?? [];
+      titles.forEach(t => {
+        if (!adminModuleTitles.includes(t)) adminModuleTitles.push(t);
+      });
+    });
+
+    if (adminModuleTitles.length === 0) {
+      adminModuleTitles.push('Module 1: General Sessions');
+    }
+
+    adminModuleTitles.forEach(t => moduleMap.set(t, []));
+
+    filtered.forEach((rec: any) => {
+      const titleModMatch = (rec.title || '').match(/\[(.*?)\]/);
+      const rawMod = titleModMatch ? titleModMatch[1] : (rec.title || 'Module 1');
+      const canonical = findCanonicalModuleTitle(rawMod, adminModuleTitles);
+      const key = canonical || adminModuleTitles[0];
+
+      if (!moduleMap.has(key)) moduleMap.set(key, []);
+      moduleMap.get(key)!.push(rec);
+    });
+
+    moduleMap.forEach((recs, title) => {
+      if (recs.length > 0 || activeFilter !== 'All') {
+        groups.push({ moduleTitle: title, recordings: recs });
+      }
+    });
+
+    return groups;
+  }, [filtered, coursesMap, activeFilter, recordings, enrolledCourses]);
 
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -605,6 +689,7 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
           onChangeText={setSearch}
         />
       </View>
+
       {/* Filter chips — all enrolled courses */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
@@ -619,57 +704,87 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
           ))}
         </ScrollView>
       </View>
-      {/* Cards */}
+
+      {/* Module-wise Grouped Accordion List */}
       {loading ? (
         <ActivityIndicator color="#7B2CBF" style={{ marginVertical: 24 }} />
-      ) : filtered.length === 0 ? (
+      ) : groupedModules.length === 0 ? (
         <View style={rs.empty}>
           <Ionicons name="videocam-off-outline" size={36} color="#D1D5DB" />
           <Text style={rs.emptyText}>No recordings found</Text>
         </View>
       ) : (
-        filtered.map((rec: any) => {
-          const playVideo = () => {
-            setPlayTitle(rec.title);
-            const targetUri = rec.videoUrl ? resolveDynamicFileUrl(rec.videoUrl) : getStreamUrl(rec.id);
-            setPlayUri(targetUri);
-          };
+        groupedModules.map((group) => {
+          const isExpanded = expandedModules[group.moduleTitle] !== false;
+          const cleanTitle = group.moduleTitle.replace(/^\[|\]$/g, '');
+
           return (
-            <TouchableOpacity key={rec.id} style={rs.card} onPress={playVideo} activeOpacity={0.85}>
-              <View style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start' }}>
-                {/* Thumbnail — clickable video play icon */}
-                <TouchableOpacity style={rs.thumb} onPress={playVideo} activeOpacity={0.8}>
-                  <View style={rs.thumbInner}>
-                    <View style={rs.playCircle}>
-                      <Ionicons name="play" size={13} color="#7B2CBF" style={{ marginLeft: 2 }} />
-                    </View>
+            <View key={group.moduleTitle} style={rs.moduleAccordion}>
+              <TouchableOpacity
+                style={rs.moduleAccordionHeader}
+                activeOpacity={0.8}
+                onPress={() => setExpandedModules(prev => ({ ...prev, [group.moduleTitle]: !isExpanded }))}
+              >
+                <View style={rs.moduleHeaderLeft}>
+                  <View style={rs.moduleIconBadge}>
+                    <Ionicons name="videocam-outline" size={18} color="#7B2CBF" />
                   </View>
-                </TouchableOpacity>
-                {/* Info */}
-                <View style={{ flex: 1 }}>
-                  <Text style={rs.cardTitle} numberOfLines={2}>{rec.title}</Text>
-                  <Text style={rs.instructorText}>{rec.instructor || 'Instructor'}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 }}>
-                    <Ionicons name="grid-outline" size={11} color="#7B2CBF" />
-                    <Text style={rs.courseTag} numberOfLines={1}>{rec.course}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
-                    {(rec.classDate || rec.uploadedAt) && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                        <Ionicons name="calendar-outline" size={11} color="#6B7280" />
-                        <Text style={rs.meta}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
-                      </View>
-                    )}
-                    {rec.duration && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                        <Ionicons name="time-outline" size={11} color="#6B7280" />
-                        <Text style={rs.meta}>{rec.duration}</Text>
-                      </View>
-                    )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={rs.moduleHeaderTitle} numberOfLines={1}>{cleanTitle}</Text>
+                    <Text style={rs.moduleHeaderSub}>{group.recordings.length} {group.recordings.length === 1 ? 'session' : 'sessions'}</Text>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+                <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color="#6B7280" />
+              </TouchableOpacity>
+
+              {isExpanded && (
+                <View style={{ paddingHorizontal: 12, paddingBottom: 12, paddingTop: 10, gap: 10 }}>
+                  {group.recordings.length === 0 ? (
+                    <Text style={{ fontSize: 13, color: '#9CA3AF', fontStyle: 'italic', paddingVertical: 8 }}>
+                      No recordings uploaded for this module yet.
+                    </Text>
+                  ) : (
+                    group.recordings.map((rec: any) => {
+                      const displayTitle = (rec.title || '').replace(/\[.*?\]\s*/, '');
+                      const playVideo = () => {
+                        setPlayTitle(displayTitle || rec.title);
+                        const targetUri = rec.videoUrl ? resolveDynamicFileUrl(rec.videoUrl) : getStreamUrl(rec.id);
+                        setPlayUri(targetUri);
+                      };
+                      return (
+                        <TouchableOpacity key={rec.id} style={rs.card} onPress={playVideo} activeOpacity={0.85}>
+                          <View style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start' }}>
+                            <TouchableOpacity style={rs.thumb} onPress={playVideo} activeOpacity={0.8}>
+                              <View style={rs.thumbInner}>
+                                <View style={rs.playCircle}>
+                                  <Ionicons name="play" size={13} color="#7B2CBF" style={{ marginLeft: 2 }} />
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+                            <View style={{ flex: 1 }}>
+                              <Text style={rs.cardTitle} numberOfLines={2}>{displayTitle || rec.title}</Text>
+                              <Text style={rs.instructorText}>{rec.instructor || 'Instructor'}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 }}>
+                                <Ionicons name="grid-outline" size={11} color="#7B2CBF" />
+                                <Text style={rs.courseTag} numberOfLines={1}>{rec.course}</Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+                                {(rec.classDate || rec.uploadedAt) && (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                                    <Ionicons name="calendar-outline" size={11} color="#6B7280" />
+                                    <Text style={rs.meta}>{formatDate(rec.classDate || rec.uploadedAt)}</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </View>
+              )}
+            </View>
           );
         })
       )}
@@ -919,14 +1034,8 @@ function JoinClassSection({ enrollments }: { enrollments: Enrollment[] }) {
 
   return (
     <View style={styles.section}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <View style={{ marginBottom: 16 }}>
         <Text style={styles.sectionTitle}>Join Live Classes</Text>
-        {activeLiveClasses.length > 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' }} />
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#EF4444' }}>LIVE NOW</Text>
-          </View>
-        )}
       </View>
 
       {activeLiveClasses.length === 0 ? (
@@ -1080,7 +1189,29 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [allMaterials, setAllMaterials] = useState<any[]>([]);
   const [recordingsList, setRecordingsList] = useState<any[]>([]);
-  const [dbCoursesMap, setDbCoursesMap] = useState<Record<string, any>>({});
+  const [timeSpentSeconds, setTimeSpentSeconds] = useState<number>(0);
+
+  // Real-time tracking of overall hours spent on the application
+  useEffect(() => {
+    AsyncStorage.getItem('@nexus_student_app_time_spent_sec').then(val => {
+      if (val) {
+        const parsed = parseInt(val, 10);
+        if (!isNaN(parsed) && parsed > 0) setTimeSpentSeconds(parsed);
+      }
+    }).catch(() => {});
+
+    const timer = setInterval(() => {
+      setTimeSpentSeconds(prev => {
+        const nextSec = prev + 1;
+        if (nextSec % 5 === 0) {
+          AsyncStorage.setItem('@nexus_student_app_time_spent_sec', String(nextSec)).catch(() => {});
+        }
+        return nextSec;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     api.getActiveCourses().then((data: any) => {
@@ -1120,28 +1251,10 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
   };
 
   const computeHoursLearned = () => {
-    let totalMins = 0;
-    if (Array.isArray(recordingsList) && recordingsList.length > 0) {
-      recordingsList.forEach((r: any) => {
-        const durStr = (r.duration || '').toLowerCase();
-        const hourMatch = durStr.match(/(\d+(?:\.\d+)?)\s*(?:h|hour)/);
-        const minMatch = durStr.match(/(\d+)\s*(?:m|min)/);
-        if (hourMatch) totalMins += parseFloat(hourMatch[1]) * 60;
-        if (minMatch) totalMins += parseInt(minMatch[1], 10);
-        if (!hourMatch && !minMatch) {
-          const num = parseFloat(durStr);
-          if (!isNaN(num)) {
-            totalMins += num < 10 ? num * 60 : num;
-          }
-        }
-      });
-    }
-    if (totalMins === 0) {
-      const count = enrollments?.length || 1;
-      return String(count * 24);
-    }
-    const hours = (totalMins / 60).toFixed(1);
-    return hours.endsWith('.0') ? hours.slice(0, -2) : hours;
+    const hours = timeSpentSeconds / 3600;
+    if (hours < 0.1) return '0.1';
+    const formatted = hours.toFixed(1);
+    return formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted;
   };
 
   if (selectedCourseForMaterials !== null) {
@@ -1724,6 +1837,35 @@ const rs = StyleSheet.create({
   chipActive: { backgroundColor: '#7B2CBF', borderColor: '#7B2CBF' },
   chipText: { fontSize: 12, fontWeight: '600', color: '#4B5563' },
   chipTextActive: { color: '#FFF' },
+  moduleAccordion: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  moduleAccordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    backgroundColor: '#FAF5FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+  },
+  moduleHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  moduleIconBadge: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center',
+  },
+  moduleHeaderTitle: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+  moduleHeaderSub: { fontSize: 11, color: '#7B2CBF', marginTop: 1, fontWeight: '600' },
   card: {
     backgroundColor: '#FFF',
     borderRadius: 16,

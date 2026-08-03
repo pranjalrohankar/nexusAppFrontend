@@ -212,7 +212,7 @@ export default function AdminCoursesScreen() {
   }, []);
 
   const handleSaveCourse = useCallback(async () => {
-    if (!formData.title || !formData.instructor || !formData.capacity || !formData.price) {
+    if (!formData.title || !formData.capacity || !formData.price) {
       showToast('Please fill out all required fields.', 'error');
       return;
     }
@@ -232,7 +232,6 @@ export default function AdminCoursesScreen() {
     const payload: any = {
       title: formData.title,
       category: formData.category || null,
-      instructor: formData.instructor,
       description: formData.description || null,
       duration: formData.duration || null,
       totalSessions: formData.totalSessions ? Number(formData.totalSessions) : null,
