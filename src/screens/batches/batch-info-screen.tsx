@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -38,41 +38,10 @@ interface BatchInfoScreenProps {
 }
 
 export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: BatchInfoScreenProps) {
-  const defaultData = {
-    title: 'Data Science & Machine Learning',
-    subtitle: 'Batch A - Evening',
-    startDate: 'June 15, 2026',
-    duration: '3 Months',
-    classDays: ['Monday', 'Wednesday', 'Friday'],
-    classTiming: '8:00 PM - 10:00 PM',
-    mode: 'Live Online Classes (Google Meet)',
-    instructor: {
-      name: 'Priya Sharma',
-      title: 'M.Tech, Ph.D.',
-      initials: 'PS',
-      rating: '4.9',
-    },
-    syllabus: [
-      'Introduction to Data Science',
-      'Python for Data Analysis',
-      'Statistics & Probability',
-      'Machine Learning Fundamentals',
-      'Deep Learning & Neural Networks',
-      'Real-world Projects',
-    ],
-    whatYouGet: [
-      'Live Interactive Classes',
-      'Recorded Sessions Access',
-      'Lifetime Course Material',
-      'Doubt Clearing Sessions',
-      'Industry Projects',
-      'Placement Assistance',
-    ],
-    fees: '₹25,000',
-    installment: 'Installment Plan Available: ₹8,500 × 3 months',
-  };
+  const [fetchedSyllabus, setFetchedSyllabus] = useState<any>(null);
+  const [fetchedWhatYouGet, setFetchedWhatYouGet] = useState<string[]>([]);
 
-  const getBatchData = () => {
+  const data = useMemo(() => {
     if (!batch) {
       return {
         title: 'Enrolled Course',
@@ -82,12 +51,7 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
         classDays: ['Monday', 'Wednesday', 'Friday'],
         classTiming: '6:00 PM',
         mode: 'Live Online Classes (Google Meet)',
-        instructor: {
-          name: 'Expert Instructor',
-          title: 'Senior Instructor',
-          initials: 'EI',
-          rating: '4.9',
-        },
+        instructor: { name: 'Expert Instructor', title: 'Senior Instructor', initials: 'EI', rating: '4.9' },
         syllabus: [],
         whatYouGet: [],
         fees: '₹25,000',
@@ -105,42 +69,27 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
       const dayAbbrs = parts[0].split(', ');
       classDays = dayAbbrs.map((abbr: string) => {
         const mapping: Record<string, string> = {
-          'Mon': 'Monday',
-          'Tue': 'Tuesday',
-          'Wed': 'Wednesday',
-          'Thu': 'Thursday',
-          'Fri': 'Friday',
-          'Sat': 'Saturday',
-          'Sun': 'Sunday'
+          'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',
+          'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday',
         };
         return mapping[abbr] || abbr;
       });
     }
 
-    const rawSyllabus = batch.syllabusTopics || batch.syllabus || batch.whatYouWillLearn || fetchedSyllabus;
-    
-    let whatYouGetItems: string[] = [];
-    if (batch.whatYouWillLearn) {
-      if (typeof batch.whatYouWillLearn === 'string') {
-        try {
-          const parsed = JSON.parse(batch.whatYouWillLearn);
-          if (Array.isArray(parsed)) {
-            whatYouGetItems = parsed.map(String);
-          } else {
-            whatYouGetItems = batch.whatYouWillLearn.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 0);
-          }
-        } catch (_) {
-          whatYouGetItems = batch.whatYouWillLearn.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 0);
-        }
-      } else if (Array.isArray(batch.whatYouWillLearn)) {
-        whatYouGetItems = batch.whatYouWillLearn.map(String);
-      }
-    } else if (Array.isArray(batch.whatYouGet) && batch.whatYouGet.length > 0) {
-      whatYouGetItems = batch.whatYouGet;
-    }
+    const rawSyllabus = batch.syllabusTopics || batch.syllabus || fetchedSyllabus;
 
-    if (whatYouGetItems.length === 0 && fetchedWhatYouGet.length > 0) {
-      whatYouGetItems = fetchedWhatYouGet;
+    // Resolve whatYouGet: fetchedWhatYouGet (from DB) takes priority
+    let whatYouGet: string[] = [];
+    if (fetchedWhatYouGet.length > 0) {
+      whatYouGet = fetchedWhatYouGet;
+    } else if (batch.whatYouWillLearn) {
+      const raw: string = typeof batch.whatYouWillLearn === 'string' ? batch.whatYouWillLearn : '';
+      whatYouGet = raw
+        .split(/\r?\n/)
+        .map((s: string) => s.replace(/^[\*\#\-•\d\.]+\s*/, '').trim())
+        .filter((s: string) => s.length > 0);
+    } else if (Array.isArray(batch.whatYouGet) && batch.whatYouGet.length > 0) {
+      whatYouGet = batch.whatYouGet;
     }
 
     const instructorName = batch.instructor || 'Expert Instructor';
@@ -154,44 +103,34 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
       classDays,
       classTiming,
       mode: 'Live Online Classes (Google Meet)',
-      instructor: {
-        name: instructorName,
-        title: 'Senior Technical Instructor',
-        initials: instructorInitials,
-        rating: '4.9',
-      },
+      instructor: { name: instructorName, title: 'Senior Technical Instructor', initials: instructorInitials, rating: '4.9' },
       syllabus: rawSyllabus || [],
-      whatYouGet: whatYouGetItems,
+      whatYouGet,
       fees: batch.fees || '₹25,000',
       installment: batch.installment || 'Installment Plan Available',
     };
-  };
-
-  const [fetchedSyllabus, setFetchedSyllabus] = useState<any>(null);
-  const [fetchedWhatYouGet, setFetchedWhatYouGet] = useState<string[]>([]);
+  }, [batch, fetchedSyllabus, fetchedWhatYouGet]);
 
   useEffect(() => {
     const loadCourseFromAdmin = async () => {
       try {
-        const rawSyllabus = batch?.syllabusTopics || batch?.syllabus || batch?.whatYouWillLearn;
-        if (!rawSyllabus || (Array.isArray(rawSyllabus) && rawSyllabus.length === 0)) {
-          const res: any = await api.getAllCourses();
-          const coursesList: any[] = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.content) ? res.content : [];
-          const currentTitle = (batch?.title || '').trim().toLowerCase();
-          const match = coursesList.find((c: any) => {
-            if (!c.title) return false;
-            const t = c.title.trim().toLowerCase();
-            return t === currentTitle || t.includes(currentTitle) || (currentTitle.length > 0 && currentTitle.includes(t));
-          });
-          if (match) {
-            const syl = match.syllabusTopics || match.whatYouWillLearn;
-            if (syl) setFetchedSyllabus(syl);
-            if (match.whatYouWillLearn) {
-              const items = typeof match.whatYouWillLearn === 'string'
-                ? match.whatYouWillLearn.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 0)
-                : Array.isArray(match.whatYouWillLearn) ? match.whatYouWillLearn : [];
-              setFetchedWhatYouGet(items);
-            }
+        const res: any = await api.getAllCourses();
+        const coursesList: any[] = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.content) ? res.content : [];
+        const currentTitle = (batch?.title || '').trim().toLowerCase();
+        const match = coursesList.find((c: any) => {
+          if (!c.title) return false;
+          const t = c.title.trim().toLowerCase();
+          return t === currentTitle || t.includes(currentTitle) || (currentTitle.length > 0 && currentTitle.includes(t));
+        });
+        if (match) {
+          if (match.syllabusTopics) setFetchedSyllabus(match.syllabusTopics);
+          if (match.whatYouWillLearn) {
+            const raw: string = match.whatYouWillLearn;
+            const items = raw
+              .split(/\r?\n/)
+              .map((s: string) => s.replace(/^[\*\#\-•\d\.]+\s*/, '').trim())
+              .filter((s: string) => s.length > 0);
+            if (items.length > 0) setFetchedWhatYouGet(items);
           }
         }
       } catch (_) {}
@@ -199,7 +138,6 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
     loadCourseFromAdmin();
   }, [batch?.title]);
 
-  const data = getBatchData();
   const [completedTopics, setCompletedTopics] = useState<string[]>([]);
 
   useEffect(() => {

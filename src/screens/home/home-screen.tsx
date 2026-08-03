@@ -25,6 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { buildCourseDataFromDb } from '@/utils/syllabus-parser';
 
 export const exploreCoursesList: ExploreCourseItem[] = [];
 
@@ -955,10 +956,14 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [allMaterials, setAllMaterials] = useState<any[]>([]);
   const [recordingsList, setRecordingsList] = useState<any[]>([]);
+  const [dbCoursesMap, setDbCoursesMap] = useState<Record<string, any>>({});
 
   useEffect(() => {
     api.getActiveCourses().then((data: any) => {
       const list = Array.isArray(data) ? data : [];
+      const map: Record<string, any> = {};
+      list.forEach((c: any) => { map[c.title] = c; map[String(c.id)] = c; });
+      setDbCoursesMap(map);
       setLiveExploreList(list.map((c: any) => ({
         id: String(c.id),
         title: c.title,
@@ -983,6 +988,12 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
       setRecordingsList(Array.isArray(data) ? data : []);
     }).catch(() => { });
   }, []);
+
+  const resolveCourse = (courseTitle: string): CourseData | null => {
+    const dbCourse = dbCoursesMap[courseTitle];
+    if (dbCourse) return buildCourseDataFromDb(dbCourse, coursesData);
+    return coursesData[courseTitle] ?? null;
+  };
 
   const computeHoursLearned = () => {
     let totalMins = 0;
@@ -1171,7 +1182,14 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
           {activeTab === 'JOIN_CLASS' ? (
             <LiveClassesView
               enrollments={enrollments}
-              setSelectedCourse={setSelectedCourse}
+              setSelectedCourse={(c) => {
+                if (c) {
+                  const resolved = resolveCourse(c.title);
+                  setSelectedCourse(resolved ?? c);
+                } else {
+                  setSelectedCourse(null);
+                }
+              }}
               InstructorAvatar={InstructorAvatar}
             />
           ) : (
