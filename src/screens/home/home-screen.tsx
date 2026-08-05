@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { parseSyllabus } from '@/utils/syllabus-parser';
+import { parseSyllabus, buildCourseDataFromDb } from '@/utils/syllabus-parser';
 
 function normalizeModString(str: string): string {
   if (!str) return '';
@@ -1189,6 +1189,7 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [allMaterials, setAllMaterials] = useState<any[]>([]);
   const [recordingsList, setRecordingsList] = useState<any[]>([]);
+  const [dbCoursesMap, setDbCoursesMap] = useState<Record<string, any>>({});
   const [timeSpentSeconds, setTimeSpentSeconds] = useState<number>(0);
 
   // Real-time tracking of overall hours spent on the application
@@ -1287,7 +1288,7 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
         onBack={() => setIsExploring(false)}
         onSelectCourse={(courseKey: string) => {
           setIsExploring(false);
-          setSelectedCourse(coursesData[courseKey]);
+          setSelectedCourse(resolveCourse(courseKey));
         }}
       />
     );
