@@ -160,12 +160,69 @@ async function handleResponse(res: Response) {
   return { success: true, message: "Operation successful" };
 }
 
+// ── In-Memory Fast Cache for Instant Screen Loads ──
+const _apiCache = new Map<string, { data: any; expiresAt: number }>();
+const DEFAULT_CACHE_TTL = 30 * 1000; // 30 seconds
+
+export function clearApiCache(prefix?: string) {
+  if (!prefix) {
+    _apiCache.clear();
+  } else {
+    for (const key of _apiCache.keys()) {
+      if (key.startsWith(prefix) || key.includes(prefix)) {
+        _apiCache.delete(key);
+      }
+    }
+  }
+}
+
+async function get(path: string, bypassCache = false) {
+  const token = getToken();
+  const cacheKey = `auth:${token ? token.substring(0, 15) : 'anon'}:${path}`;
+  
+  if (!bypassCache) {
+    const cached = _apiCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, { headers: buildHeaders() });
+  const data = await handleResponse(res);
+  
+  if (data && data.success !== false) {
+    _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+  }
+  return data;
+}
+
+async function getPublic(path: string, bypassCache = false) {
+  const cacheKey = `pub:${path}`;
+  if (!bypassCache) {
+    const cached = _apiCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`);
+  const data = await handleResponse(res);
+  
+  if (data && data.success !== false) {
+    _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+  }
+  return data;
+}
+
 async function post(
   path: string,
   body: object,
   contentType = "application/json",
   skipAuth = false,
 ) {
+  clearApiCache();
   const baseUrl = getApiBaseUrl();
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
@@ -176,6 +233,7 @@ async function post(
 }
 
 async function postFormData(path: string, body: FormData) {
+  clearApiCache();
   const baseUrl = getApiBaseUrl();
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
@@ -185,19 +243,8 @@ async function postFormData(path: string, body: FormData) {
   return handleResponse(res);
 }
 
-async function get(path: string) {
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, { headers: buildHeaders() });
-  return handleResponse(res);
-}
-
-async function getPublic(path: string) {
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`);
-  return handleResponse(res);
-}
-
 async function put(path: string, body: object) {
+  clearApiCache();
   const baseUrl = getApiBaseUrl();
   const res = await fetch(`${baseUrl}${path}`, {
     method: "PUT",
@@ -208,6 +255,7 @@ async function put(path: string, body: object) {
 }
 
 async function del(path: string) {
+  clearApiCache();
   const baseUrl = getApiBaseUrl();
   const res = await fetch(`${baseUrl}${path}`, {
     method: "DELETE",
@@ -222,6 +270,7 @@ async function del(path: string) {
 }
 
 async function patch(path: string) {
+  clearApiCache();
   const baseUrl = getApiBaseUrl();
   const res = await fetch(`${baseUrl}${path}`, {
     method: "PATCH",
