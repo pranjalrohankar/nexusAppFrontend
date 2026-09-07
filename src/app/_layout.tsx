@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, AppStateStatus, useColorScheme } from 'react-native';
+import { AppState, AppStateStatus, Platform, useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/common/animated-icon';
 import AppTabs from '@/components/layout/app-tabs';
@@ -19,12 +19,73 @@ export default function TabLayout() {
   const [userId, setUserId] = useState<number | null>(null);
   const [lastLogin, setLastLogin] = useState('');
 
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // Global reset: eliminate default browser blue focus outline from all web inputs
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const styleId = 'nexus-remove-focus-ring';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          input, textarea, select, [contenteditable="true"], [tabindex] {
+            outline: none !important;
+            outline-width: 0 !important;
+            outline-style: none !important;
+            outline-color: transparent !important;
+            box-shadow: none !important;
+            -webkit-tap-highlight-color: transparent !important;
+          }
+          input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus, [tabindex]:focus {
+            outline: none !important;
+            outline-width: 0 !important;
+            outline-style: none !important;
+            outline-color: transparent !important;
+            box-shadow: none !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    }
+  }, []);
+
   // Session timeout refs
   const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActiveRef = useRef<number>(Date.now());
   const sessionEnabledRef = useRef(false);
 
-  useEffect(() => { loadToken(); }, []);
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const token = loadToken();
+        if (token) {
+          const res = await api.getMe();
+          const user = res?.data ?? res;
+          if (res && res.success !== false && user && user.email && user.role) {
+            const role = String(user.role).toLowerCase() as 'student' | 'teacher' | 'admin';
+            setUserRole(role);
+            setUserName(user.name || user.firstName || 'User');
+            setUserEmail(user.email);
+            setUserId(user.userId || user.id || null);
+            setLastLogin(user.lastLogin || '');
+            setIsAuthenticated(true);
+            if (role === 'student') {
+              api.setActivityStatus(true).catch(() => {});
+            }
+          } else {
+            clearToken();
+          }
+        }
+      } catch (err) {
+        console.log('Session restore error or expired token:', err);
+        clearToken();
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+    restoreSession();
+  }, []);
 
   const doLogout = useCallback(() => {
     clearToken();
@@ -110,7 +171,9 @@ export default function TabLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {isAuthenticated ? (
+      {isInitializing ? (
+        <AnimatedSplashOverlay />
+      ) : isAuthenticated ? (
         <>
           <AnimatedSplashOverlay />
           <AppTabs

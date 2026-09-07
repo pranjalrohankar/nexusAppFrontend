@@ -3,12 +3,9 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
-  if (Platform.OS === "web") {
-    if (typeof window !== "undefined" && window.location && window.location.hostname) {
-      const host = window.location.hostname;
-      return `http://${host}:8080/api`;
-    }
-    return "http://localhost:8080/api";
+  // 1. Production API URL configured via EXPO_PUBLIC_API_URL in Vercel / CI
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
   }
 
   const extra = (Constants.expoConfig?.extra ?? {}) as {
@@ -21,6 +18,17 @@ export function getApiBaseUrl() {
   const configuredUrl = extra.apiUrl || extra.apiBaseUrl;
   if (configuredUrl) {
     return configuredUrl.replace(/\/$/, "");
+  }
+
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined" && window.location && window.location.hostname) {
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
+        return "http://localhost:8080/api";
+      }
+      return `http://${host}:8080/api`;
+    }
+    return "http://localhost:8080/api";
   }
 
   const hostUri =
@@ -219,7 +227,7 @@ export const api = {
   login: (
     email: string,
     password: string,
-    role: string,
+    role?: string,
     deviceFingerprint?: string,
   ) => post("/auth/login", { email, password, role, deviceFingerprint }, "application/json", true),
 
@@ -361,4 +369,37 @@ export const api = {
   getTeacherNotifications: () => get('/notifications/teacher'),
   markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
   markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
+
+  // User Profile & Session Persistence
+  getMe: () => get('/users/me'),
+  updateUserProfile: (data: object) => put('/users/profile', data),
+  changePassword: (data: object) => put('/users/change-password', data),
+  getAllUsers: () => get('/users/all'),
+  toggleUserStatus: (id: number | string, active?: boolean) => put(`/users/${id}/status`, { active }),
+
+  // Tests & Assessments endpoints
+  getAllTests: async () => {
+    const res = await get('/tests/all');
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getTestsByCourse: async (courseTitle: string) => {
+    const res = await get(`/tests/course/${encodeURIComponent(courseTitle)}`);
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getTestById: (id: number | string) => get(`/tests/${id}`),
+  createTest: (data: object) => post('/tests', data),
+  deleteTest: (id: number | string) => del(`/tests/${id}`),
+
+  // Test Attempt & Submissions
+  submitTestAttempt: (data: object) => post('/tests/submit', data),
+  getTestSubmissions: async (status?: string) => {
+    const path = status ? `/tests/submissions?status=${encodeURIComponent(status)}` : '/tests/submissions';
+    const res = await get(path);
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getMyTestSubmissions: async () => {
+    const res = await get('/tests/submissions/my');
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  gradeTestSubmission: (id: number | string, data: object) => put(`/tests/submissions/${id}/grade`, data),
 };

@@ -157,37 +157,20 @@ const [loading, setLoading] = useState(false);
         deviceFingerprint = stored;
       } catch {}
 
-      // Auto-detect role: try selected role first, then fallback to others if needed
-      const rolesToTry: ('student' | 'teacher' | 'admin')[] = [
-        selectedRole,
-        ...(['student', 'teacher', 'admin'] as const).filter(r => r !== selectedRole)
-      ];
-      let successRes: any = null;
-      let detectedRole: 'student' | 'teacher' | 'admin' = selectedRole;
+      // Authenticate directly with email and password (role is resolved by backend from user credentials)
+      const res = await api.login(email, password, undefined, deviceFingerprint ?? undefined);
 
-      for (const role of rolesToTry) {
-        try {
-          const res = await api.login(email, password, role, deviceFingerprint ?? undefined);
-          if (res.success && res.data?.token) {
-            successRes = res;
-            // Use role from backend response if available, otherwise use the tried role
-            const backendRole = (res.data?.role ?? '').toUpperCase();
-            detectedRole = backendRole === 'TEACHER' ? 'teacher'
-              : backendRole === 'ADMIN' ? 'admin'
-              : backendRole === 'STUDENT' ? 'student'
-              : role;
-            break;
-          }
-        } catch {
-          // this role didn't match, try next
-        }
-      }
+      if (res.success && res.data?.token) {
+        const backendRole = (res.data?.role ?? '').toUpperCase();
+        const detectedRole: 'student' | 'teacher' | 'admin' =
+          backendRole === 'TEACHER' ? 'teacher'
+          : backendRole === 'ADMIN' ? 'admin'
+          : 'student';
 
-      if (successRes) {
-        setToken(successRes.data.token);
-        onSignIn(detectedRole, successRes.data.name ?? '', successRes.data.email ?? '', successRes.data.userId, successRes.data.lastLogin);
+        setToken(res.data.token);
+        onSignIn(detectedRole, res.data.name ?? '', res.data.email ?? '', res.data.userId, res.data.lastLogin);
       } else {
-        const errorMsg = 'Invalid email or password. Please try again.';
+        const errorMsg = res.message || 'Invalid email or password. Please try again.';
         showToast(errorMsg, 'error');
         showAlertModal('Invalid Credentials', errorMsg, 'error');
       }
@@ -455,7 +438,6 @@ disabled={loading}
 </TouchableOpacity>
 
 {/* Footer */}
-{selectedRole === 'student' && (
 <View style={styles.footerRow}>
 <Text style={styles.footerText}>
 Want to start learning?{' '}
@@ -467,7 +449,6 @@ Enquiry Form
 </Text>
 </Text>
 </View>
-)}
 
 </View>
 </Animated.View>

@@ -227,7 +227,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 44,
   },
-  searchInput: { flex: 1, fontSize: 13, color: '#1F2937' },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1F2937',
+    borderWidth: 0,
+    outlineStyle: 'none',
+    outlineWidth: 0,
+    outlineColor: 'transparent',
+    ...(Platform.OS === 'web' ? ({ outline: 'none', boxShadow: 'none' } as any) : {}),
+  },
 
   scroll: { flex: 1, backgroundColor: '#F9FAFB' },
   scrollContent: { padding: 20 },

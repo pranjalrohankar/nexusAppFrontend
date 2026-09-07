@@ -288,6 +288,10 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10,
     height: 48, paddingHorizontal: 14, fontSize: 14, color: '#1F2937', backgroundColor: '#F9FAFB',
+    outlineStyle: 'none',
+    outlineWidth: 0,
+    outlineColor: 'transparent',
+    ...(Platform.OS === 'web' ? ({ outline: 'none', boxShadow: 'none' } as any) : {}),
   },
   textArea: { height: 110, paddingTop: 12, textAlignVertical: 'top' },
   sendBtn: {

@@ -143,7 +143,7 @@ export default function AdminCoursesScreen() {
       const matchesSearch =
         !q ||
         course.title.toLowerCase().includes(q) ||
-        course.instructor.toLowerCase().includes(q);
+        (course.instructor?.toLowerCase().includes(q) ?? false);
       return activeTab === 'All' ? matchesSearch : matchesSearch && course.status === activeTab;
     });
   }, [courses, searchQuery, activeTab]);
