@@ -166,7 +166,8 @@ async function post(
   contentType = "application/json",
   skipAuth = false,
 ) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: buildHeaders(contentType, skipAuth),
     body: JSON.stringify(body),
@@ -175,7 +176,8 @@ async function post(
 }
 
 async function postFormData(path: string, body: FormData) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: buildHeaders(),
     body,
@@ -184,17 +186,20 @@ async function postFormData(path: string, body: FormData) {
 }
 
 async function get(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, { headers: buildHeaders() });
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, { headers: buildHeaders() });
   return handleResponse(res);
 }
 
 async function getPublic(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`);
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`);
   return handleResponse(res);
 }
 
 async function put(path: string, body: object) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "PUT",
     headers: buildHeaders("application/json"),
     body: JSON.stringify(body),
@@ -203,7 +208,8 @@ async function put(path: string, body: object) {
 }
 
 async function del(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "DELETE",
     headers: buildHeaders(),
   });
@@ -216,7 +222,8 @@ async function del(path: string) {
 }
 
 async function patch(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "PATCH",
     headers: buildHeaders(),
   });
