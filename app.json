@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Nexus LMS",
+    "slug": "nexuslms",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/nexusctc.png",
+    "scheme": "nexuslms",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/nexusctc.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F0B1E"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/nexusctc.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
