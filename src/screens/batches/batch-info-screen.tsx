@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { getCompletedTopicsForCourse } from '../../utils/syllabus-progress-store';
 import { api } from '../../services/api';
+import { coursesData } from '@/screens/home/home-screen';
 
 interface Batch {
   id: string;
@@ -132,8 +133,30 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
               .filter((s: string) => s.length > 0);
             if (items.length > 0) setFetchedWhatYouGet(items);
           }
+        } else if (batch?.title) {
+          const fallback = coursesData[batch.title];
+          if (fallback) {
+            if (fallback.syllabusTopics || fallback.syllabus) {
+              setFetchedSyllabus(fallback.syllabusTopics || fallback.syllabus);
+            }
+            if (fallback.skills && fallback.skills.length > 0) {
+              setFetchedWhatYouGet(fallback.skills);
+            }
+          }
         }
-      } catch (_) {}
+      } catch (_) {
+        if (batch?.title) {
+          const fallback = coursesData[batch.title];
+          if (fallback) {
+            if (fallback.syllabusTopics || fallback.syllabus) {
+              setFetchedSyllabus(fallback.syllabusTopics || fallback.syllabus);
+            }
+            if (fallback.skills && fallback.skills.length > 0) {
+              setFetchedWhatYouGet(fallback.skills);
+            }
+          }
+        }
+      }
     };
     loadCourseFromAdmin();
   }, [batch?.title]);

@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../services/api';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { getCompletedTopicsForCourse, toggleTopicCompleted } from '../../utils/syllabus-progress-store';
+import { coursesData } from '@/screens/home/home-screen';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -130,6 +131,13 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
       courseList.forEach((c: any) => {
         if (c.title) courseSyllabusMap[c.title.toLowerCase().trim()] = c.syllabusTopics || '';
       });
+      // Merge coursesData fallbacks
+      Object.entries(coursesData).forEach(([cTitle, cData]) => {
+        const norm = cTitle.toLowerCase().trim();
+        if (!courseSyllabusMap[norm] && (cData as any).syllabusTopics) {
+          courseSyllabusMap[norm] = (cData as any).syllabusTopics;
+        }
+      });
 
       if (res.success && Array.isArray(res.data)) {
         const list = res.data.map((b: any) => {
@@ -139,7 +147,16 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             if (Array.isArray(v)) return `${v[0]}-${String(v[1]).padStart(2,'0')}-${String(v[2]).padStart(2,'0')}`;
             return String(v);
           };
-          const matchedSyllabus = courseSyllabusMap[(b.selectCourse || '').toLowerCase().trim()] || b.syllabusTopics || '';
+          const normCourse = (b.selectCourse || '').toLowerCase().trim();
+          let matchedSyllabus = courseSyllabusMap[normCourse] || b.syllabusTopics || '';
+          if (!matchedSyllabus) {
+            for (const [k, v] of Object.entries(coursesData)) {
+              if (normCourse.includes(k.toLowerCase()) || k.toLowerCase().includes(normCourse)) {
+                matchedSyllabus = (v as any).syllabusTopics || '';
+                if (matchedSyllabus) break;
+              }
+            }
+          }
           return {
             ...b,
             startDate: toDateStr(b.startDate),
@@ -493,10 +510,15 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
             <Text style={styles.logoText}>
               NE<Text style={styles.logoTextGold}>X</Text>US
             </Text>
-            <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
-              <Ionicons name="notifications-outline" size={22} color="#FFF" />
-              <View style={styles.badgeDot} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity style={styles.iconButton} onPress={loadBatches}>
+                <Ionicons name="refresh-outline" size={20} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconButton} onPress={onOpenNotifications}>
+                <Ionicons name="notifications-outline" size={22} color="#FFF" />
+                <View style={styles.badgeDot} />
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={styles.headerTitle}>My Classes</Text>
           <Text style={styles.headerSubtitle}>Manage your courses and class schedules.</Text>
@@ -754,7 +776,10 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {(() => {
-                const modules = parseSyllabus(syllabusBatch?.syllabusTopics);
+                const rawTopics = syllabusBatch?.syllabusTopics ||
+                  (syllabusBatch?.selectCourse ? (coursesData as any)[syllabusBatch.selectCourse]?.syllabusTopics : null) ||
+                  Object.values(coursesData).find(cd => cd.title.toLowerCase().includes((syllabusBatch?.selectCourse || '').toLowerCase()))?.syllabusTopics;
+                const modules = parseSyllabus(rawTopics);
                 if (!modules || modules.length === 0) {
                   return (
                     <View style={{ padding: 30, alignItems: 'center', justifyContent: 'center' }}>

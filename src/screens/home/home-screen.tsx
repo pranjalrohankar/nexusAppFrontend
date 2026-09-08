@@ -617,8 +617,31 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
           }
         }
       });
+      Object.entries(coursesData).forEach(([title, cData]) => {
+        const key = title.trim().toLowerCase();
+        if (!map[key]) {
+          const parsed = parseSyllabus(cData.syllabusTopics || cData.syllabus);
+          if (parsed && parsed.length > 0) {
+            map[key] = parsed.map((m, idx) =>
+              m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+            );
+          }
+        }
+      });
       setCoursesMap(map);
-    }).catch(() => {});
+    }).catch(() => {
+      const map: Record<string, string[]> = {};
+      Object.entries(coursesData).forEach(([title, cData]) => {
+        const key = title.trim().toLowerCase();
+        const parsed = parseSyllabus(cData.syllabusTopics || cData.syllabus);
+        if (parsed && parsed.length > 0) {
+          map[key] = parsed.map((m, idx) =>
+            m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+          );
+        }
+      });
+      setCoursesMap(map);
+    });
   }, []);
 
   const categories = ['All', ...enrolledCourses];

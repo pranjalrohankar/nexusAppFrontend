@@ -223,6 +223,13 @@ function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: s
                 <Ionicons name="close" size={24} color="#1E2937" />
               </TouchableOpacity>
               <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1E2937' }} numberOfLines={1}>{title}</Text>
+              <TouchableOpacity
+                onPress={() => Linking.openURL(uri)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7B2CBF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginLeft: 8 }}
+              >
+                <Ionicons name="download-outline" size={16} color="#FFF" />
+                <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>Download</Text>
+              </TouchableOpacity>
             </View>
             <View style={{ flex: 1, backgroundColor: '#000' }}>
               <video
@@ -735,7 +742,17 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
         {/* Recent Uploads */}
         <View style={s.recentSection}>
-          <Text style={s.sectionTitle}>RECENT UPLOADS</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={[s.sectionTitle, { marginBottom: 0 }]}>RECENT UPLOADS ({recentUploads.length})</Text>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+              onPress={fetchRecentUploads}
+            >
+              <Ionicons name="refresh-outline" size={14} color="#7B2CBF" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#7B2CBF' }}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+
           {recentUploads.length > 0 ? (
             recentUploads.map((item) => (
               <View key={item.id} style={s.recentCard}>
@@ -760,6 +777,20 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Ionicons name="eye-outline" size={18} color="#7B2CBF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.playBtn, { backgroundColor: '#EFF6FF' }]}
+                    onPress={() => {
+                      const url = getStreamUrl(item.id);
+                      if (IS_WEB) {
+                        window.open(url, '_blank');
+                      } else {
+                        Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open video stream'));
+                      }
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="download-outline" size={18} color="#2563EB" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={s.deleteBtn}

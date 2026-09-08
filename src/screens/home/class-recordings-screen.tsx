@@ -17,8 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Linking from 'expo-linking';
-import { api, getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
+import { coursesData } from '@/screens/home/home-screen';
 
 function normalizeModString(str: string): string {
   if (!str) return '';
@@ -564,8 +565,31 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
           }
         }
       });
+      Object.entries(coursesData).forEach(([title, cData]) => {
+        const key = title.trim().toLowerCase();
+        if (!map[key]) {
+          const parsed = parseSyllabus(cData.syllabusTopics || cData.syllabus);
+          if (parsed && parsed.length > 0) {
+            map[key] = parsed.map((m, idx) =>
+              m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+            );
+          }
+        }
+      });
       setCoursesMap(map);
-    } catch {}
+    } catch {
+      const map: Record<string, string[]> = {};
+      Object.entries(coursesData).forEach(([title, cData]) => {
+        const key = title.trim().toLowerCase();
+        const parsed = parseSyllabus(cData.syllabusTopics || cData.syllabus);
+        if (parsed && parsed.length > 0) {
+          map[key] = parsed.map((m, idx) =>
+            m.title.startsWith('Module') ? m.title : `Module ${idx + 1}: ${m.title}`
+          );
+        }
+      });
+      setCoursesMap(map);
+    }
   };
 
   const loadRecordings = async () => {
@@ -808,7 +832,11 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
                                 <TouchableOpacity
                                   style={s.watchNowBtn}
                                   activeOpacity={0.8}
-                                  onPress={() => { setPreviewTitle(displayTitle || rec.title); setPreviewUri(getStreamUrl(rec.id)); }}
+                                  onPress={() => {
+                                    setPreviewTitle(displayTitle || rec.title);
+                                    const targetUri = (rec as any).videoUrl ? resolveDynamicFileUrl((rec as any).videoUrl) : getStreamUrl(rec.id);
+                                    setPreviewUri(targetUri);
+                                  }}
                                 >
                                   <Ionicons name="play" size={14} color="#FFF" />
                                   <Text style={s.watchNowText}>Watch Now</Text>
