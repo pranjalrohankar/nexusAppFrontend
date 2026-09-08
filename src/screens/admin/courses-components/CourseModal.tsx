@@ -372,3 +372,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
+CourseModal.displayName = 'CourseModal';

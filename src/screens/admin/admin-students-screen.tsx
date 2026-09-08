@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Animated,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -100,9 +101,9 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     Animated.sequence([
-      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: (Platform.OS as string) !== 'web' }),
       Animated.delay(2500),
-      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: (Platform.OS as string) !== 'web' }),
     ]).start(() => setToast(null));
   };
 

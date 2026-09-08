@@ -977,7 +977,7 @@ export default function TeacherAssessmentsScreen() {
                       </View>
                       {(sub.feedback || gradingFeedback[sub.id]) ? (
                         <Text style={styles.gradedFeedbackText}>
-                          Teacher Feedback: "{sub.feedback || gradingFeedback[sub.id]}"
+                          Teacher Feedback: &quot;{sub.feedback || gradingFeedback[sub.id]}&quot;
                         </Text>
                       ) : null}
                     </View>

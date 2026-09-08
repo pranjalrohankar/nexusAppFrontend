@@ -142,7 +142,7 @@ function EnquiryDetail({
           ) : null}
           {enquiry.message ? (
             <View style={det.messageBox}>
-              <Text style={det.messageText}>"{enquiry.message}"</Text>
+              <Text style={det.messageText}>&quot;{enquiry.message}&quot;</Text>
             </View>
           ) : null}
         </View>

@@ -210,3 +210,5 @@ const styles = StyleSheet.create({
     color: '#EF4444',
   },
 });
+
+CourseCardItem.displayName = 'CourseCardItem';

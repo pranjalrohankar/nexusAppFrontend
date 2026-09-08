@@ -110,8 +110,6 @@ export function resolveDynamicFileUrl(urlOrPath: string): string {
   return `${activeApiBase}${cleanPath}`;
 }
 
-const BASE_URL = getApiBaseUrl();
-
 let _token: string | null = null;
 
 export function setToken(token: string) {

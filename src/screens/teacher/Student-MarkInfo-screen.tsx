@@ -235,7 +235,7 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
           </TouchableOpacity>
         </View>
         <Text style={styles.welcomeText}>Student Marks</Text>
-        <Text style={styles.headerSubtitle}>Search and review your students' performance</Text>
+        <Text style={styles.headerSubtitle}>Search and review your students&apos; performance</Text>
       </View>
 
       {/* SEARCH BAR */}

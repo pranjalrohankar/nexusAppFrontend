@@ -208,3 +208,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+CourseSyllabusBuilder.displayName = 'CourseSyllabusBuilder';

@@ -423,7 +423,7 @@ export default function TestsScreen() {
                             </View>
                             {feedbackVal ? (
                               <Text style={{ fontSize: 12, color: '#374151', marginTop: 4, fontStyle: 'italic' }}>
-                                Teacher Feedback: "{feedbackVal}"
+                                Teacher Feedback: &quot;{feedbackVal}&quot;
                               </Text>
                             ) : null}
                           </View>

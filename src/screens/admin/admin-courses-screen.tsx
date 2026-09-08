@@ -53,9 +53,9 @@ export default function AdminCoursesScreen() {
       if (toastTimer.current) clearTimeout(toastTimer.current);
       setToast({ message, type });
       toastAnim.setValue(0);
-      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: (Platform.OS as string) !== 'web' }).start();
       toastTimer.current = setTimeout(() => {
-        Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(
+        Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: (Platform.OS as string) !== 'web' }).start(
           () => setToast(null)
         );
       }, 3000);

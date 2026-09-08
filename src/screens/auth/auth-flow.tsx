@@ -62,9 +62,9 @@ const showToast = (msg: string, type: 'error' | 'success') => {
   setToast({ msg, type });
   toastAnim.setValue(0);
   Animated.sequence([
-    Animated.timing(toastAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+    Animated.timing(toastAnim, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== 'web' }),
     Animated.delay(2500),
-    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: Platform.OS !== 'web' }),
   ]).start(() => setToast(null));
 };
 
