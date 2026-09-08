@@ -209,13 +209,13 @@ function getEmbedInfo(rawUrl: string): { isEmbed: boolean; embedUrl: string } {
   const url = rawUrl.trim();
   
   // YouTube
-  const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   if (ytMatch && ytMatch[1]) {
     return { isEmbed: true, embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0` };
   }
 
   // Google Drive
-  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/i);
+  const driveMatch = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([a-zA-Z0-9_-]+)/i);
   if (driveMatch && driveMatch[1]) {
     return { isEmbed: true, embedUrl: `https://drive.google.com/file/d/${driveMatch[1]}/preview` };
   }
@@ -272,10 +272,14 @@ function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: s
                   controls
                   autoPlay
                   playsInline
+                  crossOrigin="anonymous"
                   onError={(e: any) => {
                     const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-                    if (e?.currentTarget?.src !== fallbackSrc) {
+                    if (e?.currentTarget && e.currentTarget.src !== fallbackSrc) {
                       e.currentTarget.src = fallbackSrc;
+                      e.currentTarget.load();
+                      const p = e.currentTarget.play();
+                      if (p !== undefined) p.catch(() => {});
                     }
                   }}
                   style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
