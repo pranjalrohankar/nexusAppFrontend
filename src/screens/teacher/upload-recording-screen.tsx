@@ -327,6 +327,8 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const isDesktop = IS_WEB && winWidth >= 1024;
   const { show: showToast, ToastView } = useToast();
 
+  const [uploadMode, setUploadMode] = useState<'link' | 'file'>('link');
+  const [videoLink, setVideoLink] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [classDate, setClassDate] = useState(new Date());
@@ -494,25 +496,33 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) return Alert.alert('Error', 'Please select a video file.');
+    if (uploadMode === 'link') {
+      if (!videoLink.trim()) return Alert.alert('Error', 'Please enter a video URL (YouTube, Google Drive, Vimeo, or MP4 link).');
+    } else {
+      if (!selectedFile) return Alert.alert('Error', 'Please select a video file.');
+    }
     if (!course.trim()) return Alert.alert('Error', 'Please select a course.');
     if (!batch.trim()) return Alert.alert('Error', 'Please select a batch.');
 
-    const fileName = selectedFile.name || `recording-${Date.now()}.mp4`;
     const formData = new FormData();
 
-    if (IS_WEB) {
-      try {
-        const fileBlob = await (await fetch(selectedFile.uri)).blob();
-        formData.append('file', fileBlob, fileName);
-      } catch {
-        Alert.alert('Error', 'Unable to read selected video file.');
-        return;
-      }
+    if (uploadMode === 'link') {
+      formData.append('videoUrl', videoLink.trim());
     } else {
-      // On native, append URI directly — React Native FormData handles it
-      formData.append('file', { uri: selectedFile.uri, name: fileName, type: selectedFile.mimeType || 'video/mp4' } as any);
+      const fileName = selectedFile.name || `recording-${Date.now()}.mp4`;
+      if (IS_WEB) {
+        try {
+          const fileBlob = await (await fetch(selectedFile.uri)).blob();
+          formData.append('file', fileBlob, fileName);
+        } catch {
+          Alert.alert('Error', 'Unable to read selected video file.');
+          return;
+        }
+      } else {
+        formData.append('file', { uri: selectedFile.uri, name: fileName, type: selectedFile.mimeType || 'video/mp4' } as any);
+      }
     }
+
     const topicText = selectedTopic.trim();
     const titleVal = topicText || title.trim() || 'Class Session';
     const finalTitle = selectedModule
@@ -537,6 +547,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       setLoading(true);
       await api.uploadClassRecording(formData);
       setSelectedFile(null);
+      setVideoLink('');
       setTitle('');
       setDescription('');
       setCourse('');
@@ -591,27 +602,84 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Upload Area */}
-        <TouchableOpacity style={s.uploadArea} onPress={handleFileSelect} activeOpacity={0.9}>
-          <View style={s.uploadIconBox}>
-            <Ionicons name="cloud-upload-outline" size={48} color="#7B2CBF" />
+        {/* Mode Selector: Link vs File */}
+        <View style={s.modeSelector}>
+          <TouchableOpacity
+            style={[s.modeBtn, uploadMode === 'link' && s.modeBtnActive]}
+            onPress={() => setUploadMode('link')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="link-outline" size={18} color={uploadMode === 'link' ? '#FFF' : '#6B7280'} />
+            <Text style={[s.modeBtnText, uploadMode === 'link' && s.modeBtnTextActive]}>
+              Video Link (YouTube / Drive / CDN)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.modeBtn, uploadMode === 'file' && s.modeBtnActive]}
+            onPress={() => setUploadMode('file')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="cloud-upload-outline" size={18} color={uploadMode === 'file' ? '#FFF' : '#6B7280'} />
+            <Text style={[s.modeBtnText, uploadMode === 'file' && s.modeBtnTextActive]}>
+              Upload Video File
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {uploadMode === 'link' ? (
+          <View style={s.linkArea}>
+            <View style={s.linkHeaderRow}>
+              <Ionicons name="play-circle" size={20} color="#7B2CBF" />
+              <Text style={s.linkLabel}>Video Link / Embed URL <Text style={s.req}>*</Text></Text>
+            </View>
+            <TextInput
+              style={s.input}
+              placeholder="e.g. YouTube unlisted link, Google Drive preview link, or MP4 URL"
+              value={videoLink}
+              onChangeText={setVideoLink}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={s.linkHelperText}>
+              💡 Permanent storage: YouTube unlisted links, Google Drive share links, and cloud MP4s never expire or get deleted on server restarts.
+            </Text>
+            {videoLink.trim().length > 5 && (
+              <TouchableOpacity
+                style={s.previewBtn}
+                onPress={() => {
+                  setPreviewTitle(title.trim() || 'Video Link Preview');
+                  setPreviewUri(videoLink.trim());
+                }}
+              >
+                <Ionicons name="play-circle" size={18} color="#fff" />
+                <Text style={s.previewBtnText}>Test / Preview Video Link</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          <Text style={s.uploadTitle}>Drop your video here</Text>
-          <Text style={s.uploadSub}>or tap to browse files</Text>
-          <Text style={s.fileTypes}>MP4, MOV, MKV • Max 4 GB</Text>
-          {selectedFile && (
-            <Text style={s.selectedText}>✓ {selectedFile.name}</Text>
-          )}
-          {selectedFile && (
-            <TouchableOpacity
-              style={s.previewBtn}
-              onPress={() => { setPreviewTitle('Preview Selected Video'); setPreviewUri(selectedFile.uri); }}
-            >
-              <Ionicons name="play-circle" size={18} color="#fff" />
-              <Text style={s.previewBtnText}>Preview Selected Video</Text>
-            </TouchableOpacity>
-          )}
-        </TouchableOpacity>
+        ) : (
+          /* File Upload Area */
+          <TouchableOpacity style={s.uploadArea} onPress={handleFileSelect} activeOpacity={0.9}>
+            <View style={s.uploadIconBox}>
+              <Ionicons name="cloud-upload-outline" size={48} color="#7B2CBF" />
+            </View>
+            <Text style={s.uploadTitle}>Drop your video here</Text>
+            <Text style={s.uploadSub}>or tap to browse files</Text>
+            <Text style={s.fileTypes}>MP4, MOV, MKV • Max 4 GB</Text>
+            {selectedFile && (
+              <Text style={s.selectedText}>✓ {selectedFile.name}</Text>
+            )}
+            {selectedFile && (
+              <TouchableOpacity
+                style={s.previewBtn}
+                onPress={() => { setPreviewTitle('Preview Selected Video'); setPreviewUri(selectedFile.uri); }}
+              >
+                <Ionicons name="play-circle" size={18} color="#fff" />
+                <Text style={s.previewBtnText}>Preview Selected Video</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Recording Details */}
         <View style={s.section}>
@@ -896,6 +964,74 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   scrollContent: { padding: 20, paddingBottom: 40 },
   scrollDesktop: { maxWidth: 860, alignSelf: 'center', width: '100%', paddingHorizontal: 40 },
+
+  modeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#EEF2F6',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 20,
+    gap: 6,
+  },
+  modeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    gap: 6,
+  },
+  modeBtnActive: {
+    backgroundColor: '#7B2CBF',
+    shadowColor: '#7B2CBF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  modeBtnTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  linkArea: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  linkHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  linkLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E2937',
+  },
+  linkHelperText: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+    marginTop: -4,
+    marginBottom: 4,
+  },
 
   uploadArea: {
     backgroundColor: '#fff',
