@@ -62,3 +62,4 @@ android/build/generated/autolinking/
 *.bin
 *.lock
 *.sha
+node_modules
