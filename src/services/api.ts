@@ -461,6 +461,10 @@ export const api = {
     clearApiCache();
     return postFormData("/recordings/upload", data);
   },
+  updateClassRecording: (id: number | string, data: object) => {
+    clearApiCache();
+    return put(`/recordings/${id}`, data);
+  },
   getRecordingStreamUrl: (id: number | string) => `${getApiBaseUrl()}/recordings/stream/${id}`,
   deleteClassRecording: (id: number | string) => {
     clearApiCache();

@@ -354,6 +354,11 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
   const [showModuleDropdown, setShowModuleDropdown] = useState(false);
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
 
+  const [editingRecording, setEditingRecording] = useState<ClassRecording | null>(null);
+  const [editVideoUrl, setEditVideoUrl] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const [courseSyllabusMap, setCourseSyllabusMap] = useState<Record<string, string[]>>({});
   const [courseModuleTopicsMap, setCourseModuleTopicsMap] = useState<Record<string, Record<string, string[]>>>({});
 
@@ -492,6 +497,28 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRecording) return;
+    if (!editTitle.trim() && !editVideoUrl.trim()) {
+      Alert.alert('Error', 'Please provide a title or video link.');
+      return;
+    }
+    try {
+      setSavingEdit(true);
+      await api.updateClassRecording(editingRecording.id, {
+        title: editTitle.trim() || editingRecording.title,
+        videoUrl: editVideoUrl.trim() || (editingRecording as any).videoUrl,
+      });
+      setEditingRecording(null);
+      await fetchRecentUploads();
+      showToast('Recording updated successfully!', 'success');
+    } catch (err: any) {
+      Alert.alert('Update failed', err?.message || 'Could not update recording.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -909,6 +936,17 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                     <Ionicons name="download-outline" size={18} color="#2563EB" />
                   </TouchableOpacity>
                   <TouchableOpacity
+                    style={[s.playBtn, { backgroundColor: '#F3E8FF' }]}
+                    onPress={() => {
+                      setEditingRecording(item);
+                      setEditTitle(item.title || '');
+                      setEditVideoUrl((item as any).videoUrl?.startsWith('http') && !(item as any).videoUrl?.includes('/api/recordings/stream/') ? (item as any).videoUrl : '');
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="pencil-outline" size={16} color="#7B2CBF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={s.deleteBtn}
                     onPress={() => handleDelete(item.id, item.title || 'Untitled')}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -930,6 +968,57 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
         title={previewTitle}
         onClose={() => setPreviewUri(null)}
       />
+
+      {/* Edit Recording Modal */}
+      <Modal visible={!!editingRecording} transparent animationType="fade" onRequestClose={() => setEditingRecording(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 500, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#1E2937' }}>Edit Recording Link</Text>
+              <TouchableOpacity onPress={() => setEditingRecording(null)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.label}>Recording Title</Text>
+            <TextInput
+              style={s.input}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="e.g. [Module 2] Need of JDBC & Drivers"
+            />
+
+            <Text style={s.label}>Video Link (YouTube / Google Drive / MP4)</Text>
+            <TextInput
+              style={s.input}
+              value={editVideoUrl}
+              onChangeText={setEditVideoUrl}
+              placeholder="e.g. https://youtu.be/... or Google Drive preview link"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={{ fontSize: 12, color: '#64748B', marginTop: -8, marginBottom: 16 }}>
+              💡 Pasting an unlisted YouTube or Google Drive link ensures this video remains accessible permanently without being deleted on server restarts.
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+              <TouchableOpacity
+                style={[s.cancelBtn, { flex: 1, marginBottom: 0 }]}
+                onPress={() => setEditingRecording(null)}
+              >
+                <Text style={s.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.uploadBtn, { flex: 1, marginBottom: 0 }]}
+                onPress={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                <Text style={s.uploadBtnText}>{savingEdit ? 'Saving...' : 'Save Video Link'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {showDatePicker && (
         <DateTimePicker
