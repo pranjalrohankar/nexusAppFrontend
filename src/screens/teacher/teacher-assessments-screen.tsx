@@ -9,6 +9,8 @@ import {
   Alert,
   Linking,
   Platform,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,9 +77,91 @@ function safeParseJson(json: any, fallback: any = undefined) {
   }
 }
 
+function normalizeQuestions(rawList: any, fallbackTitle: string): Question[] {
+  if (!rawList || !Array.isArray(rawList) || rawList.length === 0) {
+    const parsed = parseMcqsFromText('', fallbackTitle);
+    return parsed.map((p, idx) => ({
+      id: `q-${idx + 1}`,
+      text: p.text || (p as any).question || `Question ${idx + 1}`,
+      options: p.options,
+      correctOption: p.correctOption,
+    }));
+  }
+
+  return rawList.map((q: any, idx: number): Question => {
+    let text = `Question ${idx + 1}`;
+    if (typeof q === 'string') {
+      text = q;
+    } else if (q.question && typeof q.question === 'string') {
+      text = q.question;
+    } else if (q.text && typeof q.text === 'string') {
+      text = q.text;
+    } else if (typeof q.question === 'object' && q.question !== null) {
+      text = q.question.text || q.question.title || JSON.stringify(q.question);
+    } else if (typeof q.text === 'object' && q.text !== null) {
+      text = q.text.text || q.text.title || JSON.stringify(q.text);
+    }
+
+    const options: { A: string; B: string; C: string; D: string } = {
+      A: 'Option A',
+      B: 'Option B',
+      C: 'Option C',
+      D: 'Option D',
+    };
+
+    if (Array.isArray(q.options)) {
+      if (q.options[0] !== undefined) options.A = String(typeof q.options[0] === 'object' ? q.options[0].text || q.options[0].value || JSON.stringify(q.options[0]) : q.options[0]);
+      if (q.options[1] !== undefined) options.B = String(typeof q.options[1] === 'object' ? q.options[1].text || q.options[1].value || JSON.stringify(q.options[1]) : q.options[1]);
+      if (q.options[2] !== undefined) options.C = String(typeof q.options[2] === 'object' ? q.options[2].text || q.options[2].value || JSON.stringify(q.options[2]) : q.options[2]);
+      if (q.options[3] !== undefined) options.D = String(typeof q.options[3] === 'object' ? q.options[3].text || q.options[3].value || JSON.stringify(q.options[3]) : q.options[3]);
+    } else if (q.options && typeof q.options === 'object') {
+      if (q.options.A !== undefined) options.A = String(q.options.A);
+      if (q.options.B !== undefined) options.B = String(q.options.B);
+      if (q.options.C !== undefined) options.C = String(q.options.C);
+      if (q.options.D !== undefined) options.D = String(q.options.D);
+      if (q.options.a !== undefined) options.A = String(q.options.a);
+      if (q.options.b !== undefined) options.B = String(q.options.b);
+      if (q.options.c !== undefined) options.C = String(q.options.c);
+      if (q.options.d !== undefined) options.D = String(q.options.d);
+    }
+
+    let correctOption: 'A' | 'B' | 'C' | 'D' = 'A';
+    const rawCorrect = q.correctOption ?? q.correct_option ?? q.answer ?? q.correctAnswer;
+    if (typeof rawCorrect === 'number') {
+      const letters: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+      correctOption = letters[rawCorrect] || 'A';
+    } else if (typeof rawCorrect === 'string') {
+      const upper = rawCorrect.trim().toUpperCase();
+      if (upper === 'A' || upper === 'B' || upper === 'C' || upper === 'D') {
+        correctOption = upper;
+      } else if (upper.startsWith('OPT') && upper.length >= 7) {
+        const char = upper.charAt(upper.length - 1);
+        if (char === 'A' || char === 'B' || char === 'C' || char === 'D') correctOption = char;
+      } else if (options.A.trim().toLowerCase() === rawCorrect.trim().toLowerCase()) {
+        correctOption = 'A';
+      } else if (options.B.trim().toLowerCase() === rawCorrect.trim().toLowerCase()) {
+        correctOption = 'B';
+      } else if (options.C.trim().toLowerCase() === rawCorrect.trim().toLowerCase()) {
+        correctOption = 'C';
+      } else if (options.D.trim().toLowerCase() === rawCorrect.trim().toLowerCase()) {
+        correctOption = 'D';
+      }
+    }
+
+    return {
+      id: String(q.id || `q-${idx + 1}`),
+      text,
+      options,
+      correctOption,
+    };
+  });
+}
+
 export default function TeacherAssessmentsScreen() {
   const [activeTab, setActiveTab] = useState<'MANAGE_TESTS' | 'CHECK_SUBMISSIONS'>('MANAGE_TESTS');
   const [showCreateWizard, setShowCreateWizard] = useState(false);
+  const [selectedTestForView, setSelectedTestForView] = useState<Test | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const defaultTests: Test[] = [
     { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 5, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
@@ -120,6 +204,7 @@ export default function TeacherAssessmentsScreen() {
   }, []);
 
   const loadTestsAndSubmissions = async () => {
+    setIsRefreshing(true);
     try {
       // 1. Fetch tests from backend API + AsyncStorage
       let apiTests: any[] = [];
@@ -217,7 +302,9 @@ export default function TeacherAssessmentsScreen() {
       });
       setGradingMarks(initialMarks);
       setGradingFeedback(initialFeedback);
-    } catch (_) { }
+    } catch (_) { } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const onPdfFileSelected = (fileName: string, fileUri: string, rawText = '') => {
@@ -695,6 +782,18 @@ export default function TeacherAssessmentsScreen() {
             <View style={styles.listContainer}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>📚 Published Active Tests ({tests.length})</Text>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                  onPress={loadTestsAndSubmissions}
+                  disabled={isRefreshing}
+                >
+                  {isRefreshing ? (
+                    <ActivityIndicator size="small" color="#7B2CBF" />
+                  ) : (
+                    <Ionicons name="refresh-outline" size={14} color="#7B2CBF" />
+                  )}
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#7B2CBF' }}>Refresh</Text>
+                </TouchableOpacity>
               </View>
 
               {tests.map((t) => (
@@ -729,14 +828,64 @@ export default function TeacherAssessmentsScreen() {
                       <Ionicons name="ribbon-outline" size={12} color="#16A34A" />
                       <Text style={[styles.testStatVal, { color: '#16A34A' }]}>{t.totalMarks || 100} Marks</Text>
                     </View>
+                    <View style={styles.testStatBox}>
+                      <Ionicons name="help-circle-outline" size={12} color="#7B2CBF" />
+                      <Text style={[styles.testStatVal, { color: '#7B2CBF' }]}>
+                        {t.questionsCount || (Array.isArray(t.questions) ? t.questions.length : 5)} Qs
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Actions Row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F3F4F6' }}>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        backgroundColor: '#7B2CBF',
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderRadius: 8,
+                      }}
+                      onPress={() => setSelectedTestForView(t)}
+                    >
+                      <Ionicons name="eye-outline" size={14} color="#FFF" />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>View Questions & Answers</Text>
+                    </TouchableOpacity>
+
+                    {t.testType === 'PDF' && (
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          backgroundColor: '#EFF6FF',
+                          borderWidth: 1,
+                          borderColor: '#BFDBFE',
+                        }}
+                        onPress={() => {
+                          const uri = t.pdfFileUri || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+                          Linking.openURL(uri).catch(() => Alert.alert('Error', 'Could not open PDF file'));
+                        }}
+                      >
+                        <Ionicons name="download-outline" size={14} color="#2563EB" />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563EB' }}>Paper</Text>
+                      </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: 4,
-                        marginLeft: 'auto',
                         paddingHorizontal: 10,
-                        paddingVertical: 6,
+                        paddingVertical: 8,
                         borderRadius: 8,
                         backgroundColor: '#FEE2E2',
                         borderWidth: 1,
@@ -744,8 +893,8 @@ export default function TeacherAssessmentsScreen() {
                       }}
                       onPress={() => handleDeleteTest(t.id)}
                     >
-                      <Ionicons name="trash-outline" size={13} color="#DC2626" />
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#DC2626' }}>Delete Test</Text>
+                      <Ionicons name="trash-outline" size={14} color="#DC2626" />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#DC2626' }}>Delete</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -757,6 +906,18 @@ export default function TeacherAssessmentsScreen() {
           <View style={styles.listContainer}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>✍️ Student Submissions ({submissions.length})</Text>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                onPress={loadTestsAndSubmissions}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color="#7B2CBF" />
+                ) : (
+                  <Ionicons name="refresh-outline" size={14} color="#7B2CBF" />
+                )}
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#7B2CBF' }}>Refresh</Text>
+              </TouchableOpacity>
             </View>
 
             {submissions.length === 0 ? (
@@ -796,7 +957,7 @@ export default function TeacherAssessmentsScreen() {
                       >
                         <Ionicons name="document-attach" size={16} color="#7B2CBF" />
                         <Text style={styles.viewSolutionText}>
-                          View Student Solution File ({sub.solutionFileName || 'Solution.pdf'})
+                          View / Download Student Solution File ({sub.solutionFileName || 'Solution.pdf'})
                         </Text>
                       </TouchableOpacity>
                     ) : null}
@@ -859,6 +1020,160 @@ export default function TeacherAssessmentsScreen() {
         )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* ── TEST QUESTIONS & ANSWER KEY MODAL ── */}
+      <Modal
+        visible={!!selectedTestForView}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedTestForView(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{
+            backgroundColor: '#FFF',
+            borderRadius: 20,
+            width: '100%',
+            maxWidth: 720,
+            maxHeight: '90%',
+            padding: 20,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            elevation: 10,
+          }}>
+            {/* Modal Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 14, marginBottom: 14 }}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1F2937' }} numberOfLines={1}>
+                    {selectedTestForView?.title}
+                  </Text>
+                  <View style={[styles.typeTag, selectedTestForView?.testType === 'PDF' ? styles.tagPdf : styles.tagMcq]}>
+                    <Text style={[styles.typeTagText, selectedTestForView?.testType === 'PDF' ? styles.tagPdfText : styles.tagMcqText]}>
+                      {selectedTestForView?.testType === 'PDF' ? 'PDF Exam' : 'MCQ Test'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 13, color: '#7B2CBF', fontWeight: '600' }}>
+                  {selectedTestForView?.category} • {selectedTestForView?.duration} • {selectedTestForView?.totalMarks || 100} Marks • Pass: {selectedTestForView?.passScore}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedTestForView(null)}
+                style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }}
+              >
+                <Ionicons name="close" size={20} color="#4B5563" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Questions List */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
+              {selectedTestForView && (() => {
+                const qs = normalizeQuestions(selectedTestForView.questions, selectedTestForView.title || selectedTestForView.category);
+
+                return (
+                  <View style={{ gap: 14 }}>
+                    {selectedTestForView.testType === 'PDF' && (
+                      <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#BFDBFE', marginBottom: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, marginRight: 10 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E40AF' }}>
+                              📄 {selectedTestForView.pdfFileName || 'Question_Paper.pdf'}
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#3B82F6', marginTop: 2 }}>
+                              {selectedTestForView.pdfInstructions || 'Complete all questions in the question paper.'}
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={{ backgroundColor: '#2563EB', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            onPress={() => {
+                              const uri = selectedTestForView.pdfFileUri || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+                              Linking.openURL(uri).catch(() => Alert.alert('Error', 'Could not open PDF file'));
+                            }}
+                          >
+                            <Ionicons name="download-outline" size={14} color="#FFF" />
+                            <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Download PDF</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: '#374151' }}>
+                        Questions & Correct Answer Keys ({qs.length})
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#059669', fontWeight: '600' }}>
+                        ✓ Correct option marked in green
+                      </Text>
+                    </View>
+
+                    {qs.map((q, idx) => (
+                      <View key={q.id || idx} style={{ backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 14 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#7B2CBF', justifyContent: 'center', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#FFF' }}>{idx + 1}</Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: '#1F2937', lineHeight: 20 }}>
+                            {q.text}
+                          </Text>
+                        </View>
+
+                        {/* Options */}
+                        <View style={{ gap: 6, marginLeft: 32 }}>
+                          {(['A', 'B', 'C', 'D'] as const).map((opt) => {
+                            const isCorrect = q.correctOption === opt;
+                            const optVal = q.options[opt];
+                            return (
+                              <View
+                                key={opt}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  paddingVertical: 8,
+                                  paddingHorizontal: 12,
+                                  borderRadius: 8,
+                                  backgroundColor: isCorrect ? '#DCFCE7' : '#FFFFFF',
+                                  borderWidth: 1,
+                                  borderColor: isCorrect ? '#86EFAC' : '#E5E7EB',
+                                }}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: isCorrect ? '#16A34A' : '#6B7280' }}>
+                                    {opt}.
+                                  </Text>
+                                  <Text style={{ fontSize: 13, color: isCorrect ? '#15803D' : '#374151', fontWeight: isCorrect ? '600' : '400', flex: 1 }}>
+                                    {optVal}
+                                  </Text>
+                                </View>
+                                {isCorrect && (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16A34A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                    <Ionicons name="checkmark" size={12} color="#FFF" />
+                                    <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#FFF' }}>CORRECT</Text>
+                                  </View>
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+            </ScrollView>
+
+            {/* Modal Footer */}
+            <TouchableOpacity
+              style={{ backgroundColor: '#7B2CBF', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 14 }}
+              onPress={() => setSelectedTestForView(null)}
+            >
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Close Preview</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

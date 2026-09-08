@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import { api, getApiBaseUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
+import { coursesData } from '@/screens/home/home-screen';
 
 interface StudyMaterialsScreenProps {
   onClose?: () => void;
@@ -100,6 +101,7 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
 
   // Form State
   const [selectedFile, setSelectedFile] = useState<any>(null);
@@ -146,14 +148,15 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
       setAllTeacherBatches(rawBatches);
 
-      // Merge courses with full admin properties (including syllabusTopics added by admin)
+      // Merge courses with full admin properties (including syllabusTopics added by admin and coursesData fallback)
       const mergedCourses = myCoursesList.map((c: any) => {
         const full = allCoursesList.find((ac: any) => ac.title?.toLowerCase() === c.title?.toLowerCase());
+        const rawSyl = full?.syllabusTopics || c.syllabusTopics || (coursesData as any)[c.title]?.syllabusTopics || '';
         return {
           id: c.id,
           title: c.title,
           category: full?.category || c.category || 'Professional Training',
-          syllabusTopics: full?.syllabusTopics || c.syllabusTopics || '',
+          syllabusTopics: rawSyl,
         };
       });
 
@@ -478,19 +481,32 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
     if (!downloadUrl) return Alert.alert('Error', 'No file available.');
     try {
       if (Platform.OS === 'web') {
-        const res = await fetch(downloadUrl);
-        if (!res.ok) throw new Error();
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url; link.download = item.fileName;
-        document.body.appendChild(link); link.click();
-        document.body.removeChild(link); URL.revokeObjectURL(url);
+        window.open(downloadUrl, '_blank');
       } else {
         await Linking.openURL(downloadUrl);
       }
     } catch {
       Alert.alert('Error', 'Failed to open file');
+    }
+  };
+
+  const handleDownloadMaterial = async (item: Material) => {
+    const downloadUrl = item.id ? api.getMaterialDownloadUrl(item.id) : item.fileUri;
+    if (!downloadUrl) return Alert.alert('Error', 'No file available for download.');
+    try {
+      if (Platform.OS === 'web') {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = item.fileName || 'material';
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        await Linking.openURL(downloadUrl);
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to download file');
     }
   };
 
@@ -518,9 +534,17 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
               {materials.length} files · {totalDownloads} total downloads
             </Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleOpenUploadModal}>
-            <Ionicons name="add" size={26} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: 'rgba(255,255,255,0.18)' }]}
+              onPress={() => { loadMaterials(); loadCoursesAndBatches(); }}
+            >
+              <Ionicons name="refresh-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addButton} onPress={handleOpenUploadModal}>
+              <Ionicons name="add" size={26} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search bar */}
@@ -758,13 +782,29 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                               <Ionicons name="download-outline" size={13} color="#64748B" />
                               <Text style={styles.downloadsText}>{item.downloads} downloads</Text>
                             </View>
-                            <TouchableOpacity
-                              style={styles.deleteBtn}
-                              onPress={() => handleDelete(item.id)}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                              <TouchableOpacity
+                                style={{ backgroundColor: '#EDE9FE', padding: 6, borderRadius: 8 }}
+                                onPress={() => setPreviewMaterial(item)}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <Ionicons name="eye-outline" size={18} color="#7B2CBF" />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={{ backgroundColor: '#EFF6FF', padding: 6, borderRadius: 8 }}
+                                onPress={() => handleDownloadMaterial(item)}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <Ionicons name="download-outline" size={18} color="#2563EB" />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.deleteBtn, { marginLeft: 0 }]}
+                                onPress={() => handleDelete(item.id)}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                              </TouchableOpacity>
+                            </View>
                           </View>
                         </TouchableOpacity>
                       );
@@ -985,6 +1025,75 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── MATERIAL PREVIEW MODAL ── */}
+      <Modal
+        visible={!!previewMaterial}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPreviewMaterial(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 640 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={styles.modalTitle} numberOfLines={1}>{previewMaterial?.title}</Text>
+                <Text style={{ fontSize: 13, color: '#7B2CBF', fontWeight: '600', marginTop: 2 }}>
+                  {previewMaterial?.course} • {previewMaterial?.batch} • {previewMaterial?.moduleName}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setPreviewMaterial(null)}>
+                <Ionicons name="close" size={24} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 16, marginVertical: 14, borderWidth: 1, borderColor: '#E2E8F0' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <View style={[styles.iconBox, { backgroundColor: getIcon(previewMaterial?.type || 'PDF').bg }]}>
+                  <Ionicons name={getIcon(previewMaterial?.type || 'PDF').name} size={32} color={getIcon(previewMaterial?.type || 'PDF').color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#1E293B' }}>{previewMaterial?.fileName || 'Document File'}</Text>
+                  <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Type: {previewMaterial?.type} • {previewMaterial?.downloads} downloads</Text>
+                </View>
+              </View>
+
+              {!!previewMaterial?.description && (
+                <View style={{ backgroundColor: '#FFF', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#E2E8F0' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Description & Overview:</Text>
+                  <Text style={{ fontSize: 13, color: '#334155', lineHeight: 18 }}>{previewMaterial.description}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <TouchableOpacity
+                style={[styles.uploadBtn, { flex: 1, backgroundColor: '#7B2CBF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
+                onPress={() => {
+                  if (previewMaterial) handleOpenMaterial(previewMaterial);
+                }}
+              >
+                <Ionicons name="open-outline" size={18} color="#FFF" />
+                <Text style={styles.uploadBtnText}>Open / View File</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.uploadBtn, { flex: 1, backgroundColor: '#2563EB', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
+                onPress={() => {
+                  if (previewMaterial) handleDownloadMaterial(previewMaterial);
+                }}
+              >
+                <Ionicons name="download-outline" size={18} color="#FFF" />
+                <Text style={styles.uploadBtnText}>Download File</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setPreviewMaterial(null)}>
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

@@ -3,15 +3,13 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
-  // 1. Production API URL configured via EXPO_PUBLIC_API_URL in Vercel / CI / .env
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
-  }
+  const isBrowser = typeof window !== "undefined" && Boolean(window.location?.hostname);
+  const isLocalhost = isBrowser && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
-  // 2. Runtime override via window / localStorage / query param (useful on deployed Vercel previews)
-  if (typeof window !== "undefined") {
+  // 1. Runtime override via URL query param (?apiUrl=...) or localStorage
+  if (isBrowser) {
     try {
-      if (window.location && window.location.search) {
+      if (window.location.search) {
         const params = new URLSearchParams(window.location.search);
         const qApi = params.get("apiUrl") || params.get("api");
         if (qApi) {
@@ -27,6 +25,17 @@ export function getApiBaseUrl() {
     } catch {}
   }
 
+  // 2. Production API URL configured via EXPO_PUBLIC_API_URL
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    const envUrl = process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
+    // If we are running on a remote web domain (e.g. Vercel) but env was hardcoded to localhost, skip localhost
+    if (isBrowser && !isLocalhost && (envUrl.includes("localhost") || envUrl.includes("127.0.0.1") || envUrl.includes("10.0.2.2"))) {
+      // Fall through to remote default below
+    } else {
+      return envUrl;
+    }
+  }
+
   const extra = (Constants.expoConfig?.extra ?? {}) as {
     apiUrl?: string;
     apiUrlWeb?: string;
@@ -36,17 +45,17 @@ export function getApiBaseUrl() {
 
   const configuredUrl = extra.apiUrl || extra.apiBaseUrl;
   if (configuredUrl) {
-    return configuredUrl.replace(/\/$/, "");
+    if (isBrowser && !isLocalhost && (configuredUrl.includes("localhost") || configuredUrl.includes("127.0.0.1"))) {
+      // Fall through
+    } else {
+      return configuredUrl.replace(/\/$/, "");
+    }
   }
 
   if (Platform.OS === "web") {
-    if (typeof window !== "undefined" && window.location && window.location.hostname) {
-      const host = window.location.hostname;
-      if (host === "localhost" || host === "127.0.0.1") {
-        return "http://localhost:8080/api";
-      }
-      // On web preview/deployed domains without EXPO_PUBLIC_API_URL, fallback gracefully
-      return "http://localhost:8080/api";
+    if (isBrowser && !isLocalhost) {
+      // On live deployed web (e.g., Vercel), default directly to the production Render backend
+      return "https://nexusappbackend-zibq.onrender.com/api";
     }
     return "http://localhost:8080/api";
   }
@@ -63,7 +72,7 @@ export function getApiBaseUrl() {
     return "http://10.0.2.2:8080/api";
   }
 
-  return "http://localhost:8080/api";
+  return "https://nexusappbackend-zibq.onrender.com/api";
 }
 
 export function resolveDynamicFileUrl(urlOrPath: string): string {

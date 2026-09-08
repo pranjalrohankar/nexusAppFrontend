@@ -48,6 +48,76 @@ interface Question {
   correctOption: 'A' | 'B' | 'C' | 'D';
 }
 
+function normalizeQuestions(rawList: any, fallbackTitle: string): Question[] {
+  if (!rawList || !Array.isArray(rawList) || rawList.length === 0) {
+    return parseMcqsFromText('', fallbackTitle) as Question[];
+  }
+
+  return rawList.map((q: any, idx: number): Question => {
+    // 1. Resolve question text
+    let text = `Question ${idx + 1}`;
+    if (typeof q === 'string') {
+      text = q;
+    } else if (q.question && typeof q.question === 'string') {
+      text = q.question;
+    } else if (q.text && typeof q.text === 'string') {
+      text = q.text;
+    } else if (typeof q.question === 'object' && q.question !== null) {
+      text = q.question.text || q.question.title || JSON.stringify(q.question);
+    } else if (typeof q.text === 'object' && q.text !== null) {
+      text = q.text.text || q.text.title || JSON.stringify(q.text);
+    }
+
+    // 2. Resolve options
+    const options: { A: string; B: string; C: string; D: string } = {
+      A: 'Option A',
+      B: 'Option B',
+      C: 'Option C',
+      D: 'Option D',
+    };
+
+    if (Array.isArray(q.options)) {
+      if (q.options[0] !== undefined) options.A = String(typeof q.options[0] === 'object' ? q.options[0].text || q.options[0].value || JSON.stringify(q.options[0]) : q.options[0]);
+      if (q.options[1] !== undefined) options.B = String(typeof q.options[1] === 'object' ? q.options[1].text || q.options[1].value || JSON.stringify(q.options[1]) : q.options[1]);
+      if (q.options[2] !== undefined) options.C = String(typeof q.options[2] === 'object' ? q.options[2].text || q.options[2].value || JSON.stringify(q.options[2]) : q.options[2]);
+      if (q.options[3] !== undefined) options.D = String(typeof q.options[3] === 'object' ? q.options[3].text || q.options[3].value || JSON.stringify(q.options[3]) : q.options[3]);
+    } else if (q.options && typeof q.options === 'object') {
+      if (q.options.A !== undefined) options.A = String(q.options.A);
+      if (q.options.B !== undefined) options.B = String(q.options.B);
+      if (q.options.C !== undefined) options.C = String(q.options.C);
+      if (q.options.D !== undefined) options.D = String(q.options.D);
+      // lowercase keys fallback
+      if (q.options.a !== undefined) options.A = String(q.options.a);
+      if (q.options.b !== undefined) options.B = String(q.options.b);
+      if (q.options.c !== undefined) options.C = String(q.options.c);
+      if (q.options.d !== undefined) options.D = String(q.options.d);
+    }
+
+    // 3. Resolve correct option ('A' | 'B' | 'C' | 'D')
+    let correctOption: 'A' | 'B' | 'C' | 'D' = 'A';
+    const rawCorrect = q.correctOption ?? q.correct_option ?? q.answer ?? q.correctAnswer;
+    if (typeof rawCorrect === 'number') {
+      const letters: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+      correctOption = letters[rawCorrect] || 'A';
+    } else if (typeof rawCorrect === 'string') {
+      const clean = rawCorrect.trim().toUpperCase();
+      if (['A', 'B', 'C', 'D'].includes(clean)) {
+        correctOption = clean as any;
+      } else if (['0', '1', '2', '3'].includes(clean)) {
+        const letters: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+        correctOption = letters[parseInt(clean, 10)] || 'A';
+      }
+    }
+
+    return {
+      id: q.id || idx + 1,
+      text,
+      options,
+      correctOption,
+    };
+  });
+}
+
 export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreenProps) {
   // Parse Duration (default 45 mins), Pass Score (default 75%), Total Marks (default 100)
   const durationMins = parseInt(String(testInfo.duration || '45').replace(/\D/g, ''), 10) || 45;
@@ -195,9 +265,14 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const questionsList: Question[] = (testInfo as any).questions && Array.isArray((testInfo as any).questions) && (testInfo as any).questions.length > 0
-    ? (testInfo as any).questions
-    : (parseMcqsFromText('', testInfo.pdfFileName || testInfo.title) as any);
+  const rawQuestions = (testInfo as any).questions;
+  const questionsList: Question[] = React.useMemo(() => {
+    let list = rawQuestions;
+    if (typeof list === 'string') {
+      try { list = JSON.parse(list); } catch (_) {}
+    }
+    return normalizeQuestions(list, testInfo.pdfFileName || testInfo.title);
+  }, [rawQuestions, testInfo.pdfFileName, testInfo.title]);
 
   const currentQuestion = questionsList[currentIdx] || questionsList[0];
   const isAnswered = answers[currentIdx] !== undefined;
@@ -347,19 +422,31 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
 
   return (
     <SafeAreaView style={[styles.safeArea, { userSelect: 'none', WebkitUserSelect: 'none' } as any]} edges={['top']}>
-      {/* CAMERA ACCESS BLOCKING OVERLAY IF CAMERA NOT GRANTED */}
+      {/* CAMERA ACCESS OVERLAY */}
       {!cameraActive && (
         <View style={styles.cameraBlockedOverlay}>
           <View style={styles.cameraBlockedCard}>
-            <Ionicons name="videocam-off" size={48} color="#EF4444" />
-            <Text style={styles.cameraBlockedTitle}>Camera Access Required</Text>
+            <Ionicons name="videocam-outline" size={48} color="#7B2CBF" />
+            <Text style={styles.cameraBlockedTitle}>Proctored Assessment Mode</Text>
             <Text style={styles.cameraBlockedDesc}>
-              This is a proctored exam. Compulsory webcam access is required to take this test.
+              This exam features AI-assisted proctoring and focus monitoring. Compulsory webcam access is recommended.
             </Text>
             {cameraError ? <Text style={styles.cameraErrorText}>{cameraError}</Text> : null}
             <TouchableOpacity style={styles.retryCameraBtn} onPress={requestCameraPermission}>
               <Ionicons name="camera" size={18} color="#FFF" />
-              <Text style={styles.retryCameraBtnText}>Allow Camera Access & Start Exam</Text>
+              <Text style={styles.retryCameraBtnText}>Allow Camera & Start Exam</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#F3E8FF', alignItems: 'center' }}
+              onPress={() => setCameraActive(true)}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#7B2CBF' }}>Proceed to Test</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ marginTop: 8, paddingVertical: 6, alignItems: 'center' }}
+              onPress={onClose}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7280' }}>Cancel & Exit</Text>
             </TouchableOpacity>
           </View>
         </View>

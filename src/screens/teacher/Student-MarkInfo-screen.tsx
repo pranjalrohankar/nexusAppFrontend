@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
 
 interface Props {
@@ -45,40 +46,74 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
     try {
       const profileRes = await api.getTeacherProfile().catch(() => null);
       const profileData = profileRes?.data ?? profileRes;
-      const assignedCourses: any[] = profileData?.assignedCourses ?? [];
-      setCourses(assignedCourses);
-
-      if (assignedCourses.length > 0) {
-        // Use enrollments endpoint — properly filters by courseTitle on the backend
-        const results = await Promise.all(
-          assignedCourses.map((c: any) =>
-            api.getEnrollmentsByCourse(c.title).catch(() => [])
-          )
-        );
-        const map: Record<string, any[]> = {};
-        assignedCourses.forEach((c: any, i: number) => {
-          const raw = results[i];
-          const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
-          map[c.title] = list.map((e: any) => {
-            const nameVal = (e.name && String(e.name).trim())
-              || (e.studentName && String(e.studentName).trim())
-              || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '')
-              || (e.email && String(e.email).trim())
-              || 'Student';
-            return {
-              id: e.studentId ?? e.id,
-              studentId: e.studentId ?? e.id,
-              name: nameVal,
-              email: e.email ?? '',
-              phone: e.phone ?? '',
-              enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
-              paymentStatus: e.paymentStatus ?? '',
-              course: c.title,
-            };
-          });
-        });
-        setStudentsByCourse(map);
+      let courseList: any[] = profileData?.assignedCourses ?? [];
+      if (!courseList || courseList.length === 0) {
+        const allCoursesRes = await api.getAllCourses().catch(() => []);
+        const allList = Array.isArray(allCoursesRes?.data) ? allCoursesRes.data : Array.isArray(allCoursesRes) ? allCoursesRes : [];
+        if (allList.length > 0) {
+          courseList = allList;
+        } else {
+          courseList = [
+            { id: 1, title: 'Full Stack Web Development' },
+            { id: 2, title: 'Java Full Stack Development' },
+            { id: 3, title: 'Data Science & Machine Learning' },
+            { id: 4, title: 'UI/UX Design Mastery' },
+          ];
+        }
       }
+      setCourses(courseList);
+
+      const results = await Promise.all(
+        courseList.map((c: any) =>
+          api.getEnrollmentsByCourse(c.title).catch(() => [])
+        )
+      );
+      const map: Record<string, any[]> = {};
+      let totalFetchedStudents = 0;
+      courseList.forEach((c: any, i: number) => {
+        const raw = results[i];
+        const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+        totalFetchedStudents += list.length;
+        map[c.title] = list.map((e: any) => {
+          const nameVal = (e.name && String(e.name).trim())
+            || (e.studentName && String(e.studentName).trim())
+            || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '')
+            || (e.email && String(e.email).trim())
+            || 'Student';
+          return {
+            id: e.studentId ?? e.id,
+            studentId: e.studentId ?? e.id,
+            name: nameVal,
+            email: e.email ?? '',
+            phone: e.phone ?? '',
+            enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
+            paymentStatus: e.paymentStatus ?? '',
+            course: c.title,
+          };
+        });
+      });
+
+      if (totalFetchedStudents === 0) {
+        const allStudRes = await api.getStudents().catch(() => []);
+        const allStudList = Array.isArray(allStudRes?.data) ? allStudRes.data : Array.isArray(allStudRes) ? allStudRes : [];
+        if (allStudList.length > 0) {
+          allStudList.forEach((s: any) => {
+            const cTitle = s.course || s.courseTitle || 'Full Stack Web Development';
+            if (!map[cTitle]) map[cTitle] = [];
+            map[cTitle].push({
+              id: s.id,
+              studentId: s.id,
+              name: s.name || (s.firstName ? `${s.firstName} ${s.lastName || ''}`.trim() : 'Student'),
+              email: s.email || '',
+              phone: s.phone || '',
+              enrollmentDate: s.enrollmentDate || s.createdAt || '',
+              paymentStatus: s.paymentStatus || 'PAID',
+              course: cTitle,
+            });
+          });
+        }
+      }
+      setStudentsByCourse(map);
     } catch {
       // fail silently, empty state will show
     } finally {
@@ -122,8 +157,47 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
     setMarksLoading(true);
     try {
       const id = student.studentId ?? student.id;
+      const sEmail = String(student.email || '').trim().toLowerCase();
+      const sName = String(student.name || '').trim().toLowerCase();
       const res = await api.getStudentMarks(id).catch(() => ({ data: [] }));
-      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      let list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+
+      // Merge local submissions
+      try {
+        const storedStr = await AsyncStorage.getItem('NEXUS_TEST_SUBMISSIONS');
+        if (storedStr) {
+          const localSubs = JSON.parse(storedStr);
+          if (Array.isArray(localSubs)) {
+            const matching = localSubs.filter((sub: any) => {
+              const subEmail = String(sub.studentEmail || '').trim().toLowerCase();
+              const subName = String(sub.studentName || '').trim().toLowerCase();
+              return (sEmail && subEmail && sEmail === subEmail) ||
+                     (sName && subName && sName === subName);
+            });
+            matching.forEach((sub: any) => {
+              const subTitle = sub.testTitle || 'Assessment';
+              const existingIdx = list.findIndex((m: any) => (m.testName === subTitle || m.subject === subTitle));
+              const marksObt = sub.obtainedMarks ?? sub.marks ?? sub.score;
+              if (existingIdx >= 0) {
+                if (marksObt !== undefined && marksObt !== null) {
+                  list[existingIdx].marks = marksObt;
+                }
+              } else if (marksObt !== undefined && marksObt !== null) {
+                list.push({
+                  id: sub.id || `sub-${Date.now()}`,
+                  testName: subTitle,
+                  subject: subTitle,
+                  marks: marksObt,
+                  totalMarks: sub.totalMarks || 100,
+                  date: sub.submittedAt || new Date().toISOString().slice(0, 10),
+                  time: '',
+                });
+              }
+            });
+          }
+        }
+      } catch (_) {}
+
       setStudentMarks(list);
     } catch {
       setStudentMarks([]);
@@ -153,10 +227,12 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <Ionicons name="chevron-back" size={22} color="#FFF" />
           </TouchableOpacity>
-          {/* <Text style={styles.logoText}>
-            NE<Text style={styles.logoTextGold}>X</Text>US
-          </Text> */}
-          <View style={{ width: 36 }} />
+          <TouchableOpacity
+            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}
+            onPress={load}
+          >
+            <Ionicons name="refresh-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
         </View>
         <Text style={styles.welcomeText}>Student Marks</Text>
         <Text style={styles.headerSubtitle}>Search and review your students' performance</Text>

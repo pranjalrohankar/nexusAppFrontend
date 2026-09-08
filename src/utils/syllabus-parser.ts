@@ -76,7 +76,7 @@ export function parseSyllabus(input: any): SyllabusModule[] {
       }
     }
 
-    // Case 3: Plain text with newlines
+    // Case 3: Plain text with newlines or comma separated
     const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const modulesArr: SyllabusModule[] = [];
     let curr: SyllabusModule | null = null;
@@ -89,7 +89,7 @@ export function parseSyllabus(input: any): SyllabusModule[] {
         /^part\s*\d+/i.test(line) ||
         /^chapter\s*\d+/i.test(line) ||
         (line.endsWith(':') && !/^\d+[\.\)]/.test(line)) ||
-        (!curr && !/^\d+[\.\)]/.test(line) && !line.startsWith('•') && !line.startsWith('-'));
+        (!curr && !/^\d+[\.\)]/.test(line) && !line.startsWith('•') && !line.startsWith('-') && !line.includes(','));
 
       if (isHeader) {
         if (curr) {
@@ -104,18 +104,46 @@ export function parseSyllabus(input: any): SyllabusModule[] {
         const cleanTopic = line.replace(/^\d+[\.\)]\s*/, '').replace(/^[•\-\*]\s*/, '');
         if (!curr) {
           curr = {
-            title: `Module 1`,
+            title: `Module 1: Core Concepts`,
             topics: [],
           };
         }
         if (cleanTopic && curr) {
-          curr.topics.push(cleanTopic);
+          if (cleanTopic.includes(',') && !cleanTopic.startsWith('http')) {
+            cleanTopic.split(',').map(s => s.trim()).filter(Boolean).forEach(t => curr!.topics.push(t));
+          } else {
+            curr.topics.push(cleanTopic);
+          }
         }
       }
     });
 
     if (curr) {
       modulesArr.push(curr);
+    }
+
+    // Fallback: If single line with commas or no topics extracted
+    if (modulesArr.length === 1 && modulesArr[0].topics.length === 0) {
+      const singleTitle = modulesArr[0].title;
+      if (singleTitle.includes(',')) {
+        const parts = singleTitle.split(',').map((s) => s.trim()).filter(Boolean);
+        return [
+          {
+            title: 'Module 1: Core Curriculum & Topics',
+            topics: parts,
+          },
+        ];
+      }
+    }
+
+    if (modulesArr.length === 0 && trimmed.length > 0) {
+      const parts = trimmed.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      return [
+        {
+          title: 'Module 1: Course Syllabus & Topics',
+          topics: parts,
+        },
+      ];
     }
 
     return modulesArr;
