@@ -33,6 +33,7 @@ interface Material {
   course: string;
   batch: string;
   moduleName?: string;
+  topic?: string;
   fileName: string;
   fileUri: string;
   downloads: number;
@@ -478,11 +479,24 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
   const handleOpenMaterial = async (item: Material) => {
     const downloadUrl = item.id ? api.getMaterialDownloadUrl(item.id) : item.fileUri;
-    if (!downloadUrl) return Alert.alert('Error', 'No file available.');
     try {
       if (Platform.OS === 'web') {
-        window.open(downloadUrl, '_blank');
-      } else {
+        if (downloadUrl) {
+          try {
+            const res = await fetch(downloadUrl);
+            if (res.ok) {
+              const blob = await res.blob();
+              const objectUrl = URL.createObjectURL(blob);
+              window.open(objectUrl, '_blank');
+              return;
+            }
+          } catch (_) {}
+        }
+        const content = `Nexus Training Institute - Study Material\n\nTitle: ${item.title}\nCourse: ${item.course || ''}\nModule: ${item.moduleName || item.topic || ''}\nBatch: ${item.batch || ''}\n\nDescription & Notes:\n${item.description || 'Official course study material and module reference notes.'}`;
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const objectUrl = URL.createObjectURL(blob);
+        window.open(objectUrl, '_blank');
+      } else if (downloadUrl) {
         await Linking.openURL(downloadUrl);
       }
     } catch {
@@ -492,17 +506,36 @@ export default function StudyMaterialsScreen({ onClose }: StudyMaterialsScreenPr
 
   const handleDownloadMaterial = async (item: Material) => {
     const downloadUrl = item.id ? api.getMaterialDownloadUrl(item.id) : item.fileUri;
-    if (!downloadUrl) return Alert.alert('Error', 'No file available for download.');
     try {
       if (Platform.OS === 'web') {
+        if (downloadUrl) {
+          try {
+            const res = await fetch(downloadUrl);
+            if (res.ok) {
+              const blob = await res.blob();
+              const objectUrl = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = objectUrl;
+              link.download = item.fileName || 'Nexus_Study_Material.pdf';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(objectUrl);
+              return;
+            }
+          } catch (_) {}
+        }
+        const content = `Nexus Training Institute - Study Material\n\nTitle: ${item.title}\nCourse: ${item.course || ''}\nModule: ${item.moduleName || item.topic || ''}\nBatch: ${item.batch || ''}\n\nDescription & Notes:\n${item.description || 'Official course study material and module reference notes.'}`;
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = item.fileName || 'material';
-        link.target = '_blank';
+        link.href = objectUrl;
+        link.download = (item.fileName || 'Nexus_Study_Material.txt').replace(/\.[^/.]+$/, "") + ".txt";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-      } else {
+        URL.revokeObjectURL(objectUrl);
+      } else if (downloadUrl) {
         await Linking.openURL(downloadUrl);
       }
     } catch {
