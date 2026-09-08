@@ -3,9 +3,28 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
-  // 1. Production API URL configured via EXPO_PUBLIC_API_URL in Vercel / CI
+  // 1. Production API URL configured via EXPO_PUBLIC_API_URL in Vercel / CI / .env
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+
+  // 2. Runtime override via window / localStorage / query param (useful on deployed Vercel previews)
+  if (typeof window !== "undefined") {
+    try {
+      if (window.location && window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        const qApi = params.get("apiUrl") || params.get("api");
+        if (qApi) {
+          const clean = qApi.replace(/\/$/, "");
+          localStorage.setItem("nexus_api_url", clean);
+          return clean;
+        }
+      }
+      const savedApi = localStorage.getItem("nexus_api_url");
+      if (savedApi) {
+        return savedApi.replace(/\/$/, "");
+      }
+    } catch {}
   }
 
   const extra = (Constants.expoConfig?.extra ?? {}) as {
@@ -26,7 +45,8 @@ export function getApiBaseUrl() {
       if (host === "localhost" || host === "127.0.0.1") {
         return "http://localhost:8080/api";
       }
-      return `http://${host}:8080/api`;
+      // On web preview/deployed domains without EXPO_PUBLIC_API_URL, fallback gracefully
+      return "http://localhost:8080/api";
     }
     return "http://localhost:8080/api";
   }
@@ -53,6 +73,11 @@ export function resolveDynamicFileUrl(urlOrPath: string): string {
 
   // If URL matches any domain/IP like http://192.168.x.x:8080/uploads/ or http://localhost:8080/uploads/
   if (/^https?:\/\/[^\/]+(?::\d+)?\/uploads\//i.test(url)) {
+    return url.replace(/^https?:\/\/[^\/]+(?::\d+)?/i, activeApiBase);
+  }
+
+  // If URL matches streaming endpoint like http://localhost:8080/api/recordings/stream/1
+  if (/^https?:\/\/[^\/]+(?::\d+)?\/api\/recordings\/stream\//i.test(url)) {
     return url.replace(/^https?:\/\/[^\/]+(?::\d+)?/i, activeApiBase);
   }
 
@@ -372,7 +397,7 @@ export const api = {
     const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
     return list.map((item: any) => ({
       ...item,
-      videoUrl: resolveDynamicFileUrl(item.videoUrl || item.url || item.filePath),
+      videoUrl: resolveDynamicFileUrl(item.fileUrl || item.videoUrl || item.url || item.filePath || (item.id ? `/api/recordings/stream/${item.id}` : '')),
     }));
   },
   uploadClassRecording: (data: FormData) =>
@@ -408,7 +433,7 @@ export const api = {
     const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
     return list.map((item: any) => ({
       ...item,
-      videoUrl: resolveDynamicFileUrl(item.videoUrl || item.url || item.filePath),
+      videoUrl: resolveDynamicFileUrl(item.fileUrl || item.videoUrl || item.url || item.filePath || (item.id ? `/api/recordings/stream/${item.id}` : '')),
     }));
   },
   getStudentUpcomingClasses: () => get('/student/upcoming-classes'),

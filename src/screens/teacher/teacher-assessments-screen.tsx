@@ -65,14 +65,26 @@ interface Submission {
   feedback?: string;
 }
 
+function safeParseJson(json: any, fallback: any = undefined) {
+  if (!json) return fallback;
+  if (typeof json === 'object') return json;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function TeacherAssessmentsScreen() {
   const [activeTab, setActiveTab] = useState<'MANAGE_TESTS' | 'CHECK_SUBMISSIONS'>('MANAGE_TESTS');
   const [showCreateWizard, setShowCreateWizard] = useState(false);
 
   const defaultTests: Test[] = [
-    // { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 30, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    // { id: '2', title: 'React Advanced Patterns Test', questionsCount: 40, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    // { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 25, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
+    { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 5, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
+    { id: '2', title: 'React Advanced Patterns Test', questionsCount: 5, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
+    { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 5, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
+    { id: '4', title: 'Data Science Foundations', questionsCount: 5, duration: '40 mins', passScore: '70%', category: 'Data Science & Machine Learning', testType: 'MCQ', totalMarks: 100 },
+    { id: '5', title: 'Java Full Stack & Spring Boot Assessment', questionsCount: 5, duration: '45 mins', passScore: '75%', category: 'Java Full Stack', testType: 'MCQ', totalMarks: 100 },
   ];
 
   const [tests, setTests] = useState<Test[]>(defaultTests);
@@ -119,7 +131,7 @@ export default function TeacherAssessmentsScreen() {
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
       let localTests: any[] = [];
       if (storedTests) {
-        const parsed = JSON.parse(storedTests);
+        const parsed = safeParseJson(storedTests, []);
         if (Array.isArray(parsed)) localTests = parsed;
       }
 
@@ -127,10 +139,11 @@ export default function TeacherAssessmentsScreen() {
       const mergedTestsMap = new Map<string, Test>();
       apiTests.forEach((t: any) => {
         const tid = String(t.id);
+        const parsedQ = safeParseJson(t.questionsJson, undefined);
         mergedTestsMap.set(tid, {
           id: tid,
           title: t.title || t.testName,
-          questionsCount: t.questionsCount || (t.questionsJson ? JSON.parse(t.questionsJson).length : 0),
+          questionsCount: t.questionsCount || (Array.isArray(parsedQ) ? parsedQ.length : 0),
           duration: t.duration || '45 mins',
           passScore: t.passScore || '75%',
           category: t.category || t.courseTitle || 'Full Stack Development',
@@ -139,7 +152,7 @@ export default function TeacherAssessmentsScreen() {
           pdfFileName: t.pdfFileName,
           pdfFileUri: t.pdfFileUri,
           pdfInstructions: t.pdfInstructions,
-          questions: t.questionsJson ? JSON.parse(t.questionsJson) : undefined,
+          questions: parsedQ,
         });
       });
       localTests.forEach((t: any) => {

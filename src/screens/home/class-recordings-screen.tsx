@@ -571,7 +571,13 @@ export default function ClassRecordingsScreen({ onBack }: ClassRecordingsScreenP
   const loadRecordings = async () => {
     try {
       setLoading(true);
-      const data = await api.getClassRecordings();
+      let data = await api.getClassRecordings();
+      if (!Array.isArray(data) || data.length === 0) {
+        const studentData = await api.getStudentRecordings().catch(() => []);
+        if (Array.isArray(studentData) && studentData.length > 0) {
+          data = studentData;
+        }
+      }
       if (Array.isArray(data)) {
         setRecordings(
           data.sort((a: any, b: any) =>

@@ -47,6 +47,16 @@ interface RealMaterial {
   uploadedAt: string;
 }
 
+function safeParseJson(json: any, fallback: any = undefined) {
+  if (!json) return fallback;
+  if (typeof json === 'object') return json;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
 export default function TestsScreen() {
@@ -69,18 +79,19 @@ export default function TestsScreen() {
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
       let localTests: any[] = [];
       if (storedTests) {
-        const parsed = JSON.parse(storedTests);
+        const parsed = safeParseJson(storedTests, []);
         if (Array.isArray(parsed)) localTests = parsed;
       }
 
       const mergedTestsMap = new Map<string, any>();
       apiTests.forEach((t: any) => {
         const tid = String(t.id);
+        const parsedQ = safeParseJson(t.questionsJson, undefined);
         mergedTestsMap.set(tid, {
           id: tid,
           title: t.title || t.testName,
           category: t.category || t.courseTitle || 'Full Stack Development',
-          questionsCount: t.questionsCount || (t.questionsJson ? JSON.parse(t.questionsJson).length : 0),
+          questionsCount: t.questionsCount || (Array.isArray(parsedQ) ? parsedQ.length : 0),
           duration: t.duration || '45 mins',
           passScore: t.passScore || '75%',
           totalMarks: t.totalMarks || 100,
@@ -88,7 +99,7 @@ export default function TestsScreen() {
           pdfFileName: t.pdfFileName,
           pdfFileUri: t.pdfFileUri,
           pdfInstructions: t.pdfInstructions,
-          questions: t.questionsJson ? JSON.parse(t.questionsJson) : undefined,
+          questions: parsedQ,
         });
       });
       localTests.forEach((t: any) => {
