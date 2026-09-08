@@ -36,9 +36,9 @@ function useToast() {
   const show = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     Animated.sequence([
-      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== 'web' }),
       Animated.delay(2500),
-      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: Platform.OS !== 'web' }),
     ]).start(() => setToast(null));
   };
 

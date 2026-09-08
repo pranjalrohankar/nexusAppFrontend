@@ -98,7 +98,7 @@ export default function PrivacyPolicyScreen({ onBack }: Props) {
               <MaterialCommunityIcons name="shield-account-outline" size={22} color="#7B2CBF" />
             </View>
             <Text style={styles.introText}>
-              Nexus Training Institute ("we", "us", or "our") is committed to protecting your privacy. This policy explains how we collect, use, and safeguard the personal information of students using our platform.
+              Nexus Training Institute (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is committed to protecting your privacy. This policy explains how we collect, use, and safeguard the personal information of students using our platform.
             </Text>
           </View>
         </View>

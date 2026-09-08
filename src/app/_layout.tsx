@@ -24,11 +24,17 @@ export default function TabLayout() {
   // Global reset: eliminate default browser blue focus outline from all web inputs
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const styleId = 'nexus-remove-focus-ring';
+      const styleId = 'nexus-web-fonts-and-outline';
       if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
+          @font-face {
+            font-family: 'Ionicons';
+            src: url('https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.woff2') format('woff2'),
+                 url('https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.ttf') format('truetype');
+            font-display: swap;
+          }
           input, textarea, select, [contenteditable="true"], [tabindex] {
             outline: none !important;
             outline-width: 0 !important;
@@ -163,11 +169,6 @@ export default function TabLayout() {
       if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
     }
   }, [isAuthenticated]);
-
-  console.log("ThemeProvider is:", ThemeProvider);
-  console.log("AuthFlow is:", AuthFlow);
-  console.log("AnimatedSplashOverlay is:", AnimatedSplashOverlay);
-  console.log("AppTabs is:", AppTabs);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

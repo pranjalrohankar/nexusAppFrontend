@@ -110,8 +110,6 @@ export function resolveDynamicFileUrl(urlOrPath: string): string {
   return `${activeApiBase}${cleanPath}`;
 }
 
-const BASE_URL = getApiBaseUrl();
-
 let _token: string | null = null;
 
 export function setToken(token: string) {
@@ -171,27 +169,27 @@ function buildHeaders(contentType?: string, skipAuth = false) {
 async function handleResponse(res: Response) {
   if (!res.ok) {
     if (res.status === 403) {
-      console.error(
-        "403 Forbidden - Token may be invalid or missing admin role",
-      );
+      console.warn("403 Forbidden - Token may be invalid or missing required role");
     }
-    const text = await res.text();
-    console.error("API Error:", res.status, text);
+    const text = await res.text().catch(() => "");
+    if (res.status >= 500) {
+      console.warn(`API ${res.status}:`, text);
+    }
     try {
       const json = JSON.parse(text);
-      if (json && json.message) {
-        return { success: false, message: json.message, status: res.status };
+      if (json && (json.message || json.data !== undefined)) {
+        return { success: false, message: json.message || `HTTP ${res.status}`, data: json.data || [], status: res.status };
       }
     } catch {}
-    return { success: false, message: text || `HTTP ${res.status}`, status: res.status };
+    return { success: false, message: text || `HTTP ${res.status}`, data: [], status: res.status };
   }
   if (res.status === 204)
-    return { success: true, message: "Operation successful" };
+    return { success: true, message: "Operation successful", data: [] };
   const contentType = res.headers.get("content-type");
   if (contentType && contentType.includes("application/json")) {
-    return res.json();
+    return res.json().catch(() => ({ success: true, message: "Operation successful", data: [] }));
   }
-  return { success: true, message: "Operation successful" };
+  return { success: true, message: "Operation successful", data: [] };
 }
 
 // ── In-Memory Fast Cache for Instant Screen Loads ──

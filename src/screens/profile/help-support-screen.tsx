@@ -47,9 +47,9 @@ export default function HelpSupportScreen({ onBack, teacherProfile, userRole = '
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ message: msg, type });
     Animated.sequence([
-      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: (Platform.OS as string) !== 'web' }),
       Animated.delay(2500),
-      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: (Platform.OS as string) !== 'web' }),
     ]).start(() => setToast(null));
   };
 

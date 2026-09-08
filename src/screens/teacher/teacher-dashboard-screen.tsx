@@ -186,7 +186,7 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
           </TouchableOpacity>
         </View>
         <Text style={styles.welcomeText}>Welcome {displayName}!</Text>
-        <Text style={styles.headerSubtitle}>Here's your teaching schedule for today</Text>
+        <Text style={styles.headerSubtitle}>Here&apos;s your teaching schedule for today</Text>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -274,7 +274,7 @@ export default function TeacherDashboardScreen({ onUploadRecording, onUploadStud
               <Ionicons name="calendar" size={20} color="#FFF" />
             </View>
             <View>
-              <Text style={styles.scheduleTitle}>Today's Schedule</Text>
+              <Text style={styles.scheduleTitle}>Today&apos;s Schedule</Text>
               <Text style={styles.scheduleDate}>{todayLabel()}</Text>
             </View>
           </View>

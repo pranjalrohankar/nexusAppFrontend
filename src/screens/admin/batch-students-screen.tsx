@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Animated, StatusBar,
+  TextInput, ActivityIndicator, Animated, StatusBar, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -70,9 +70,9 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     Animated.sequence([
-      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: (Platform.OS as string) !== 'web' }),
       Animated.delay(2500),
-      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: (Platform.OS as string) !== 'web' }),
     ]).start(() => setToast(null));
   };
 

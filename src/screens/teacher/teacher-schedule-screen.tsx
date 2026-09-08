@@ -162,7 +162,7 @@ export default function TeacherScheduleScreen() {
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.summaryCard}
         >
-          <Text style={styles.summaryTitle}>This Week's Summary</Text>
+          <Text style={styles.summaryTitle}>This Week&apos;s Summary</Text>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryVal, { color: '#7B2CBF' }]}>{totalClasses}</Text>
