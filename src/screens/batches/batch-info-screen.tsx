@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseSyllabus } from '../../utils/syllabus-parser';
-import { getCompletedTopicsForCourse } from '../../utils/syllabus-progress-store';
+import { getCompletedTopicsForCourse, parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
 import { api } from '../../services/api';
 import { coursesData } from '@/screens/home/home-screen';
 

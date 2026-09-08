@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../services/api';
 import { parseSyllabus } from '../../utils/syllabus-parser';
-import { getCompletedTopicsForCourse, toggleTopicCompleted } from '../../utils/syllabus-progress-store';
+import { getCompletedTopicsForCourse, toggleTopicCompleted, isTopicCovered } from '../../utils/syllabus-progress-store';
 import { coursesData } from '@/screens/home/home-screen';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -797,7 +797,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                   }
                 });
                 const totalTopics = allTopics.length;
-                const doneCount = allTopics.filter(t => completedTopics.includes(t)).length;
+                const doneCount = allTopics.filter(t => isTopicCovered(t, completedTopics)).length;
                 const progressPct = totalTopics > 0 ? Math.round((doneCount / totalTopics) * 100) : 0;
 
                 return (
@@ -823,7 +823,7 @@ export default function TeacherClassesScreen({ onOpenNotifications }: TeacherCla
                         </Text>
                         {mod.topics && mod.topics.length > 0 ? (
                           mod.topics.map((t, tIdx) => {
-                            const isDone = completedTopics.includes(t);
+                            const isDone = isTopicCovered(t, completedTopics);
                             return (
                               <TouchableOpacity
                                 key={tIdx}

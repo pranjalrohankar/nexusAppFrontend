@@ -368,15 +368,26 @@ export default function AdminBatchesScreen() {
           <>
             <View style={{ flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }}>
           {pagedBatches.map((batch) => {
-            const selectedCourse = courses.find(c => c.title === batch.selectCourse);
-            const syllabusRaw = (selectedCourse as any)?.syllabusTopics || (coursesData as any)?.[batch.selectCourse]?.syllabusTopics || (coursesData as any)?.[batch.selectCourse]?.syllabus;
+            const batchCourseNorm = (batch.selectCourse || '').trim().toLowerCase();
+            const selectedCourse = courses.find(c => {
+              if (!c.title) return false;
+              const ct = c.title.trim().toLowerCase();
+              return ct === batchCourseNorm || (batchCourseNorm && (ct.includes(batchCourseNorm) || batchCourseNorm.includes(ct)));
+            });
+            const syllabusRaw = (selectedCourse as any)?.syllabusTopics ||
+              (selectedCourse as any)?.syllabus ||
+              (selectedCourse as any)?.whatYouWillLearn ||
+              (coursesData as any)?.[batch.selectCourse]?.syllabusTopics ||
+              (coursesData as any)?.[batch.selectCourse]?.syllabus ||
+              Object.values(coursesData).find(cd => cd.title?.trim().toLowerCase() === batchCourseNorm)?.syllabusTopics ||
+              Object.values(coursesData).find(cd => batchCourseNorm && (cd.title?.toLowerCase().includes(batchCourseNorm) || batchCourseNorm.includes(cd.title?.toLowerCase())))?.syllabusTopics;
             const parsedModules = parseSyllabus(syllabusRaw);
             let allBatchTopics: string[] = [];
             parsedModules.forEach(m => {
               if (m.topics && m.topics.length > 0) allBatchTopics.push(...m.topics);
             });
             const totalSyllabusTopics = allBatchTopics.length;
-            const coveredList = parseTopicsData(batch.coveredTopics || (selectedCourse as any)?.coveredTopics);
+            const coveredList = parseTopicsData(batch.coveredTopics || (selectedCourse as any)?.coveredTopics || (batch as any).completedTopics);
             const coveredSyllabusCount = allBatchTopics.filter(t => isTopicCovered(t, coveredList)).length;
             const syllabusPercent = totalSyllabusTopics > 0 ? Math.round((coveredSyllabusCount / totalSyllabusTopics) * 100) : 0;
 
@@ -750,15 +761,26 @@ export default function AdminBatchesScreen() {
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {(() => {
                 if (!syllabusViewingBatch) return null;
-                const selectedCourse = courses.find(c => c.title === syllabusViewingBatch.selectCourse);
-                const syllabusRaw = (selectedCourse as any)?.syllabusTopics || (coursesData as any)?.[syllabusViewingBatch.selectCourse]?.syllabusTopics || (coursesData as any)?.[syllabusViewingBatch.selectCourse]?.syllabus;
+                const batchCourseNorm = (syllabusViewingBatch.selectCourse || '').trim().toLowerCase();
+                const selectedCourse = courses.find(c => {
+                  if (!c.title) return false;
+                  const ct = c.title.trim().toLowerCase();
+                  return ct === batchCourseNorm || (batchCourseNorm && (ct.includes(batchCourseNorm) || batchCourseNorm.includes(ct)));
+                });
+                const syllabusRaw = (selectedCourse as any)?.syllabusTopics ||
+                  (selectedCourse as any)?.syllabus ||
+                  (selectedCourse as any)?.whatYouWillLearn ||
+                  (coursesData as any)?.[syllabusViewingBatch.selectCourse]?.syllabusTopics ||
+                  (coursesData as any)?.[syllabusViewingBatch.selectCourse]?.syllabus ||
+                  Object.values(coursesData).find(cd => cd.title?.trim().toLowerCase() === batchCourseNorm)?.syllabusTopics ||
+                  Object.values(coursesData).find(cd => batchCourseNorm && (cd.title?.toLowerCase().includes(batchCourseNorm) || batchCourseNorm.includes(cd.title?.toLowerCase())))?.syllabusTopics;
                 const parsedModules = parseSyllabus(syllabusRaw);
                 let allBatchTopics: string[] = [];
                 parsedModules.forEach(m => {
                   if (m.topics && m.topics.length > 0) allBatchTopics.push(...m.topics);
                 });
                 const totalSyllabusTopics = allBatchTopics.length;
-                const coveredList = parseTopicsData(syllabusViewingBatch.coveredTopics || (selectedCourse as any)?.coveredTopics);
+                const coveredList = parseTopicsData(syllabusViewingBatch.coveredTopics || (selectedCourse as any)?.coveredTopics || (syllabusViewingBatch as any).completedTopics);
                 const coveredSyllabusCount = allBatchTopics.filter(t => isTopicCovered(t, coveredList)).length;
                 const syllabusPercent = totalSyllabusTopics > 0 ? Math.round((coveredSyllabusCount / totalSyllabusTopics) * 100) : 0;
 

@@ -505,6 +505,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       setSelectedModule('');
       setSelectedTopic('');
       setTopicOptions([]);
+      await fetchRecentUploads();
       showToast('Recording uploaded successfully!', 'success');
     } catch (err: any) {
       Alert.alert('Upload failed', err?.message || 'Please try again.');
