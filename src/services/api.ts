@@ -3,12 +3,28 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 export function getApiBaseUrl() {
-  if (Platform.OS === "web") {
-    if (typeof window !== "undefined" && window.location && window.location.hostname) {
-      const host = window.location.hostname;
-      return `http://${host}:8080/api`;
-    }
-    return "http://localhost:8080/api";
+  // 1. Production API URL configured via EXPO_PUBLIC_API_URL in Vercel / CI / .env
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+
+  // 2. Runtime override via window / localStorage / query param (useful on deployed Vercel previews)
+  if (typeof window !== "undefined") {
+    try {
+      if (window.location && window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        const qApi = params.get("apiUrl") || params.get("api");
+        if (qApi) {
+          const clean = qApi.replace(/\/$/, "");
+          localStorage.setItem("nexus_api_url", clean);
+          return clean;
+        }
+      }
+      const savedApi = localStorage.getItem("nexus_api_url");
+      if (savedApi) {
+        return savedApi.replace(/\/$/, "");
+      }
+    } catch {}
   }
 
   const extra = (Constants.expoConfig?.extra ?? {}) as {
@@ -21,6 +37,18 @@ export function getApiBaseUrl() {
   const configuredUrl = extra.apiUrl || extra.apiBaseUrl;
   if (configuredUrl) {
     return configuredUrl.replace(/\/$/, "");
+  }
+
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined" && window.location && window.location.hostname) {
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
+        return "http://localhost:8080/api";
+      }
+      // On web preview/deployed domains without EXPO_PUBLIC_API_URL, fallback gracefully
+      return "http://localhost:8080/api";
+    }
+    return "http://localhost:8080/api";
   }
 
   const hostUri =
@@ -45,6 +73,11 @@ export function resolveDynamicFileUrl(urlOrPath: string): string {
 
   // If URL matches any domain/IP like http://192.168.x.x:8080/uploads/ or http://localhost:8080/uploads/
   if (/^https?:\/\/[^\/]+(?::\d+)?\/uploads\//i.test(url)) {
+    return url.replace(/^https?:\/\/[^\/]+(?::\d+)?/i, activeApiBase);
+  }
+
+  // If URL matches streaming endpoint like http://localhost:8080/api/recordings/stream/1
+  if (/^https?:\/\/[^\/]+(?::\d+)?\/api\/recordings\/stream\//i.test(url)) {
     return url.replace(/^https?:\/\/[^\/]+(?::\d+)?/i, activeApiBase);
   }
 
@@ -152,13 +185,71 @@ async function handleResponse(res: Response) {
   return { success: true, message: "Operation successful" };
 }
 
+// ── In-Memory Fast Cache for Instant Screen Loads ──
+const _apiCache = new Map<string, { data: any; expiresAt: number }>();
+const DEFAULT_CACHE_TTL = 30 * 1000; // 30 seconds
+
+export function clearApiCache(prefix?: string) {
+  if (!prefix) {
+    _apiCache.clear();
+  } else {
+    for (const key of _apiCache.keys()) {
+      if (key.startsWith(prefix) || key.includes(prefix)) {
+        _apiCache.delete(key);
+      }
+    }
+  }
+}
+
+async function get(path: string, bypassCache = false) {
+  const token = getToken();
+  const cacheKey = `auth:${token ? token.substring(0, 15) : 'anon'}:${path}`;
+  
+  if (!bypassCache) {
+    const cached = _apiCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, { headers: buildHeaders() });
+  const data = await handleResponse(res);
+  
+  if (data && data.success !== false) {
+    _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+  }
+  return data;
+}
+
+async function getPublic(path: string, bypassCache = false) {
+  const cacheKey = `pub:${path}`;
+  if (!bypassCache) {
+    const cached = _apiCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`);
+  const data = await handleResponse(res);
+  
+  if (data && data.success !== false) {
+    _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+  }
+  return data;
+}
+
 async function post(
   path: string,
   body: object,
   contentType = "application/json",
   skipAuth = false,
 ) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  clearApiCache();
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: buildHeaders(contentType, skipAuth),
     body: JSON.stringify(body),
@@ -167,7 +258,9 @@ async function post(
 }
 
 async function postFormData(path: string, body: FormData) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  clearApiCache();
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: buildHeaders(),
     body,
@@ -175,18 +268,10 @@ async function postFormData(path: string, body: FormData) {
   return handleResponse(res);
 }
 
-async function get(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, { headers: buildHeaders() });
-  return handleResponse(res);
-}
-
-async function getPublic(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`);
-  return handleResponse(res);
-}
-
 async function put(path: string, body: object) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  clearApiCache();
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "PUT",
     headers: buildHeaders("application/json"),
     body: JSON.stringify(body),
@@ -195,7 +280,9 @@ async function put(path: string, body: object) {
 }
 
 async function del(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  clearApiCache();
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "DELETE",
     headers: buildHeaders(),
   });
@@ -208,7 +295,9 @@ async function del(path: string) {
 }
 
 async function patch(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  clearApiCache();
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "PATCH",
     headers: buildHeaders(),
   });
@@ -219,7 +308,7 @@ export const api = {
   login: (
     email: string,
     password: string,
-    role: string,
+    role?: string,
     deviceFingerprint?: string,
   ) => post("/auth/login", { email, password, role, deviceFingerprint }, "application/json", true),
 
@@ -308,7 +397,7 @@ export const api = {
     const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
     return list.map((item: any) => ({
       ...item,
-      videoUrl: resolveDynamicFileUrl(item.videoUrl || item.url || item.filePath),
+      videoUrl: resolveDynamicFileUrl(item.fileUrl || item.videoUrl || item.url || item.filePath || (item.id ? `/api/recordings/stream/${item.id}` : '')),
     }));
   },
   uploadClassRecording: (data: FormData) =>
@@ -344,7 +433,7 @@ export const api = {
     const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
     return list.map((item: any) => ({
       ...item,
-      videoUrl: resolveDynamicFileUrl(item.videoUrl || item.url || item.filePath),
+      videoUrl: resolveDynamicFileUrl(item.fileUrl || item.videoUrl || item.url || item.filePath || (item.id ? `/api/recordings/stream/${item.id}` : '')),
     }));
   },
   getStudentUpcomingClasses: () => get('/student/upcoming-classes'),
@@ -361,4 +450,37 @@ export const api = {
   getTeacherNotifications: () => get('/notifications/teacher'),
   markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
   markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
+
+  // User Profile & Session Persistence
+  getMe: () => get('/users/me'),
+  updateUserProfile: (data: object) => put('/users/profile', data),
+  changePassword: (data: object) => put('/users/change-password', data),
+  getAllUsers: () => get('/users/all'),
+  toggleUserStatus: (id: number | string, active?: boolean) => put(`/users/${id}/status`, { active }),
+
+  // Tests & Assessments endpoints
+  getAllTests: async () => {
+    const res = await get('/tests/all');
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getTestsByCourse: async (courseTitle: string) => {
+    const res = await get(`/tests/course/${encodeURIComponent(courseTitle)}`);
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getTestById: (id: number | string) => get(`/tests/${id}`),
+  createTest: (data: object) => post('/tests', data),
+  deleteTest: (id: number | string) => del(`/tests/${id}`),
+
+  // Test Attempt & Submissions
+  submitTestAttempt: (data: object) => post('/tests/submit', data),
+  getTestSubmissions: async (status?: string) => {
+    const path = status ? `/tests/submissions?status=${encodeURIComponent(status)}` : '/tests/submissions';
+    const res = await get(path);
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  getMyTestSubmissions: async () => {
+    const res = await get('/tests/submissions/my');
+    return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+  },
+  gradeTestSubmission: (id: number | string, data: object) => put(`/tests/submissions/${id}/grade`, data),
 };

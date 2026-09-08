@@ -286,7 +286,7 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
       const newSub = {
         id: `sub-${Date.now()}`,
         testId: testInfo.id || `test-${Date.now()}`,
-        testTitle: testInfo.title,
+        testTitle: testInfo.title || (testInfo as any).testName,
         studentName: studentName,
         studentEmail: studentEmail,
         submittedAt: new Date().toLocaleString(),
@@ -298,6 +298,21 @@ export default function ActiveTestScreen({ testInfo, onClose }: ActiveTestScreen
           : `Evaluated: ${score}/${questionsList.length} correct (${percentScore}%).`,
       };
 
+      // 1. Submit to backend PostgreSQL API
+      const numTestId = typeof testInfo.id === 'number' ? testInfo.id : parseInt(String(testInfo.id).replace(/\D/g, ''), 10) || undefined;
+      api.submitTestAttempt({
+        testId: numTestId,
+        testTitle: testInfo.title || (testInfo as any).testName,
+        studentName: studentName,
+        studentEmail: studentEmail,
+        marksObtained: obtainedMarks,
+        totalMarks: totalMarks,
+        status: 'GRADED',
+        answersJson: JSON.stringify(currentAnswers),
+        feedback: newSub.feedback,
+      }).catch(err => console.log('Backend submission sync error:', err));
+
+      // 2. Save to local AsyncStorage for instant UI responsiveness
       const existingSubsStr = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
       const existingSubs = existingSubsStr ? JSON.parse(existingSubsStr) : [];
       const updatedSubs = [newSub, ...existingSubs];

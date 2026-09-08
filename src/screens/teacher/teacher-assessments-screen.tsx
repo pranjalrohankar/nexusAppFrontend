@@ -65,14 +65,26 @@ interface Submission {
   feedback?: string;
 }
 
+function safeParseJson(json: any, fallback: any = undefined) {
+  if (!json) return fallback;
+  if (typeof json === 'object') return json;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function TeacherAssessmentsScreen() {
   const [activeTab, setActiveTab] = useState<'MANAGE_TESTS' | 'CHECK_SUBMISSIONS'>('MANAGE_TESTS');
   const [showCreateWizard, setShowCreateWizard] = useState(false);
 
   const defaultTests: Test[] = [
-    // { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 30, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    // { id: '2', title: 'React Advanced Patterns Test', questionsCount: 40, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    // { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 25, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
+    { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 5, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
+    { id: '2', title: 'React Advanced Patterns Test', questionsCount: 5, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
+    { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 5, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
+    { id: '4', title: 'Data Science Foundations', questionsCount: 5, duration: '40 mins', passScore: '70%', category: 'Data Science & Machine Learning', testType: 'MCQ', totalMarks: 100 },
+    { id: '5', title: 'Java Full Stack & Spring Boot Assessment', questionsCount: 5, duration: '45 mins', passScore: '75%', category: 'Java Full Stack', testType: 'MCQ', totalMarks: 100 },
   ];
 
   const [tests, setTests] = useState<Test[]>(defaultTests);
@@ -109,65 +121,102 @@ export default function TeacherAssessmentsScreen() {
 
   const loadTestsAndSubmissions = async () => {
     try {
+      // 1. Fetch tests from backend API + AsyncStorage
+      let apiTests: any[] = [];
+      try {
+        const res = await api.getAllTests();
+        apiTests = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+      } catch (_) {}
+
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
+      let localTests: any[] = [];
       if (storedTests) {
-        const parsed = JSON.parse(storedTests);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTests([...parsed, ...defaultTests.filter(dt => !parsed.some(p => p.id === dt.id))]);
-        }
+        const parsed = safeParseJson(storedTests, []);
+        if (Array.isArray(parsed)) localTests = parsed;
       }
+
+      // Merge backend and local tests
+      const mergedTestsMap = new Map<string, Test>();
+      apiTests.forEach((t: any) => {
+        const tid = String(t.id);
+        const parsedQ = safeParseJson(t.questionsJson, undefined);
+        mergedTestsMap.set(tid, {
+          id: tid,
+          title: t.title || t.testName,
+          questionsCount: t.questionsCount || (Array.isArray(parsedQ) ? parsedQ.length : 0),
+          duration: t.duration || '45 mins',
+          passScore: t.passScore || '75%',
+          category: t.category || t.courseTitle || 'Full Stack Development',
+          totalMarks: t.totalMarks || 100,
+          testType: t.testType || 'MCQ',
+          pdfFileName: t.pdfFileName,
+          pdfFileUri: t.pdfFileUri,
+          pdfInstructions: t.pdfInstructions,
+          questions: parsedQ,
+        });
+      });
+      localTests.forEach((t: any) => {
+        if (!mergedTestsMap.has(String(t.id))) {
+          mergedTestsMap.set(String(t.id), t);
+        }
+      });
+      defaultTests.forEach((dt) => {
+        if (!mergedTestsMap.has(String(dt.id))) {
+          mergedTestsMap.set(String(dt.id), dt);
+        }
+      });
+      setTests(Array.from(mergedTestsMap.values()));
+
+      // 2. Fetch submissions from backend API + AsyncStorage
+      let apiSubs: any[] = [];
+      try {
+        const subRes = await api.getTestSubmissions();
+        apiSubs = Array.isArray(subRes) ? subRes : Array.isArray((subRes as any)?.data) ? (subRes as any).data : [];
+      } catch (_) {}
+
       const storedSubs = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
+      let localSubs: any[] = [];
       if (storedSubs) {
-        let parsed = JSON.parse(storedSubs);
-        if (Array.isArray(parsed)) {
-          // Fetch real enrolled students to replace generic 'Student User' strings
-          let realStudentNames: string[] = [];
-          try {
-            const profileRes = await api.getTeacherProfile().catch(() => null);
-            const profileData = profileRes?.data ?? profileRes;
-            const courses: any[] = profileData?.assignedCourses ?? [];
-            if (courses.length > 0) {
-              const enrollResults = await Promise.all(
-                courses.map((c: any) => api.getEnrollmentsByCourse(c.title).catch(() => []))
-              );
-              enrollResults.forEach((res: any) => {
-                const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-                list.forEach((e: any) => {
-                  const nameVal = (e.name && String(e.name).trim())
-                    || (e.studentName && String(e.studentName).trim())
-                    || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '');
-                  if (nameVal && !realStudentNames.includes(nameVal)) {
-                    realStudentNames.push(nameVal);
-                  }
-                });
-              });
-            }
-          } catch (_) {}
-
-          const fallbackNames = ['Aarav Sharma', 'Priya Patel', 'Rahul Kumar', 'Ananya Roy', 'Rohan Mehta', 'Sneha Gupta'];
-          const availableNames = realStudentNames.length > 0 ? realStudentNames : fallbackNames;
-
-          parsed = parsed.map((s: Submission, idx: number) => {
-            if (!s.studentName || s.studentName === 'Student User' || s.studentName === 'Student') {
-              const assignedName = availableNames[idx % availableNames.length];
-              return { ...s, studentName: assignedName };
-            }
-            return s;
-          });
-
-          await AsyncStorage.setItem(TEST_SUBMISSIONS_KEY, JSON.stringify(parsed));
-          setSubmissions(parsed);
-
-          const initialMarks: Record<string, string> = {};
-          const initialFeedback: Record<string, string> = {};
-          parsed.forEach((s: Submission) => {
-            if (s.obtainedMarks !== undefined) initialMarks[s.id] = String(s.obtainedMarks);
-            if (s.feedback) initialFeedback[s.id] = s.feedback;
-          });
-          setGradingMarks(initialMarks);
-          setGradingFeedback(initialFeedback);
-        }
+        const parsed = JSON.parse(storedSubs);
+        if (Array.isArray(parsed)) localSubs = parsed;
       }
+
+      const mergedSubsMap = new Map<string, Submission>();
+      apiSubs.forEach((s: any) => {
+        const sid = String(s.id);
+        mergedSubsMap.set(sid, {
+          id: sid,
+          testId: String(s.test?.id || s.testId || ''),
+          testTitle: s.testTitle || s.test?.testName || 'Assessment',
+          studentName: s.studentName || s.student?.name || 'Student',
+          studentEmail: s.studentEmail || s.student?.email || '',
+          submittedAt: s.submittedAt || s.attemptDate || new Date().toLocaleDateString(),
+          answersText: s.answersText,
+          solutionFileName: s.solutionFileName,
+          solutionFileUri: s.solutionFileUri,
+          status: s.status === 'GRADED' ? 'GRADED' : 'PENDING',
+          obtainedMarks: s.marksObtained,
+          totalMarks: s.totalMarks,
+          feedback: s.feedback,
+        });
+      });
+      localSubs.forEach((s: any) => {
+        if (!mergedSubsMap.has(String(s.id))) {
+          mergedSubsMap.set(String(s.id), s);
+        }
+      });
+
+      const allSubmissions = Array.from(mergedSubsMap.values());
+      setSubmissions(allSubmissions);
+
+      const initialMarks: Record<string, string> = {};
+      const initialFeedback: Record<string, string> = {};
+      allSubmissions.forEach((s: Submission) => {
+        if (s.obtainedMarks !== undefined) initialMarks[s.id] = String(s.obtainedMarks);
+        if (s.feedback) initialFeedback[s.id] = s.feedback;
+      });
+      setGradingMarks(initialMarks);
+      setGradingFeedback(initialFeedback);
     } catch (_) { }
   };
 
@@ -317,6 +366,26 @@ export default function TeacherAssessmentsScreen() {
       questions: finalQuestions as any,
     };
 
+    // 1. Persist to backend database via API
+    api.createTest({
+      title: newTest.title,
+      courseTitle: newTest.category,
+      category: newTest.category,
+      duration: newTest.duration,
+      passScore: newTest.passScore,
+      totalMarks: newTest.totalMarks,
+      testType: newTest.testType,
+      questionsCount: newTest.questionsCount,
+      pdfFileName: newTest.pdfFileName,
+      pdfFileUri: newTest.pdfFileUri,
+      pdfInstructions: newTest.pdfInstructions,
+      questionsJson: JSON.stringify(finalQuestions),
+    }).then((created: any) => {
+      if (created?.data?.id) {
+        newTest.id = String(created.data.id);
+      }
+    }).catch(err => console.log('Backend test creation error:', err));
+
     const updatedTests = [newTest, ...tests];
     setTests(updatedTests);
     await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(updatedTests));
@@ -337,6 +406,15 @@ export default function TeacherAssessmentsScreen() {
     if (isNaN(marksVal) || marksVal < 0) {
       Alert.alert('Invalid Marks', 'Please enter a valid marks value.');
       return;
+    }
+
+    const numSubId = parseInt(submissionId.replace(/\D/g, ''), 10);
+    if (!isNaN(numSubId)) {
+      api.gradeTestSubmission(numSubId, {
+        marks: marksVal,
+        feedback: feedbackStr,
+        status: 'GRADED',
+      }).catch(err => console.log('Backend grading error:', err));
     }
 
     const updatedSubs = submissions.map(s => {

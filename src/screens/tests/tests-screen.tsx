@@ -47,6 +47,16 @@ interface RealMaterial {
   uploadedAt: string;
 }
 
+function safeParseJson(json: any, fallback: any = undefined) {
+  if (!json) return fallback;
+  if (typeof json === 'object') return json;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
 export default function TestsScreen() {
@@ -59,16 +69,82 @@ export default function TestsScreen() {
   const fetchData = useCallback(async () => {
     await loadToken();
     try {
+      // 1. Fetch real tests from backend + AsyncStorage
+      let apiTests: any[] = [];
+      try {
+        const res = await api.getAllTests();
+        apiTests = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
+      } catch (_) {}
+
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
+      let localTests: any[] = [];
       if (storedTests) {
-        const parsed = JSON.parse(storedTests);
-        if (Array.isArray(parsed)) setPublishedTests(parsed);
+        const parsed = safeParseJson(storedTests, []);
+        if (Array.isArray(parsed)) localTests = parsed;
       }
+
+      const mergedTestsMap = new Map<string, any>();
+      apiTests.forEach((t: any) => {
+        const tid = String(t.id);
+        const parsedQ = safeParseJson(t.questionsJson, undefined);
+        mergedTestsMap.set(tid, {
+          id: tid,
+          title: t.title || t.testName,
+          category: t.category || t.courseTitle || 'Full Stack Development',
+          questionsCount: t.questionsCount || (Array.isArray(parsedQ) ? parsedQ.length : 0),
+          duration: t.duration || '45 mins',
+          passScore: t.passScore || '75%',
+          totalMarks: t.totalMarks || 100,
+          testType: t.testType || 'MCQ',
+          pdfFileName: t.pdfFileName,
+          pdfFileUri: t.pdfFileUri,
+          pdfInstructions: t.pdfInstructions,
+          questions: parsedQ,
+        });
+      });
+      localTests.forEach((t: any) => {
+        if (!mergedTestsMap.has(String(t.id))) {
+          mergedTestsMap.set(String(t.id), t);
+        }
+      });
+      setPublishedTests(Array.from(mergedTestsMap.values()));
+
+      // 2. Fetch submissions from backend + AsyncStorage
+      let apiSubs: any[] = [];
+      try {
+        const subRes = await api.getMyTestSubmissions();
+        apiSubs = Array.isArray(subRes) ? subRes : Array.isArray((subRes as any)?.data) ? (subRes as any).data : [];
+      } catch (_) {}
+
       const storedSubs = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
+      let localSubs: any[] = [];
       if (storedSubs) {
         const parsed = JSON.parse(storedSubs);
-        if (Array.isArray(parsed)) setUserSubmissions(parsed);
+        if (Array.isArray(parsed)) localSubs = parsed;
       }
+
+      const mergedSubsMap = new Map<string, any>();
+      apiSubs.forEach((s: any) => {
+        const sid = String(s.id);
+        mergedSubsMap.set(sid, {
+          id: sid,
+          testId: String(s.test?.id || s.testId || ''),
+          testTitle: s.testTitle || s.test?.testName || 'Assessment',
+          studentName: s.studentName,
+          studentEmail: s.studentEmail,
+          submittedAt: s.submittedAt || s.attemptDate || new Date().toLocaleDateString(),
+          status: s.status === 'GRADED' ? 'GRADED' : 'PENDING',
+          obtainedMarks: s.marksObtained,
+          totalMarks: s.totalMarks,
+          feedback: s.feedback,
+        });
+      });
+      localSubs.forEach((s: any) => {
+        if (!mergedSubsMap.has(String(s.id))) {
+          mergedSubsMap.set(String(s.id), s);
+        }
+      });
+      setUserSubmissions(Array.from(mergedSubsMap.values()));
     } catch (_) {}
   }, []);
 

@@ -163,7 +163,14 @@ export default function AccountSettingsScreen({
     setSaving(true);
     try {
       if (userRole === 'student') {
-        if (!profile) { showToast('Profile not loaded yet. Please wait.', 'error'); setSaving(false); return; }
+        if (!profile) {
+          const res: any = await (api as any).updateUserProfile({ name: name.trim(), phone, city, state });
+          if (res?.success !== false) {
+            setProfile((prev: any) => ({ ...prev, name: name.trim(), phone, city, state }));
+            showToast('Profile updated successfully!', 'success');
+            return;
+          }
+        }
         const nameParts = name.trim().split(' ');
         const firstName = nameParts[0];
         const lastName = nameParts.slice(1).join(' ') || '.';
@@ -175,6 +182,10 @@ export default function AccountSettingsScreen({
         showToast('Profile updated successfully!', 'success');
       } else if (userRole === 'teacher') {
         await (api as any).updateTeacherProfile({ name, phone, city, state, profileImage: photoUri });
+        showToast('Profile updated successfully!', 'success');
+        setTimeout(() => onBack(), 1600);
+      } else if (userRole === 'admin') {
+        await (api as any).updateUserProfile({ name, phone, city, state });
         showToast('Profile updated successfully!', 'success');
         setTimeout(() => onBack(), 1600);
       }
@@ -262,13 +273,9 @@ export default function AccountSettingsScreen({
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Full Name</Text>
-              {userRole === 'student' ? (
-                <Text style={styles.rowValue}>{name || '—'}</Text>
-              ) : (
-                <TextInput style={styles.rowInput} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#C4C4C4" />
-              )}
+              <TextInput style={styles.rowInput} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#C4C4C4" />
             </View>
-            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
           <View style={styles.divider} />
 
@@ -291,13 +298,9 @@ export default function AccountSettingsScreen({
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Phone</Text>
-              {userRole === 'student' ? (
-                <Text style={styles.rowValue}>{phone || '—'}</Text>
-              ) : (
-                <TextInput style={styles.rowInput} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="Enter phone number" placeholderTextColor="#C4C4C4" />
-              )}
+              <TextInput style={styles.rowInput} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="Enter phone number" placeholderTextColor="#C4C4C4" />
             </View>
-            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
           <View style={styles.divider} />
 
@@ -308,13 +311,9 @@ export default function AccountSettingsScreen({
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>City</Text>
-              {userRole === 'student' ? (
-                <Text style={styles.rowValue}>{city || '—'}</Text>
-              ) : (
-                <TextInput style={styles.rowInput} value={city} onChangeText={setCity} placeholder="Enter city" placeholderTextColor="#C4C4C4" />
-              )}
+              <TextInput style={styles.rowInput} value={city} onChangeText={setCity} placeholder="Enter city" placeholderTextColor="#C4C4C4" />
             </View>
-            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
           <View style={styles.divider} />
 
@@ -325,13 +324,9 @@ export default function AccountSettingsScreen({
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>State</Text>
-              {userRole === 'student' ? (
-                <Text style={styles.rowValue}>{state || '—'}</Text>
-              ) : (
-                <TextInput style={styles.rowInput} value={state} onChangeText={setState} placeholder="Enter state" placeholderTextColor="#C4C4C4" />
-              )}
+              <TextInput style={styles.rowInput} value={state} onChangeText={setState} placeholder="Enter state" placeholderTextColor="#C4C4C4" />
             </View>
-            {userRole !== 'student' && <Ionicons name="create-outline" size={16} color="#C4C4C4" />}
+            <Ionicons name="create-outline" size={16} color="#C4C4C4" />
           </View>
           <View style={styles.divider} />
 
@@ -348,11 +343,9 @@ export default function AccountSettingsScreen({
         </View>
 
         {/* Save Button */}
-        {userRole !== 'student' && (
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveChanges} activeOpacity={0.85} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveChanges} activeOpacity={0.85} disabled={saving}>
+          {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+        </TouchableOpacity>
 
         {/* Delete Account — admin only */}
         {userRole === 'admin' && (
@@ -422,7 +415,24 @@ const styles = StyleSheet.create({
   rowContent: { flex: 1 },
   rowLabel: { fontSize: 11, color: '#999', marginBottom: 2, fontWeight: '500' },
   rowValue: { fontSize: 14, color: '#1A1A1A', fontWeight: '500' },
-  rowInput: { fontSize: 14, color: '#1A1A1A', fontWeight: '500', padding: 0, margin: 0 },
+  rowInput: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    fontWeight: '500',
+    padding: 0,
+    margin: 0,
+    borderWidth: 0,
+    outlineStyle: 'none',
+    outlineWidth: 0,
+    outlineColor: 'transparent',
+    ...(Platform.OS === 'web'
+      ? ({
+          outline: 'none',
+          boxShadow: 'none',
+          border: 'none',
+        } as any)
+      : {}),
+  },
   divider: { height: 1, backgroundColor: '#F0F0F0', marginLeft: 50 },
   saveBtn: {
     backgroundColor: '#7B2CBF', borderRadius: 14, height: 52,
