@@ -204,8 +204,35 @@ function NativeVideoPlayer({ uri, title, onClose }: { uri: string; title: string
   );
 }
 
+function getEmbedInfo(rawUrl: string): { isEmbed: boolean; embedUrl: string } {
+  if (!rawUrl) return { isEmbed: false, embedUrl: '' };
+  const url = rawUrl.trim();
+  
+  // YouTube
+  const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    return { isEmbed: true, embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0` };
+  }
+
+  // Google Drive
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/i);
+  if (driveMatch && driveMatch[1]) {
+    return { isEmbed: true, embedUrl: `https://drive.google.com/file/d/${driveMatch[1]}/preview` };
+  }
+
+  // Vimeo
+  const vimeoMatch = url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)/i);
+  if (vimeoMatch && vimeoMatch[3]) {
+    return { isEmbed: true, embedUrl: `https://player.vimeo.com/video/${vimeoMatch[3]}?autoplay=1` };
+  }
+
+  return { isEmbed: false, embedUrl: url };
+}
+
 // ── Shared modal wrapper ──────────────────────────────────────────────────────
 function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: string | null; title: string; onClose: () => void }) {
+  const embed = uri ? getEmbedInfo(uri) : { isEmbed: false, embedUrl: '' };
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent={false} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -228,22 +255,32 @@ function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: s
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7B2CBF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginLeft: 8 }}
               >
                 <Ionicons name="download-outline" size={16} color="#FFF" />
-                <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>Download</Text>
+                <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>{embed.isEmbed ? 'Open Link' : 'Download'}</Text>
               </TouchableOpacity>
             </View>
             <View style={{ flex: 1, backgroundColor: '#000' }}>
-              <video
-                src={uri}
-                controls
-                autoPlay
-                onError={(e: any) => {
-                  const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-                  if (e?.currentTarget?.src !== fallbackSrc) {
-                    e.currentTarget.src = fallbackSrc;
-                  }
-                }}
-                style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
-              />
+              {embed.isEmbed ? (
+                <iframe
+                  src={embed.embedUrl}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  src={uri}
+                  controls
+                  autoPlay
+                  playsInline
+                  onError={(e: any) => {
+                    const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+                    if (e?.currentTarget?.src !== fallbackSrc) {
+                      e.currentTarget.src = fallbackSrc;
+                    }
+                  }}
+                  style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
+                />
+              )}
             </View>
           </>
         ) : uri ? (

@@ -222,8 +222,34 @@ function MobileVideoPlayer({ uri, title, onClose }: { uri: string; title: string
   );
 }
 
+function getEmbedInfo(rawUrl: string): { isEmbed: boolean; embedUrl: string } {
+  if (!rawUrl) return { isEmbed: false, embedUrl: '' };
+  const url = rawUrl.trim();
+  
+  // YouTube
+  const ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    return { isEmbed: true, embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0` };
+  }
+
+  // Google Drive
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^\/]+)/i);
+  if (driveMatch && driveMatch[1]) {
+    return { isEmbed: true, embedUrl: `https://drive.google.com/file/d/${driveMatch[1]}/preview` };
+  }
+
+  // Vimeo
+  const vimeoMatch = url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)/i);
+  if (vimeoMatch && vimeoMatch[3]) {
+    return { isEmbed: true, embedUrl: `https://player.vimeo.com/video/${vimeoMatch[3]}?autoplay=1` };
+  }
+
+  return { isEmbed: false, embedUrl: url };
+}
+
 // Web custom video player (works on phone browser too)
 function WebVideoPlayer({ uri, title, onClose }: { uri: string; title: string; onClose: () => void }) {
+  const embed = getEmbedInfo(uri);
   const videoRef = useRef<any>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -354,14 +380,43 @@ function WebVideoPlayer({ uri, title, onClose }: { uri: string; title: string; o
     padding: '14px 16px', gap: 12, cursor: 'pointer', background: 'none', border: 'none', width: '100%',
   };
 
+  if (embed.isEmbed) {
+    return (
+      <div style={containerStyle}>
+        <div style={topBarStyle}>
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </button>
+          <span style={{ flex: 1, color: '#fff', fontWeight: 700, fontSize: 15, margin: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+            {title}
+          </span>
+          <button onClick={() => window.open(uri, '_blank')}
+            style={{ background: '#7B2CBF', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 13 } as any}>
+            Open Original
+          </button>
+        </div>
+        <div style={{ flex: 1, backgroundColor: '#000', display: 'flex' }}>
+          <iframe
+            src={embed.embedUrl}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={containerStyle} onClick={() => { setShowMenu(false); setShowSpeedMenu(false); resetHideTimer(); }}>
-      {/* video element — no native controls */}
+      {/* video element */}
       <div style={videoAreaStyle}>
         <video
           ref={videoRef}
           src={uri}
           autoPlay
+          playsInline
           onError={(e: any) => {
             const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
             if (e?.target?.src !== fallbackSrc) {
