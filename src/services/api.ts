@@ -449,18 +449,23 @@ export const api = {
     postFormData("/materials/upload", data),
   deleteStudyMaterial: (id: number | string) => del(`/materials/${id}`),
 
-  getClassRecordings: async () => {
-    const res = await get("/recordings");
+  getClassRecordings: async (bypassCache = true) => {
+    const res = await get("/recordings", bypassCache);
     const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
     return list.map((item: any) => ({
       ...item,
       videoUrl: resolveDynamicFileUrl(item.fileUrl || item.videoUrl || item.url || item.filePath || (item.id ? `/api/recordings/stream/${item.id}` : '')),
     }));
   },
-  uploadClassRecording: (data: FormData) =>
-    postFormData("/recordings/upload", data),
+  uploadClassRecording: (data: FormData) => {
+    clearApiCache();
+    return postFormData("/recordings/upload", data);
+  },
   getRecordingStreamUrl: (id: number | string) => `${getApiBaseUrl()}/recordings/stream/${id}`,
-  deleteClassRecording: (id: number | string) => del(`/recordings/${id}`),
+  deleteClassRecording: (id: number | string) => {
+    clearApiCache();
+    return del(`/recordings/${id}`);
+  },
 
   getLoginHistory: (userId: number | string) =>
     get(`/auth/login-history?userId=${userId}`),
@@ -500,8 +505,8 @@ export const api = {
       fileUrl: resolveDynamicFileUrl(item.fileUrl || item.url || item.filePath),
     }));
   },
-  getStudentRecordings: async () => {
-    const res = await get('/student/recordings');
+  getStudentRecordings: async (bypassCache = true) => {
+    const res = await get('/student/recordings', bypassCache);
     const list = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
     return list.map((item: any) => ({
       ...item,

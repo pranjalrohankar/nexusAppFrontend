@@ -23,7 +23,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { api, getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
 
 const API_BASE = getApiBaseUrl().replace('/api', '');
@@ -887,7 +887,8 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                     style={s.playBtn}
                     onPress={() => {
                       setPreviewTitle(item.title || 'Recording');
-                      setPreviewUri(getStreamUrl(item.id));
+                      const targetUri = item.videoUrl ? resolveDynamicFileUrl(item.videoUrl) : (item.fileUrl ? resolveDynamicFileUrl(item.fileUrl) : getStreamUrl(item.id));
+                      setPreviewUri(targetUri);
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
@@ -896,7 +897,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
                   <TouchableOpacity
                     style={[s.playBtn, { backgroundColor: '#EFF6FF' }]}
                     onPress={() => {
-                      const url = getStreamUrl(item.id);
+                      const url = item.videoUrl ? resolveDynamicFileUrl(item.videoUrl) : (item.fileUrl ? resolveDynamicFileUrl(item.fileUrl) : getStreamUrl(item.id));
                       if (IS_WEB) {
                         window.open(url, '_blank');
                       } else {
