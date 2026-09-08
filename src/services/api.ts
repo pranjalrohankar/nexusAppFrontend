@@ -166,7 +166,19 @@ function buildHeaders(contentType?: string, skipAuth = false) {
   return h;
 }
 
-async function handleResponse(res: Response) {
+async function safeFetch(url: string, init?: RequestInit): Promise<Response | null> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    console.warn(`[API Network Error] ${init?.method || 'GET'} ${url}:`, err);
+    return null;
+  }
+}
+
+async function handleResponse(res: Response | null) {
+  if (!res) {
+    return { success: false, message: "Network connection error", data: [] };
+  }
   if (!res.ok) {
     if (res.status === 403) {
       console.warn("403 Forbidden - Token may be invalid or missing required role");
@@ -219,14 +231,19 @@ async function get(path: string, bypassCache = false) {
     }
   }
 
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, { headers: buildHeaders() });
-  const data = await handleResponse(res);
-  
-  if (data && data.success !== false) {
-    _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`, { headers: buildHeaders() });
+    const data = await handleResponse(res);
+    
+    if (data && data.success !== false) {
+      _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+    }
+    return data;
+  } catch (err) {
+    console.warn(`GET ${path} error:`, err);
+    return { success: false, message: "Network error", data: [] };
   }
-  return data;
 }
 
 async function getPublic(path: string, bypassCache = false) {
@@ -238,14 +255,19 @@ async function getPublic(path: string, bypassCache = false) {
     }
   }
 
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`);
-  const data = await handleResponse(res);
-  
-  if (data && data.success !== false) {
-    _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`);
+    const data = await handleResponse(res);
+    
+    if (data && data.success !== false) {
+      _apiCache.set(cacheKey, { data, expiresAt: Date.now() + DEFAULT_CACHE_TTL });
+    }
+    return data;
+  } catch (err) {
+    console.warn(`GET Public ${path} error:`, err);
+    return { success: false, message: "Network error", data: [] };
   }
-  return data;
 }
 
 async function post(
@@ -255,60 +277,88 @@ async function post(
   skipAuth = false,
 ) {
   clearApiCache();
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: buildHeaders(contentType, skipAuth),
-    body: JSON.stringify(body),
-  });
-  return handleResponse(res);
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: buildHeaders(contentType, skipAuth),
+      body: JSON.stringify(body),
+    });
+    return await handleResponse(res);
+  } catch (err) {
+    console.warn(`POST ${path} error:`, err);
+    return { success: false, message: "Network error", data: [] };
+  }
 }
 
 async function postFormData(path: string, body: FormData) {
   clearApiCache();
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: buildHeaders(),
-    body,
-  });
-  return handleResponse(res);
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body,
+    });
+    return await handleResponse(res);
+  } catch (err) {
+    console.warn(`POST FormData ${path} error:`, err);
+    return { success: false, message: "Network error", data: [] };
+  }
 }
 
 async function put(path: string, body: object) {
   clearApiCache();
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "PUT",
-    headers: buildHeaders("application/json"),
-    body: JSON.stringify(body),
-  });
-  return handleResponse(res);
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`, {
+      method: "PUT",
+      headers: buildHeaders("application/json"),
+      body: JSON.stringify(body),
+    });
+    return await handleResponse(res);
+  } catch (err) {
+    console.warn(`PUT ${path} error:`, err);
+    return { success: false, message: "Network error", data: [] };
+  }
 }
 
 async function del(path: string) {
   clearApiCache();
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "DELETE",
-    headers: buildHeaders(),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("DELETE Error:", res.status, text);
-    throw new Error(`HTTP ${res.status}: ${text}`);
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`, {
+      method: "DELETE",
+      headers: buildHeaders(),
+    });
+    if (!res) {
+      return { success: false, message: "Network connection error" };
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("DELETE Error:", res.status, text);
+      return { success: false, message: text || `HTTP ${res.status}` };
+    }
+    return { success: true };
+  } catch (err) {
+    console.warn(`DELETE ${path} error:`, err);
+    return { success: false, message: "Network error" };
   }
-  return { success: true };
 }
 
 async function patch(path: string) {
   clearApiCache();
-  const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "PATCH",
-    headers: buildHeaders(),
-  });
-  return handleResponse(res);
+  try {
+    const baseUrl = getApiBaseUrl();
+    const res = await safeFetch(`${baseUrl}${path}`, {
+      method: "PATCH",
+      headers: buildHeaders(),
+    });
+    return await handleResponse(res);
+  } catch (err) {
+    console.warn(`PATCH ${path} error:`, err);
+    return { success: false, message: "Network error", data: [] };
+  }
 }
 
 export const api = {

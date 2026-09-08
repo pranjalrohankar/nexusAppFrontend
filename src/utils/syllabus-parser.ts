@@ -221,5 +221,7 @@ export function buildCourseDataFromDb(dbCourse: any, fallbackMap?: Record<string
     },
     syllabus: fallback.syllabus || [],
     syllabusTopics: dbCourse.syllabusTopics || fallback.syllabusTopics || '',
+    coveredTopics: dbCourse.coveredTopics || fallback.coveredTopics || '',
+    id: dbCourse.id || fallback.id || null,
   };
 }

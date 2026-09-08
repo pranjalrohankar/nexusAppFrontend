@@ -119,6 +119,7 @@ export default function AdminCoursesScreen() {
           status,
           description: c.description ?? '',
           syllabusTopics: c.syllabusTopics ?? '',
+          coveredTopics: c.coveredTopics || batch?.coveredTopics || '',
           whatYouWillLearn: c.whatYouWillLearn ?? '',
           googleMeetLink: c.googleMeetLink ?? '',
           totalSessions: c.totalSessions ?? 0,

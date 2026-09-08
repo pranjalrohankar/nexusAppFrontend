@@ -7,6 +7,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
 import BatchStudentsScreen from './batch-students-screen';
+import { parseSyllabus } from '../../utils/syllabus-parser';
+import { parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
+import { coursesData } from '../home/home-screen';
 
 type FilterTab = 'All' | 'Active' | 'Upcoming' | 'Completed';
 type BatchStatus = 'ACTIVE' | 'UPCOMING' | 'COMPLETED';
@@ -27,6 +30,7 @@ interface Batch {
   courseTimings?: string;
   googleMeetLink?: string;
   meetLink?: string;
+  coveredTopics?: string;
 }
 
 interface Course {
@@ -34,6 +38,8 @@ interface Course {
   title: string;
   classTimings?: string;
   googleMeetLink?: string;
+  syllabusTopics?: string;
+  coveredTopics?: string;
 }
 
 interface Teacher {
@@ -53,6 +59,7 @@ export default function AdminBatchesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [viewingBatch, setViewingBatch] = useState<Batch | null>(null);
+  const [syllabusViewingBatch, setSyllabusViewingBatch] = useState<Batch | null>(null);
 
   const [formBatchName, setFormBatchName] = useState('');
   const [formCourse, setFormCourse] = useState('');
@@ -362,6 +369,17 @@ export default function AdminBatchesScreen() {
             <View style={{ flexDirection: isDesktop ? 'row' : 'column', flexWrap: 'wrap', gap: 16 }}>
           {pagedBatches.map((batch) => {
             const selectedCourse = courses.find(c => c.title === batch.selectCourse);
+            const syllabusRaw = (selectedCourse as any)?.syllabusTopics || (coursesData as any)?.[batch.selectCourse]?.syllabusTopics || (coursesData as any)?.[batch.selectCourse]?.syllabus;
+            const parsedModules = parseSyllabus(syllabusRaw);
+            let allBatchTopics: string[] = [];
+            parsedModules.forEach(m => {
+              if (m.topics && m.topics.length > 0) allBatchTopics.push(...m.topics);
+            });
+            const totalSyllabusTopics = allBatchTopics.length;
+            const coveredList = parseTopicsData(batch.coveredTopics || (selectedCourse as any)?.coveredTopics);
+            const coveredSyllabusCount = allBatchTopics.filter(t => isTopicCovered(t, coveredList)).length;
+            const syllabusPercent = totalSyllabusTopics > 0 ? Math.round((coveredSyllabusCount / totalSyllabusTopics) * 100) : 0;
+
             return (
               <View key={batch.id} style={[styles.batchCard, { width: isDesktop ? '48.8%' : '100%' }]}>
                 {/* Card Header: icon + name/course + status + menu */}
@@ -432,6 +450,32 @@ export default function AdminBatchesScreen() {
                   </View>
                 </View>
 
+                {/* Syllabus Progress Bar */}
+                {totalSyllabusTopics > 0 && (
+                  <View style={styles.batchSyllabusBox}>
+                    <View style={styles.batchSyllabusHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="school-outline" size={14} color="#7B2CBF" />
+                        <Text style={styles.batchSyllabusTitle}>Syllabus Progress</Text>
+                      </View>
+                      <Text style={[styles.batchSyllabusVal, { color: syllabusPercent === 100 ? '#059669' : '#7B2CBF' }]}>
+                        {coveredSyllabusCount} / {totalSyllabusTopics} Topics ({syllabusPercent}%)
+                      </Text>
+                    </View>
+                    <View style={styles.batchProgressTrack}>
+                      <View
+                        style={[
+                          styles.batchProgressFill,
+                          {
+                            width: `${syllabusPercent}%`,
+                            backgroundColor: syllabusPercent === 100 ? '#10B981' : '#7B2CBF',
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                )}
+
                 {/* Google Meet Link Box */}
                 <View style={styles.meetBoxContainer}>
                   <Ionicons name="videocam-outline" size={16} color="#7B2CBF" />
@@ -457,6 +501,10 @@ export default function AdminBatchesScreen() {
 
                 {/* Actions */}
                 <View style={styles.batchActions}>
+                  <TouchableOpacity style={styles.syllabusBtn} onPress={() => setSyllabusViewingBatch(batch)}>
+                    <Ionicons name="book-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.syllabusBtnText}>Syllabus</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.editBtn} onPress={() => handleOpenEditModal(batch)}>
                     <Ionicons name="create-outline" size={15} color="#7B2CBF" />
                     <Text style={styles.editBtnText}>Edit</Text>
@@ -673,7 +721,119 @@ export default function AdminBatchesScreen() {
         </View>
       </Modal>
 
-      {/* VISUAL MONTHLY CALENDAR MODAL */}
+      {/* Syllabus Progress Modal */}
+      <Modal
+        visible={!!syllabusViewingBatch}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSyllabusViewingBatch(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { width: '100%', maxWidth: 700, alignSelf: 'center', maxHeight: '88%', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderBottomLeftRadius: isDesktop ? 24 : 0, borderBottomRightRadius: isDesktop ? 24 : 0 }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setSyllabusViewingBatch(null)}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <View style={{ flex: 1, marginHorizontal: 12 }}>
+                <Text style={styles.modalTitle} numberOfLines={1}>
+                  {syllabusViewingBatch?.batchName || 'Batch Syllabus'}
+                </Text>
+                <Text style={styles.modalSubtitle} numberOfLines={1}>
+                  {syllabusViewingBatch?.selectCourse} • {syllabusViewingBatch?.instructor}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSyllabusViewingBatch(null)}>
+                <Ionicons name="close-circle" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {(() => {
+                if (!syllabusViewingBatch) return null;
+                const selectedCourse = courses.find(c => c.title === syllabusViewingBatch.selectCourse);
+                const syllabusRaw = (selectedCourse as any)?.syllabusTopics || (coursesData as any)?.[syllabusViewingBatch.selectCourse]?.syllabusTopics || (coursesData as any)?.[syllabusViewingBatch.selectCourse]?.syllabus;
+                const parsedModules = parseSyllabus(syllabusRaw);
+                let allBatchTopics: string[] = [];
+                parsedModules.forEach(m => {
+                  if (m.topics && m.topics.length > 0) allBatchTopics.push(...m.topics);
+                });
+                const totalSyllabusTopics = allBatchTopics.length;
+                const coveredList = parseTopicsData(syllabusViewingBatch.coveredTopics || (selectedCourse as any)?.coveredTopics);
+                const coveredSyllabusCount = allBatchTopics.filter(t => isTopicCovered(t, coveredList)).length;
+                const syllabusPercent = totalSyllabusTopics > 0 ? Math.round((coveredSyllabusCount / totalSyllabusTopics) * 100) : 0;
+
+                if (parsedModules.length === 0) {
+                  return (
+                    <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                      <Ionicons name="book-outline" size={40} color="#9CA3AF" />
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: '#1F2937', marginTop: 12 }}>No Syllabus Topics Configured</Text>
+                      <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginTop: 4 }}>
+                        You can configure syllabus modules and topics in the Course Editor.
+                      </Text>
+                    </View>
+                  );
+                }
+
+                return (
+                  <View style={{ paddingBottom: 24 }}>
+                    {/* Summary Progress Card */}
+                    <View style={{ backgroundColor: '#F3E8FF', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E9D5FF' }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="school" size={18} color="#7B2CBF" />
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1F2937' }}>Course Syllabus Status</Text>
+                        </View>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: syllabusPercent === 100 ? '#059669' : '#7B2CBF' }}>
+                          {coveredSyllabusCount} / {totalSyllabusTopics} Topics ({syllabusPercent}%)
+                        </Text>
+                      </View>
+                      <View style={{ height: 10, backgroundColor: '#E5E7EB', borderRadius: 5, overflow: 'hidden' }}>
+                        <View style={{ width: `${syllabusPercent}%`, height: '100%', backgroundColor: syllabusPercent === 100 ? '#10B981' : '#7B2CBF', borderRadius: 5 }} />
+                      </View>
+                      <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 8 }}>
+                        {syllabusPercent === 100 ? '🎉 All topics have been covered by the teacher.' : `${totalSyllabusTopics - coveredSyllabusCount} topics remaining to be covered.`}
+                      </Text>
+                    </View>
+
+                    {/* Modules Checklist */}
+                    {parsedModules.map((mod, mIdx) => (
+                      <View key={mIdx} style={{ backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', padding: 14, marginBottom: 12 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#1F2937', marginBottom: 10 }}>
+                          Module {mIdx + 1}: {mod.title}
+                        </Text>
+                        <View style={{ gap: 8 }}>
+                          {mod.topics.map((topic, tIdx) => {
+                            const isCovered = isTopicCovered(topic, coveredList);
+                            return (
+                              <View key={tIdx} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}>
+                                <Ionicons
+                                  name={isCovered ? "checkmark-circle" : "ellipse-outline"}
+                                  size={18}
+                                  color={isCovered ? "#10B981" : "#9CA3AF"}
+                                />
+                                <Text style={{ flex: 1, fontSize: 13, color: isCovered ? '#059669' : '#374151', fontWeight: isCovered ? '600' : '400' }}>
+                                  {topic}
+                                </Text>
+                                <View style={{ backgroundColor: isCovered ? '#D1FAE5' : '#F3F4F6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: isCovered ? '#059669' : '#9CA3AF' }}>
+                                    {isCovered ? 'COVERED' : 'PENDING'}
+                                  </Text>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Calendar Date Picker Modal */}
       <CalendarModal
         visible={activeCalendarField !== null}
         title={activeCalendarField === 'start' ? 'Select Start Date' : 'Select End Date'}
@@ -1067,6 +1227,54 @@ const styles = StyleSheet.create({
     borderRadius: 8, borderWidth: 1, borderColor: '#DDD6FE',
   },
   meetEditBtnText: { fontSize: 11, fontWeight: '600', color: '#7B2CBF' },
+  batchSyllabusBox: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  batchSyllabusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  batchSyllabusTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  batchSyllabusVal: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  batchProgressTrack: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  batchProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  syllabusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(123,44,191,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  syllabusBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7B2CBF',
+  },
 });
 
 const calStyles = StyleSheet.create({

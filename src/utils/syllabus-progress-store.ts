@@ -15,28 +15,81 @@ function buildKey(courseKey: string, instructorName?: string, batchId?: number |
   return `${STORAGE_KEY_PREFIX}${normCourse}`;
 }
 
-function parseTopicsData(raw: any): string[] {
+/**
+ * Robustly parses topics data from any format (JSON, array, string, comma/newline separated).
+ */
+export function parseTopicsData(raw: any): string[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(String).map(s => s.trim()).filter(Boolean);
+  if (Array.isArray(raw)) {
+    return raw
+      .map(item => {
+        if (!item) return '';
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object') return (item.name || item.title || item.topic || '').trim();
+        return String(item).trim();
+      })
+      .filter(Boolean);
+  }
   if (typeof raw === 'string') {
-    const trimmed = raw.trim();
+    let trimmed = raw.trim();
+    if (!trimmed) return [];
+
+    // Double-encoded JSON string
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        trimmed = JSON.parse(trimmed);
+      } catch (_) {}
+    }
+
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
       try {
         const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed.map(String).map(s => s.trim()).filter(Boolean);
+        if (Array.isArray(parsed)) {
+          return parseTopicsData(parsed);
+        }
       } catch (_) {}
     }
-    if (trimmed.includes(',')) {
-      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
-    }
+
     if (trimmed.includes('\n')) {
-      return trimmed.split('\n').map(s => s.trim()).filter(Boolean);
+      return trimmed.split(/\r?\n/).map(s => s.trim().replace(/^[\*\#\-•\d\.]+\s*/, '')).filter(Boolean);
     }
-    if (trimmed.length > 0) {
-      return [trimmed];
+    if (trimmed.includes(',')) {
+      return trimmed.split(',').map(s => s.trim().replace(/^[\*\#\-•\d\.]+\s*/, '')).filter(Boolean);
     }
+    return [trimmed.replace(/^[\*\#\-•\d\.]+\s*/, '').trim()].filter(Boolean);
   }
   return [];
+}
+
+/**
+ * Normalizes topic string for fuzzy/robust matching across screens.
+ */
+export function normalizeTopicString(s: string): string {
+  if (!s) return '';
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/^[\*\#\-•\d\.]+\s*/, '')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Determines if a given topic name is in the completed topics list.
+ */
+export function isTopicCovered(topicName: string, completedList: string[]): boolean {
+  if (!topicName || !completedList || completedList.length === 0) return false;
+  const targetNorm = normalizeTopicString(topicName);
+  if (!targetNorm) return false;
+
+  return completedList.some(c => {
+    if (!c) return false;
+    const cNorm = normalizeTopicString(c);
+    return (
+      cNorm === targetNorm ||
+      c.trim().toLowerCase() === topicName.trim().toLowerCase() ||
+      c.trim() === topicName.trim()
+    );
+  });
 }
 
 /**
@@ -57,6 +110,7 @@ export const getCompletedTopicsForCourse = async (
     const keysToTry: string[] = [];
     if (batchId) {
       keysToTry.push(buildKey(courseKey, instructorName, batchId));
+      keysToTry.push(`${STORAGE_KEY_PREFIX}batch_${batchId}`);
     }
     if (courseKey) {
       keysToTry.push(buildKey(courseKey, instructorName));
@@ -64,7 +118,7 @@ export const getCompletedTopicsForCourse = async (
     }
 
     for (const k of keysToTry) {
-      const json = await AsyncStorage.getItem(k);
+      const json = await AsyncStorage.getItem(k).catch(() => null);
       if (json) {
         parseTopicsData(json).forEach(t => allCompleted.add(t));
       }
@@ -118,10 +172,12 @@ export const toggleTopicCompleted = async (
   try {
     const current = await getCompletedTopicsForCourse(courseKey, instructorName, batchId);
     let updated: string[];
-    if (current.includes(topicName)) {
-      updated = current.filter(t => t !== topicName);
+    const covered = isTopicCovered(topicName, current);
+    if (covered) {
+      const targetNorm = normalizeTopicString(topicName);
+      updated = current.filter(t => normalizeTopicString(t) !== targetNorm && t.trim() !== topicName.trim());
     } else {
-      updated = [...current, topicName];
+      updated = [...current, topicName.trim()];
     }
 
     // 1. Save to local storage immediately
@@ -153,4 +209,5 @@ export const toggleTopicCompleted = async (
     return [];
   }
 };
+
 

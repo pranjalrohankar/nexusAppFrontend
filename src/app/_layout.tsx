@@ -1,6 +1,8 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform, useColorScheme } from 'react-native';
+import { useFonts } from 'expo-font';
+import { Ionicons, FontAwesome, MaterialIcons, Feather } from '@expo/vector-icons';
 
 import { AnimatedSplashOverlay } from '@/components/common/animated-icon';
 import AppTabs from '@/components/layout/app-tabs';
@@ -12,6 +14,13 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
+    ...FontAwesome.font,
+    ...MaterialIcons.font,
+    ...Feather.font,
+  });
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const [userName, setUserName] = useState('');
@@ -29,12 +38,6 @@ export default function TabLayout() {
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-          @font-face {
-            font-family: 'Ionicons';
-            src: url('https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.woff2') format('woff2'),
-                 url('https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.ttf') format('truetype');
-            font-display: swap;
-          }
           input, textarea, select, [contenteditable="true"], [tabindex] {
             outline: none !important;
             outline-width: 0 !important;

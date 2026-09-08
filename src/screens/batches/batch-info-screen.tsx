@@ -114,26 +114,25 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
 
   useEffect(() => {
     const loadCourseFromAdmin = async () => {
+      if (!batch?.title) return;
       try {
         const res: any = await api.getAllCourses();
-        const coursesList: any[] = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.content) ? res.content : [];
-        const currentTitle = (batch?.title || '').trim().toLowerCase();
-        const match = coursesList.find((c: any) => {
-          if (!c.title) return false;
-          const t = c.title.trim().toLowerCase();
-          return t === currentTitle || t.includes(currentTitle) || (currentTitle.length > 0 && currentTitle.includes(t));
-        });
+        const list = res?.success && Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const match = list.find((c: any) => c.title?.trim().toLowerCase() === batch.title?.trim().toLowerCase());
         if (match) {
-          if (match.syllabusTopics) setFetchedSyllabus(match.syllabusTopics);
+          if (match.syllabusTopics) {
+            setFetchedSyllabus(match.syllabusTopics);
+          }
           if (match.whatYouWillLearn) {
-            const raw: string = match.whatYouWillLearn;
-            const items = raw
+            const skills = String(match.whatYouWillLearn)
               .split(/\r?\n/)
               .map((s: string) => s.replace(/^[\*\#\-•\d\.]+\s*/, '').trim())
-              .filter((s: string) => s.length > 0);
-            if (items.length > 0) setFetchedWhatYouGet(items);
+              .filter(Boolean);
+            if (skills.length > 0) {
+              setFetchedWhatYouGet(skills);
+            }
           }
-        } else if (batch?.title) {
+        } else {
           const fallback = coursesData[batch.title];
           if (fallback) {
             if (fallback.syllabusTopics || fallback.syllabus) {
@@ -144,16 +143,14 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
             }
           }
         }
-      } catch (_) {
-        if (batch?.title) {
-          const fallback = coursesData[batch.title];
-          if (fallback) {
-            if (fallback.syllabusTopics || fallback.syllabus) {
-              setFetchedSyllabus(fallback.syllabusTopics || fallback.syllabus);
-            }
-            if (fallback.skills && fallback.skills.length > 0) {
-              setFetchedWhatYouGet(fallback.skills);
-            }
+      } catch (err) {
+        const fallback = coursesData[batch.title];
+        if (fallback) {
+          if (fallback.syllabusTopics || fallback.syllabus) {
+            setFetchedSyllabus(fallback.syllabusTopics || fallback.syllabus);
+          }
+          if (fallback.skills && fallback.skills.length > 0) {
+            setFetchedWhatYouGet(fallback.skills);
           }
         }
       }
@@ -161,13 +158,21 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
     loadCourseFromAdmin();
   }, [batch?.title]);
 
-  const [completedTopics, setCompletedTopics] = useState<string[]>([]);
+  const [completedTopics, setCompletedTopics] = useState<string[]>(() => parseTopicsData(batch?.coveredTopics));
 
   useEffect(() => {
-    if (data.title || batch?.id) {
-      getCompletedTopicsForCourse(data.title, data.instructor?.name, batch?.id).then(setCompletedTopics);
+    let isMounted = true;
+    if (batch?.title || batch?.id) {
+      getCompletedTopicsForCourse(batch?.title, batch?.instructor || batch?.teacher?.name, batch?.id)
+        .then((res) => {
+          if (isMounted && res && res.length > 0) {
+            setCompletedTopics(res);
+          }
+        })
+        .catch(() => {});
     }
-  }, [data.title, data.instructor?.name, batch?.id]);
+    return () => { isMounted = false; };
+  }, [batch?.title, batch?.instructor, batch?.teacher?.name, batch?.id]);
 
   const handleEnroll = () => {
     Alert.alert(
@@ -268,7 +273,7 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
                     if (m.topics && m.topics.length > 0) allTopics.push(...m.topics);
                   });
                   const totalTopics = allTopics.length;
-                  const doneCount = allTopics.filter(t => completedTopics.includes(t)).length;
+                  const doneCount = allTopics.filter(t => isTopicCovered(t, completedTopics)).length;
                   const progressPct = totalTopics > 0 ? Math.round((doneCount / totalTopics) * 100) : 0;
 
                   return (
@@ -299,7 +304,7 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
 
                           <View style={styles.batchTopicsList}>
                             {mod.topics.map((t, tIdx) => {
-                              const isCovered = completedTopics.includes(t);
+                              const isCovered = isTopicCovered(t, completedTopics);
                               return (
                                 <View key={tIdx} style={styles.syllabusRow}>
                                   <Ionicons

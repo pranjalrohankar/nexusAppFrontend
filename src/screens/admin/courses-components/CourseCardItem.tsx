@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Course } from './types';
+import { parseSyllabus } from '../../../utils/syllabus-parser';
+import { parseTopicsData, isTopicCovered } from '../../../utils/syllabus-progress-store';
+import { coursesData } from '../../home/home-screen';
 
 interface CourseCardItemProps {
   item: Course;
@@ -23,6 +26,20 @@ export const CourseCardItem = React.memo(({ item, onEdit, onDelete }: CourseCard
       return item.startDate;
     }
   }, [item.startDate]);
+
+  const syllabusMetrics = useMemo(() => {
+    const rawSyllabus = item.syllabusTopics || (coursesData as any)?.[item.title]?.syllabusTopics || (coursesData as any)?.[item.title]?.syllabus;
+    const modules = parseSyllabus(rawSyllabus);
+    let allTopics: string[] = [];
+    modules.forEach(m => {
+      if (m.topics && m.topics.length > 0) allTopics.push(...m.topics);
+    });
+    const total = allTopics.length;
+    const coveredList = parseTopicsData(item.coveredTopics);
+    const done = allTopics.filter(t => isTopicCovered(t, coveredList)).length;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, pct };
+  }, [item.syllabusTopics, item.title, item.coveredTopics]);
 
   return (
     <View style={styles.courseCard}>
@@ -71,6 +88,32 @@ export const CourseCardItem = React.memo(({ item, onEdit, onDelete }: CourseCard
           <Text style={styles.detailVal}>{formattedDate}</Text>
         </View>
       </View>
+
+      {/* Syllabus Progress Bar */}
+      {syllabusMetrics.total > 0 && (
+        <View style={styles.syllabusProgressBox}>
+          <View style={styles.progressHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Ionicons name="school-outline" size={14} color="#7B2CBF" />
+              <Text style={styles.progressLabel}>Syllabus Progress</Text>
+            </View>
+            <Text style={[styles.progressVal, { color: syllabusMetrics.pct === 100 ? '#059669' : '#7B2CBF' }]}>
+              {syllabusMetrics.done} / {syllabusMetrics.total} Topics ({syllabusMetrics.pct}%)
+            </Text>
+          </View>
+          <View style={styles.progressBarTrack}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${syllabusMetrics.pct}%`,
+                  backgroundColor: syllabusMetrics.pct === 100 ? '#10B981' : '#7B2CBF',
+                },
+              ]}
+            />
+          </View>
+        </View>
+      )}
 
       <View style={styles.priceRow}>
         <Text style={styles.priceVal}>{item.price}</Text>
@@ -208,6 +251,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#EF4444',
+  },
+  syllabusProgressBox: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  progressHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  progressLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  progressVal: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  progressBarTrack: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });
 

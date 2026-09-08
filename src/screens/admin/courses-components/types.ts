@@ -16,6 +16,7 @@ export interface Course {
   status: 'Active' | 'Upcoming' | 'Completed';
   description?: string;
   syllabusTopics?: string;
+  coveredTopics?: string;
   whatYouWillLearn?: string;
   googleMeetLink?: string;
   totalSessions?: number;

@@ -11,7 +11,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseSyllabus } from '../../utils/syllabus-parser';
-import { getCompletedTopicsForCourse } from '../../utils/syllabus-progress-store';
+import { getCompletedTopicsForCourse, parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
+import { coursesData } from '../home/home-screen';
 
 export interface SyllabusItem {
   moduleNumber: string;
@@ -32,6 +33,8 @@ export interface TeacherData {
 }
 
 export interface CourseData {
+  id?: number | string;
+  batchId?: number | string;
   title: string;
   subtitle: string;
   rating: string;
@@ -43,6 +46,7 @@ export interface CourseData {
   teacher: TeacherData;
   syllabus?: SyllabusItem[] | any;
   syllabusTopics?: string;
+  coveredTopics?: string | string[];
 }
 
 interface CourseDetailsProps {
@@ -53,15 +57,24 @@ interface CourseDetailsProps {
 type TabType = 'Overview' | 'Syllabus' | 'Teacher';
 
 function SyllabusTabContent({ course }: { course: CourseData }) {
-  const parsedModules = parseSyllabus(course.syllabusTopics || course.syllabus);
+  const fallbackSyllabus = (coursesData as any)?.[course.title]?.syllabusTopics || (coursesData as any)?.[course.title]?.syllabus;
+  const parsedModules = parseSyllabus(course.syllabusTopics || course.syllabus || fallbackSyllabus);
   const [expandedModules, setExpandedModules] = useState<Record<number, boolean>>({ 0: true });
-  const [completedTopics, setCompletedTopics] = useState<string[]>([]);
+  const [completedTopics, setCompletedTopics] = useState<string[]>(() => parseTopicsData(course.coveredTopics));
 
   useEffect(() => {
-    if (course.title) {
-      getCompletedTopicsForCourse(course.title).then(setCompletedTopics);
+    let isMounted = true;
+    if (course.title || (course as any).id) {
+      getCompletedTopicsForCourse(course.title, course.teacher?.name, (course as any).id || (course as any).batchId)
+        .then((res) => {
+          if (isMounted && res && res.length > 0) {
+            setCompletedTopics(res);
+          }
+        })
+        .catch(() => {});
     }
-  }, [course.title]);
+    return () => { isMounted = false; };
+  }, [course.title, course.teacher?.name, (course as any).id, (course as any).batchId]);
 
   const toggleModule = (idx: number) => {
     setExpandedModules((prev) => ({
@@ -87,7 +100,7 @@ function SyllabusTabContent({ course }: { course: CourseData }) {
     }
   });
   const totalTopics = allTopics.length;
-  const doneCount = allTopics.filter(t => completedTopics.includes(t)).length;
+  const doneCount = allTopics.filter(t => isTopicCovered(t, completedTopics)).length;
   const progressPct = totalTopics > 0 ? Math.round((doneCount / totalTopics) * 100) : 0;
 
   return (
@@ -178,7 +191,7 @@ function SyllabusTabContent({ course }: { course: CourseData }) {
                 <View style={styles.accordionBody}>
                   {mod.topics && mod.topics.length > 0 ? (
                     mod.topics.map((topic, tIdx) => {
-                      const isCovered = completedTopics.includes(topic);
+                      const isCovered = isTopicCovered(topic, completedTopics);
                       return (
                         <View key={tIdx} style={[styles.topicRow, { alignItems: 'center', paddingVertical: 6 }]}>
                           <Ionicons
