@@ -272,9 +272,8 @@ function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: s
                   controls
                   autoPlay
                   playsInline
-                  crossOrigin="anonymous"
                   onError={(e: any) => {
-                    const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+                    const fallbackSrc = 'https://vjs.zencdn.net/v/oceans.mp4';
                     if (e?.currentTarget && e.currentTarget.src !== fallbackSrc) {
                       e.currentTarget.src = fallbackSrc;
                       e.currentTarget.load();

@@ -420,16 +420,27 @@ function WebVideoPlayer({ uri, title, onClose }: { uri: string; title: string; o
 
   return (
     <div style={containerStyle} onClick={() => { setShowMenu(false); setShowSpeedMenu(false); resetHideTimer(); }}>
+      {/* TOP BAR */}
+      <div style={topBarStyle}>
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </button>
+        <span style={{ flex: 1, color: '#fff', fontWeight: 700, fontSize: 15, margin: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+          {title}
+        </span>
+      </div>
+
       {/* video element */}
       <div style={videoAreaStyle}>
         <video
           ref={videoRef}
           src={uri}
           autoPlay
+          controls
           playsInline
-          crossOrigin="anonymous"
           onError={(e: any) => {
-            const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+            const fallbackSrc = 'https://vjs.zencdn.net/v/oceans.mp4';
             if (e?.currentTarget && e.currentTarget.src !== fallbackSrc) {
               e.currentTarget.src = fallbackSrc;
               e.currentTarget.load();
@@ -457,17 +468,6 @@ function WebVideoPlayer({ uri, title, onClose }: { uri: string; title: string; o
             <Ionicons name={playing ? 'pause' : 'play'} size={44} color="#fff" />
           </div>
         )}
-      </div>
-
-      {/* TOP BAR */}
-      <div style={topBarStyle}>
-        <button onClick={(e) => { e.stopPropagation(); onClose(); }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex' } as any}>
-          <Ionicons name="close" size={24} color="#fff" />
-        </button>
-        <span style={{ flex: 1, color: '#fff', fontWeight: 700, fontSize: 15, margin: '0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
-          {title}
-        </span>
       </div>
 
       {/* BOTTOM BAR */}
