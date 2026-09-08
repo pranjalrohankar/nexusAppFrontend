@@ -416,8 +416,23 @@ export const api = {
     get(`/auth/login-history?userId=${userId}`),
   getSecuritySettings: (userId: number | string) =>
     get(`/auth/security-settings?userId=${userId}`),
-  updateSecuritySettings: (data: object) =>
-    put("/auth/security-settings", data),
+  // Batch and Course covered topics
+  getBatchCoveredTopics: (batchId: number | string) => get(`/batches/${batchId}/covered-topics`),
+  updateBatchCoveredTopics: (batchId: number | string, topics: string[] | string) =>
+    put(`/batches/${batchId}/covered-topics`, { coveredTopics: Array.isArray(topics) ? JSON.stringify(topics) : topics }),
+  getCourseCoveredTopics: (courseIdOrTitle: number | string) => {
+    if (typeof courseIdOrTitle === 'number' || /^\d+$/.test(String(courseIdOrTitle))) {
+      return get(`/courses/${courseIdOrTitle}/covered-topics`);
+    }
+    return get(`/courses/by-title/covered-topics?title=${encodeURIComponent(String(courseIdOrTitle))}`);
+  },
+  updateCourseCoveredTopics: (courseIdOrTitle: number | string, topics: string[] | string) => {
+    const payload = { coveredTopics: Array.isArray(topics) ? JSON.stringify(topics) : topics };
+    if (typeof courseIdOrTitle === 'number' || /^\d+$/.test(String(courseIdOrTitle))) {
+      return put(`/courses/${courseIdOrTitle}/covered-topics`, payload);
+    }
+    return put(`/courses/by-title/covered-topics?title=${encodeURIComponent(String(courseIdOrTitle))}`, payload);
+  },
 
   // Student-specific endpoints
   getStudentProfile: () => get('/student/profile'),

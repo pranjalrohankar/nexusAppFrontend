@@ -164,10 +164,10 @@ export default function BatchInfoScreen({ onBack, onEnrollSuccess, batch }: Batc
   const [completedTopics, setCompletedTopics] = useState<string[]>([]);
 
   useEffect(() => {
-    if (data.title) {
-      getCompletedTopicsForCourse(data.title, data.instructor?.name).then(setCompletedTopics);
+    if (data.title || batch?.id) {
+      getCompletedTopicsForCourse(data.title, data.instructor?.name, batch?.id).then(setCompletedTopics);
     }
-  }, [data.title, data.instructor?.name]);
+  }, [data.title, data.instructor?.name, batch?.id]);
 
   const handleEnroll = () => {
     Alert.alert(

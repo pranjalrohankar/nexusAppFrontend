@@ -236,6 +236,12 @@ function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: s
                 src={uri}
                 controls
                 autoPlay
+                onError={(e: any) => {
+                  const fallbackSrc = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+                  if (e?.currentTarget?.src !== fallbackSrc) {
+                    e.currentTarget.src = fallbackSrc;
+                  }
+                }}
                 style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
               />
             </View>
