@@ -605,9 +605,24 @@ function RecordingsSection({ enrolledCourses }: { enrolledCourses: string[] }) {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    api.getStudentRecordings().then((data: any) => {
-      setRecordings(Array.isArray(data) ? data : []);
-    }).catch(() => { }).finally(() => setLoading(false));
+    const loadRecs = async () => {
+      try {
+        let data = await api.getStudentRecordings(true);
+        if (!Array.isArray(data) || data.length === 0) {
+          const allData = await api.getClassRecordings(true).catch(() => []);
+          if (Array.isArray(allData) && allData.length > 0) {
+            data = allData;
+          }
+        }
+        setRecordings(Array.isArray(data) ? data : []);
+      } catch {
+        const allData = await api.getClassRecordings(true).catch(() => []);
+        setRecordings(Array.isArray(allData) ? allData : []);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadRecs();
 
     api.getAllCourses().then((res: any) => {
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
@@ -1269,9 +1284,15 @@ export default function HomeScreen({ onOpenNotifications, userName }: HomeScreen
       setAllMaterials(Array.isArray(data) ? data : []);
     }).catch(() => { });
 
-    api.getStudentRecordings().then((data: any) => {
-      setRecordingsList(Array.isArray(data) ? data : []);
-    }).catch(() => { });
+    api.getStudentRecordings(true).then((data: any) => {
+      if (Array.isArray(data) && data.length > 0) {
+        setRecordingsList(data);
+      } else {
+        api.getClassRecordings(true).then(all => setRecordingsList(Array.isArray(all) ? all : [])).catch(() => {});
+      }
+    }).catch(() => {
+      api.getClassRecordings(true).then(all => setRecordingsList(Array.isArray(all) ? all : [])).catch(() => {});
+    });
   }, []);
 
   const resolveCourse = (courseTitle: string): CourseData | null => {
