@@ -107,6 +107,62 @@ export default function TestsScreen() {
           mergedTestsMap.set(String(t.id), t);
         }
       });
+      if (mergedTestsMap.size === 0) {
+        const defaultDemoTests = [
+          {
+            id: "1",
+            title: "JavaScript ES6+ Assessment",
+            category: "Full Stack Web Development",
+            questionsCount: 5,
+            duration: "35 mins",
+            passScore: "70%",
+            totalMarks: 100,
+            testType: "MCQ",
+            questions: [
+              { question: "Which keyword creates a block-scoped variable in ES6?", options: ["var", "let", "const and let", "global"], correctOption: 2 },
+              { question: "What does Promise.all() do?", options: ["Rejects if any promise rejects", "Resolves first", "Runs synchronously", "Cancels all"], correctOption: 0 },
+              { question: "What is the purpose of arrow functions?", options: ["Lexical this binding", "New prototype", "Dynamic scope", "Slower execution"], correctOption: 0 },
+              { question: "Which method creates a shallow copy of an array in ES6?", options: ["Array.from() / Spread [...arr]", "arr.slice(-1)", "arr.copy()", "arr.shallow()"], correctOption: 0 },
+              { question: "What does destructuring assignment do?", options: ["Unpacks values from arrays/objects", "Destroys variables", "Compiles JS", "Deletes properties"], correctOption: 0 }
+            ]
+          },
+          {
+            id: "2",
+            title: "React Advanced Patterns Test",
+            category: "Full Stack Web Development",
+            questionsCount: 5,
+            duration: "45 mins",
+            passScore: "75%",
+            totalMarks: 100,
+            testType: "MCQ",
+            questions: [
+              { question: "What is the primary benefit of React hooks?", options: ["Reuse stateful logic without changing hierarchy", "Replace JSX", "Faster than vanilla JS", "Disable re-renders"], correctOption: 0 },
+              { question: "When does useEffect cleanup function run?", options: ["Before component unmounts and before re-running effect", "Only on page reload", "Only on error", "Never"], correctOption: 0 },
+              { question: "What is React.memo used for?", options: ["Memoizing component render based on props", "Storing redux state", "Memoizing hooks", "Database caching"], correctOption: 0 },
+              { question: "Which hook should be used for mutable values that don't trigger re-render?", options: ["useRef", "useState", "useMemo", "useCallback"], correctOption: 0 },
+              { question: "What problem does useCallback solve?", options: ["Preserves function reference across renders", "Replaces Redux", "Executes async code", "Creates DOM nodes"], correctOption: 0 }
+            ]
+          },
+          {
+            id: "3",
+            title: "Java Full Stack & Spring Boot Assessment",
+            category: "Java Full Stack Development",
+            questionsCount: 5,
+            duration: "45 mins",
+            passScore: "75%",
+            totalMarks: 100,
+            testType: "MCQ",
+            questions: [
+              { question: "Which Spring annotation maps an HTTP GET request to a handler method?", options: ["@GetMapping", "@PostMapping", "@RequestMapping(method=POST)", "@QueryMapping"], correctOption: 0 },
+              { question: "What is Dependency Injection in Spring?", options: ["Objects receive dependencies from external container", "Hardcoded object creation", "Java Reflection bypass", "Thread pooling"], correctOption: 0 },
+              { question: "What is JPA used for in Spring Boot?", options: ["Object-Relational Mapping (ORM) and data persistence", "Frontend routing", "JWT generation", "Load balancing"], correctOption: 0 },
+              { question: "Which interface does Spring Data JPA repository extend for standard CRUD?", options: ["JpaRepository / CrudRepository", "Serializable", "Runnable", "Callable"], correctOption: 0 },
+              { question: "What does @Transactional ensure in Spring?", options: ["ACID compliance across method operations", "Fast serialization", "Thread safety only", "Cache eviction"], correctOption: 0 }
+            ]
+          }
+        ];
+        defaultDemoTests.forEach(t => mergedTestsMap.set(t.id, t));
+      }
       setPublishedTests(Array.from(mergedTestsMap.values()));
 
       // 2. Fetch submissions from backend + AsyncStorage

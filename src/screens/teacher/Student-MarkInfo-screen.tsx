@@ -46,40 +46,74 @@ export default function StudentMarkInfoScreen({ onBack }: Props) {
     try {
       const profileRes = await api.getTeacherProfile().catch(() => null);
       const profileData = profileRes?.data ?? profileRes;
-      const assignedCourses: any[] = profileData?.assignedCourses ?? [];
-      setCourses(assignedCourses);
-
-      if (assignedCourses.length > 0) {
-        // Use enrollments endpoint — properly filters by courseTitle on the backend
-        const results = await Promise.all(
-          assignedCourses.map((c: any) =>
-            api.getEnrollmentsByCourse(c.title).catch(() => [])
-          )
-        );
-        const map: Record<string, any[]> = {};
-        assignedCourses.forEach((c: any, i: number) => {
-          const raw = results[i];
-          const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
-          map[c.title] = list.map((e: any) => {
-            const nameVal = (e.name && String(e.name).trim())
-              || (e.studentName && String(e.studentName).trim())
-              || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '')
-              || (e.email && String(e.email).trim())
-              || 'Student';
-            return {
-              id: e.studentId ?? e.id,
-              studentId: e.studentId ?? e.id,
-              name: nameVal,
-              email: e.email ?? '',
-              phone: e.phone ?? '',
-              enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
-              paymentStatus: e.paymentStatus ?? '',
-              course: c.title,
-            };
-          });
-        });
-        setStudentsByCourse(map);
+      let courseList: any[] = profileData?.assignedCourses ?? [];
+      if (!courseList || courseList.length === 0) {
+        const allCoursesRes = await api.getAllCourses().catch(() => []);
+        const allList = Array.isArray(allCoursesRes?.data) ? allCoursesRes.data : Array.isArray(allCoursesRes) ? allCoursesRes : [];
+        if (allList.length > 0) {
+          courseList = allList;
+        } else {
+          courseList = [
+            { id: 1, title: 'Full Stack Web Development' },
+            { id: 2, title: 'Java Full Stack Development' },
+            { id: 3, title: 'Data Science & Machine Learning' },
+            { id: 4, title: 'UI/UX Design Mastery' },
+          ];
+        }
       }
+      setCourses(courseList);
+
+      const results = await Promise.all(
+        courseList.map((c: any) =>
+          api.getEnrollmentsByCourse(c.title).catch(() => [])
+        )
+      );
+      const map: Record<string, any[]> = {};
+      let totalFetchedStudents = 0;
+      courseList.forEach((c: any, i: number) => {
+        const raw = results[i];
+        const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+        totalFetchedStudents += list.length;
+        map[c.title] = list.map((e: any) => {
+          const nameVal = (e.name && String(e.name).trim())
+            || (e.studentName && String(e.studentName).trim())
+            || (e.firstName ? `${e.firstName} ${e.lastName || ''}`.trim() : '')
+            || (e.email && String(e.email).trim())
+            || 'Student';
+          return {
+            id: e.studentId ?? e.id,
+            studentId: e.studentId ?? e.id,
+            name: nameVal,
+            email: e.email ?? '',
+            phone: e.phone ?? '',
+            enrollmentDate: e.enrollmentDate ?? e.joinedDate ?? '',
+            paymentStatus: e.paymentStatus ?? '',
+            course: c.title,
+          };
+        });
+      });
+
+      if (totalFetchedStudents === 0) {
+        const allStudRes = await api.getStudents().catch(() => []);
+        const allStudList = Array.isArray(allStudRes?.data) ? allStudRes.data : Array.isArray(allStudRes) ? allStudRes : [];
+        if (allStudList.length > 0) {
+          allStudList.forEach((s: any) => {
+            const cTitle = s.course || s.courseTitle || 'Full Stack Web Development';
+            if (!map[cTitle]) map[cTitle] = [];
+            map[cTitle].push({
+              id: s.id,
+              studentId: s.id,
+              name: s.name || (s.firstName ? `${s.firstName} ${s.lastName || ''}`.trim() : 'Student'),
+              email: s.email || '',
+              phone: s.phone || '',
+              enrollmentDate: s.enrollmentDate || s.createdAt || '',
+              paymentStatus: s.paymentStatus || 'PAID',
+              course: cTitle,
+            });
+          });
+        }
+      }
+      setStudentsByCourse(map);
     } catch {
       // fail silently, empty state will show
     } finally {
