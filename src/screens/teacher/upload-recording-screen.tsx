@@ -539,8 +539,16 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       const fileName = selectedFile.name || `recording-${Date.now()}.mp4`;
       if (IS_WEB) {
         try {
-          const fileBlob = await (await fetch(selectedFile.uri)).blob();
-          formData.append('file', fileBlob, fileName);
+          let fileBlob: any = (selectedFile as any).file;
+          if (!fileBlob && selectedFile.uri) {
+            fileBlob = await (await fetch(selectedFile.uri)).blob();
+          }
+          if (fileBlob) {
+            formData.append('file', fileBlob, fileName);
+          } else {
+            Alert.alert('Error', 'Unable to read selected video file.');
+            return;
+          }
         } catch {
           Alert.alert('Error', 'Unable to read selected video file.');
           return;
@@ -572,7 +580,11 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
     try {
       setLoading(true);
-      await api.uploadClassRecording(formData);
+      const res = await api.uploadClassRecording(formData);
+      if (res && res.success === false) {
+        Alert.alert('Upload Failed', res.message || 'Server could not save recording.');
+        return;
+      }
       setSelectedFile(null);
       setVideoLink('');
       setTitle('');
