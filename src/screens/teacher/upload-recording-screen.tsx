@@ -739,9 +739,38 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
           <View style={{ marginBottom: 16 }}>
             <Text style={s.label}>Class Date <Text style={s.req}>*</Text></Text>
-            <TouchableOpacity style={s.input} onPress={() => setShowDatePicker(true)}>
-              <Text style={{ color: '#1E2937', fontSize: 15 }}>{formatDate(classDate)}</Text>
-            </TouchableOpacity>
+            {Platform.OS === 'web' ? (
+              <View style={s.webDateContainer}>
+                <input
+                  type="date"
+                  value={classDate.toISOString().slice(0, 10)}
+                  onChange={(e: any) => {
+                    if (e.target.value) {
+                      const [y, m, d] = e.target.value.split('-').map(Number);
+                      setClassDate(new Date(y, m - 1, d));
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: 48,
+                    border: '1.5px solid #E5E7EB',
+                    borderRadius: 12,
+                    padding: '0 14px',
+                    fontSize: 15,
+                    color: '#1E2937',
+                    backgroundColor: '#FFFFFF',
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                />
+              </View>
+            ) : (
+              <TouchableOpacity style={s.input} onPress={() => setShowDatePicker(true)}>
+                <Text style={{ color: '#1E2937', fontSize: 15 }}>{formatDate(classDate)}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -1032,7 +1061,7 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
         </View>
       </Modal>
 
-      {showDatePicker && (
+      {Platform.OS !== 'web' && showDatePicker && (
         <DateTimePicker
           value={classDate}
           mode="date"

@@ -20,18 +20,16 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Dimensions,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import { adminDataCache } from '../../services/admin-data-cache';
 export { adminDataCache };
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Detect if running on web in a narrow (phone-sized) viewport
 function useIsNarrowWeb() {
@@ -61,6 +59,12 @@ interface AppTabsProps {
 export default function AppTabs({ userRole, userName, userEmail, onLogout, lastLogin }: AppTabsProps) {
   const isNarrowWeb = useIsNarrowWeb();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  const isSmallDevice = windowWidth < 380;
+  const isWeb = Platform.OS === 'web';
+  const bottomSafePadding = Math.max(insets.bottom, isWeb ? 6 : (Platform.OS === 'android' ? 10 : 8));
+  const dynamicTabBarHeight = 56 + bottomSafePadding;
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showUploadRecording, setShowUploadRecording] = useState(false);
@@ -378,25 +382,48 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
   return (
     <View style={styles.container}>
       {/* SCREEN CONTAINER */}
-      <View style={[styles.screenContainer, profileSubView === 'profile' && styles.screenWithTabBar]}>{renderScreen()}</View>
+      <View style={[
+        styles.screenContainer,
+        profileSubView === 'profile' && { paddingBottom: dynamicTabBarHeight }
+      ]}>
+        {renderScreen()}
+      </View>
 
       {/* BOTTOM TAB BAR — hidden when a profile sub-view is open */}
       {profileSubView === 'profile' && (
-        <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={[
+          styles.tabBar,
+          {
+            paddingBottom: bottomSafePadding,
+            paddingHorizontal: isSmallDevice ? 4 : 8,
+          }
+        ]}>
           {tabs.map((tab, idx) => {
             const isActive = idx === activeIndex;
             return (
               <TouchableOpacity
                 key={idx}
-                style={[styles.tabButton, isActive && styles.tabButtonActive]}
+                style={[
+                  styles.tabButton,
+                  isSmallDevice && styles.tabButtonSmall,
+                  isActive && styles.tabButtonActive
+                ]}
                 onPress={() => handleTabPress(idx, tab.name)}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name={isActive ? (tab.iconActive as any) : (tab.iconInactive as any)}
-                  size={20}
+                  size={isSmallDevice ? 19 : 21}
                   color={isActive ? "#FFFFFF" : "#374151"}
                 />
-                <Text style={[styles.tabLabel, isActive ? styles.tabLabelActive : styles.tabLabelInactive]}>
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    isSmallDevice && styles.tabLabelSmall,
+                    isActive ? styles.tabLabelActive : styles.tabLabelInactive
+                  ]}
+                  numberOfLines={1}
+                >
                   {tab.name}
                 </Text>
               </TouchableOpacity>
@@ -416,13 +443,10 @@ const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
   },
-  screenWithTabBar: {
-    paddingBottom: 80,
-  },
-  // Tab Bar — flat bottom bar matching UI screenshot
+  // Tab Bar — flat bottom bar matching UI design
   tabBar: {
     flexDirection: 'row',
-    minHeight: 58,
+    minHeight: 56,
     backgroundColor: '#FFFFFF',
     borderRadius: 0,
     justifyContent: 'space-around',
@@ -431,12 +455,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    elevation: 12,
+    elevation: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    paddingHorizontal: 16,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
     zIndex: 100,
@@ -445,20 +468,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    paddingTop: 14,
-    paddingBottom: 4,
-    borderRadius: 12,
-    marginHorizontal: 4,
-    marginTop: 6,
+    paddingTop: 8,
+    paddingBottom: 5,
+    borderRadius: 10,
+    marginHorizontal: 3,
+    marginTop: 4,
     marginBottom: 2,
+  },
+  tabButtonSmall: {
+    paddingTop: 6,
+    paddingBottom: 4,
+    marginHorizontal: 1.5,
+    borderRadius: 8,
   },
   tabButtonActive: {
     backgroundColor: '#7B2CBF',
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '600',
-    marginTop: 3,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  tabLabelSmall: {
+    fontSize: 9.5,
+    marginTop: 1.5,
   },
   tabLabelInactive: {
     color: '#374151',

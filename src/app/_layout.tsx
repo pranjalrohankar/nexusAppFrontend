@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform, useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { Ionicons, FontAwesome, MaterialIcons, Feather } from '@expo/vector-icons';
 
@@ -174,34 +175,36 @@ export default function TabLayout() {
   }, [isAuthenticated]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {isInitializing ? (
-        <AnimatedSplashOverlay />
-      ) : isAuthenticated ? (
-        <>
+    <SafeAreaProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        {isInitializing ? (
           <AnimatedSplashOverlay />
-          <AppTabs
-            userRole={userRole}
-            userName={userName}
-            userEmail={userEmail}
-            onLogout={doLogout}
-            lastLogin={lastLogin}
-          />
-        </>
-      ) : (
-        <AuthFlow onSignIn={(role, name, email, id, loginTime) => {
-          setUserRole(role);
-          setUserName(name);
-          setUserEmail(email);
-          setUserId(id ?? null);
-          setLastLogin(loginTime ?? '');
-          setIsAuthenticated(true);
-          // Mark student as online after login
-          if (role === 'student') {
-            setTimeout(() => api.setActivityStatus(true).catch(() => {}), 500);
-          }
-        }} />
-      )}
-    </ThemeProvider>
+        ) : isAuthenticated ? (
+          <>
+            <AnimatedSplashOverlay />
+            <AppTabs
+              userRole={userRole}
+              userName={userName}
+              userEmail={userEmail}
+              onLogout={doLogout}
+              lastLogin={lastLogin}
+            />
+          </>
+        ) : (
+          <AuthFlow onSignIn={(role, name, email, id, loginTime) => {
+            setUserRole(role);
+            setUserName(name);
+            setUserEmail(email);
+            setUserId(id ?? null);
+            setLastLogin(loginTime ?? '');
+            setIsAuthenticated(true);
+            // Mark student as online after login
+            if (role === 'student') {
+              setTimeout(() => api.setActivityStatus(true).catch(() => {}), 500);
+            }
+          }} />
+        )}
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
