@@ -440,12 +440,15 @@ function WebVideoPlayer({ uri, title, onClose }: { uri: string; title: string; o
           controls
           playsInline
           onError={(e: any) => {
-            const fallbackSrc = 'https://vjs.zencdn.net/v/oceans.mp4';
-            if (e?.currentTarget && e.currentTarget.src !== fallbackSrc) {
-              e.currentTarget.src = fallbackSrc;
-              e.currentTarget.load();
-              const p = e.currentTarget.play();
-              if (p !== undefined) p.catch(() => {});
+            // Auto retry stream after 2 seconds if server is waking up
+            const target = e?.currentTarget;
+            if (target && !target.dataset?.retried) {
+              target.dataset = { retried: 'true' };
+              setTimeout(() => {
+                target.load();
+                const p = target.play();
+                if (p !== undefined) p.catch(() => {});
+              }, 2000);
             }
           }}
           style={{ width: '100%', height: '100%', objectFit: 'contain', outline: 'none' } as any}

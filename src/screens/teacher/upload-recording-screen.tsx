@@ -273,12 +273,15 @@ function VideoModal({ visible, uri, title, onClose }: { visible: boolean; uri: s
                   autoPlay
                   playsInline
                   onError={(e: any) => {
-                    const fallbackSrc = 'https://vjs.zencdn.net/v/oceans.mp4';
-                    if (e?.currentTarget && e.currentTarget.src !== fallbackSrc) {
-                      e.currentTarget.src = fallbackSrc;
-                      e.currentTarget.load();
-                      const p = e.currentTarget.play();
-                      if (p !== undefined) p.catch(() => {});
+                    // If video stream fails during server wake up, attempt clean reload without replacing with oceans sample
+                    const target = e?.currentTarget;
+                    if (target && !target.dataset?.retried) {
+                      target.dataset = { retried: 'true' };
+                      setTimeout(() => {
+                        target.load();
+                        const p = target.play();
+                        if (p !== undefined) p.catch(() => {});
+                      }, 2000);
                     }
                   }}
                   style={{ width: '100%', height: '100%', backgroundColor: '#000', outline: 'none' } as any}
