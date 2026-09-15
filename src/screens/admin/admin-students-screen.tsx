@@ -336,10 +336,15 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           showToast(reason, 'error');
           return;
         }
-        // 2. Enroll in new course if selected
-        if (newCourse) {
+        // 2. Enroll in new course if selected and not already enrolled
+        const isAlreadyEnrolled = !!newCourse && (
+          selectedStudent.enrollments?.some(e => (e.courseTitle || '').trim().toLowerCase() === newCourse.trim().toLowerCase()) ||
+          (selectedStudent.course && selectedStudent.course.trim().toLowerCase() === newCourse.trim().toLowerCase())
+        );
+
+        if (newCourse && !isAlreadyEnrolled) {
           const enrollRes = await api.enrollStudent(selectedStudent.id, {
-            courseTitle: newCourse,
+            courseTitle: newCourse.trim(),
             batchName: newBatchName,
             enrollmentDate: newEnrollmentDate,
             paymentStatus: newPaymentStatus,
@@ -1046,10 +1051,15 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 
               {/* Add new course — shown in both add and edit mode */}
               <View style={[styles.formGroup, { zIndex: 1000 }]}>
-                <Text style={styles.fieldLabel}>{selectedStudent ? 'Add New Course' : 'Course *'}</Text>
+                <Text style={styles.fieldLabel}>{selectedStudent ? 'Enroll in Additional Course (Optional)' : 'Course *'}</Text>
+                {selectedStudent && (
+                  <Text style={{ fontSize: 11, color: '#6B7280', marginBottom: 6 }}>
+                    To change batches for current courses, use the dropdown above. Only select here to add a new course.
+                  </Text>
+                )}
                 <View style={styles.checkboxGroup}>
                   <Text style={[styles.dropdownText, !newCourse && styles.dropdownPlaceholder]}>
-                    {newCourse || 'Select a course'}
+                    {newCourse || 'Select an additional course'}
                   </Text>
                   <View style={styles.checkboxList}>
                     {courses.length === 0 ? (
@@ -1058,7 +1068,13 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       </View>
                     ) : (
                       courses
-                        .filter(c => !selectedStudent || !selectedStudent.enrollments?.some(e => e.courseTitle === c.title))
+                        .filter(c => {
+                          if (!selectedStudent) return true;
+                          const cTitleLower = (c.title || '').trim().toLowerCase();
+                          const enrolledInList = selectedStudent.enrollments?.some(e => (e.courseTitle || '').trim().toLowerCase() === cTitleLower);
+                          const enrolledInSingle = (selectedStudent.course || '').trim().toLowerCase() === cTitleLower;
+                          return !enrolledInList && !enrolledInSingle;
+                        })
                         .map((course) => (
                           <TouchableOpacity
                             key={course.id}
