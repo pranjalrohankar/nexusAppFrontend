@@ -422,16 +422,6 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     borderWidth: 0,
-    outlineStyle: 'none',
-    outlineWidth: 0,
-    outlineColor: 'transparent',
-    ...(Platform.OS === 'web'
-      ? ({
-          outline: 'none',
-          boxShadow: 'none',
-          border: 'none',
-        } as any)
-      : {}),
   },
   divider: { height: 1, backgroundColor: '#F0F0F0', marginLeft: 50 },
   saveBtn: {
