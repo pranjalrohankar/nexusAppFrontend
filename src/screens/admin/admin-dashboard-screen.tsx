@@ -251,33 +251,6 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* PENDING PASSWORD RESET BANNER */}
-        {pendingResetCount > 0 && (
-          <TouchableOpacity
-            style={styles.resetAlertBanner}
-            onPress={() => { fetchEnquiriesAndResets(); setEnquiriesTab('resets'); setShowEnquiries(true); }}
-            activeOpacity={0.8}
-          >
-            <View style={styles.resetAlertLeft}>
-              <View style={styles.resetAlertIconBox}>
-                <Ionicons name="key" size={18} color="#DC2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.resetAlertTitle}>
-                  {pendingResetCount} Password Reset {pendingResetCount === 1 ? 'Request' : 'Requests'} Pending
-                </Text>
-                <Text style={styles.resetAlertSubtitle}>
-                  Users requested password assistance. Tap to review & resolve.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.resetAlertAction}>
-              <Text style={styles.resetAlertActionText}>Review</Text>
-              <Ionicons name="chevron-forward" size={14} color="#7B2CBF" />
-            </View>
-          </TouchableOpacity>
-        )}
-
         {/* KPI METRICS GRID */}
         <View style={styles.metricsGrid}>
           {metrics.map((m, idx) => (
@@ -583,59 +556,6 @@ const styles = StyleSheet.create({
   modalSaveText: {
     color: '#FFF',
     fontWeight: '600',
-  },
-
-  resetAlertBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-  },
-  resetAlertLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  resetAlertIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FEE2E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resetAlertTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#991B1B',
-  },
-  resetAlertSubtitle: {
-    fontSize: 11,
-    color: '#B91C1C',
-    marginTop: 2,
-  },
-  resetAlertAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
-    marginLeft: 8,
-  },
-  resetAlertActionText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#7B2CBF',
   },
 
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginBottom: 24 },
