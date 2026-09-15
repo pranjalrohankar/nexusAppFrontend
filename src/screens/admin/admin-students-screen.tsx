@@ -24,16 +24,27 @@ interface Enrollment {
   paymentStatus: string;
 }
 
+interface StudentBatch {
+  id: number;
+  batchName: string;
+  selectCourse: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 interface Student {
   id: number;
   name: string;
   email: string;
   phone: string;
   active: boolean;
+  status?: string;
   onlineStatus?: 'online' | 'offline' | 'always_online';
   coursesCount: number;
   createdAt: string;
   enrollments: Enrollment[];
+  batches?: StudentBatch[];
   dob?: string;
   street?: string;
   city?: string;
@@ -88,7 +99,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     return cached.length > 0 ? cached.slice().sort((a: any, b: any) => b.id - a.id) : [];
   });
   const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
-  const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string }[]>([]);
+  const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string; status?: string; startDate?: string; endDate?: string }[]>([]);
   const [loading, setLoading] = useState(adminDataCache.students.length === 0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 5;
@@ -148,6 +159,9 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         id: b.id,
         batchName: b.batchName,
         selectCourse: b.selectCourse,
+        status: b.status,
+        startDate: b.startDate,
+        endDate: b.endDate,
       })));
     } catch (err) { }
   }, []);
@@ -563,6 +577,31 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       ))}
                     </View>
                   )}
+                  {item.batches && item.batches.length > 0 && (
+                    <View style={styles.batchesRow}>
+                      <Ionicons name="time-outline" size={13} color="#6B7280" />
+                      <View style={styles.batchesList}>
+                        {item.batches.map((b, bIdx) => (
+                          <View
+                            key={bIdx}
+                            style={[
+                              styles.batchPill,
+                              b.status === 'COMPLETED' ? styles.batchPillCompleted : styles.batchPillActive
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.batchPillText,
+                                b.status === 'COMPLETED' ? styles.batchPillCompletedText : styles.batchPillActiveText
+                              ]}
+                            >
+                              {b.batchName} • {b.status === 'COMPLETED' ? 'Completed' : b.status === 'UPCOMING' ? 'Upcoming' : 'Active'}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
                 </View>
 
                 {/* Actions */}
@@ -795,26 +834,83 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
               </View>
 
               {/* Enrollment Details */}
-              <Text style={styles.formSectionTitle}>Enrollment Details</Text>
+              <Text style={styles.formSectionTitle}>Enrollment & Status</Text>
+
+              {/* Dynamic Batch-Dependent Status Banner */}
+              {selectedStudent && (
+                <View style={[
+                  styles.statusInfoBanner,
+                  selectedStudent.active !== false ? styles.statusInfoBannerActive : styles.statusInfoBannerInactive
+                ]}>
+                  <Ionicons
+                    name={selectedStudent.active !== false ? "checkmark-circle" : "time"}
+                    size={22}
+                    color={selectedStudent.active !== false ? "#10B981" : "#F59E0B"}
+                    style={{ marginTop: 2 }}
+                  />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.statusInfoTitle}>Student Status: </Text>
+                      <View style={[styles.statusBadge, selectedStudent.active !== false ? styles.statusActive : styles.statusInactive]}>
+                        <Text style={[styles.statusText, selectedStudent.active !== false ? styles.statusActiveText : styles.statusInactiveText]}>
+                          {selectedStudent.active !== false ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.statusInfoSubtitle}>
+                      {selectedStudent.active !== false
+                        ? 'Active — Enrolled in active or upcoming batch schedules.'
+                        : 'Inactive — All enrolled batches have reached their completion date.'}
+                    </Text>
+                    <Text style={styles.statusInfoNote}>
+                      Status is automatically determined based on batch schedules and course enrollments.
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {/* In edit mode: show existing enrollments as read-only */}
               {selectedStudent && selectedStudent.enrollments && selectedStudent.enrollments.length > 0 && (
                 <View style={styles.formGroup}>
-                  <Text style={styles.fieldLabel}>Current Enrollments</Text>
+                  <Text style={styles.fieldLabel}>Current Enrollments & Batches</Text>
                   <View style={styles.existingEnrollmentsBox}>
-                    {selectedStudent.enrollments.map((enr, idx) => (
-                      <View key={idx} style={styles.existingEnrollmentRow}>
-                        <Ionicons name="book-outline" size={13} color="#7B2CBF" />
-                        <Text style={styles.existingEnrollmentText}>{enr.courseTitle}</Text>
-                        <View style={[
-                          styles.existingEnrollmentBadge,
-                          enr.paymentStatus === 'Paid' ? styles.badgePaid :
-                            enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
-                        ]}>
-                          <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
+                    {selectedStudent.enrollments.map((enr, idx) => {
+                      const matchingBatch = selectedStudent.batches?.find(b =>
+                        (b.selectCourse || '').toLowerCase() === (enr.courseTitle || '').toLowerCase() ||
+                        (b.selectCourse || '').toLowerCase().includes((enr.courseTitle || '').toLowerCase()) ||
+                        (enr.courseTitle || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
+                      );
+                      return (
+                        <View key={idx} style={styles.existingEnrollmentContainer}>
+                          <View style={styles.existingEnrollmentRow}>
+                            <Ionicons name="book-outline" size={13} color="#7B2CBF" />
+                            <Text style={styles.existingEnrollmentText}>{enr.courseTitle}</Text>
+                            <View style={[
+                              styles.existingEnrollmentBadge,
+                              enr.paymentStatus === 'Paid' ? styles.badgePaid :
+                                enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
+                            ]}>
+                              <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
+                            </View>
+                          </View>
+                          {matchingBatch ? (
+                            <View style={styles.enrolledBatchInfo}>
+                              <Ionicons name="people-outline" size={11} color="#6B7280" />
+                              <Text style={styles.enrolledBatchText}>
+                                Batch: {matchingBatch.batchName} ({matchingBatch.status === 'COMPLETED' ? 'Completed' : matchingBatch.status === 'UPCOMING' ? 'Upcoming' : 'Active'})
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.enrolledBatchInfo}>
+                              <Ionicons name="information-circle-outline" size={11} color="#9CA3AF" />
+                              <Text style={[styles.enrolledBatchText, { color: '#9CA3AF' }]}>
+                                No specific batch linked yet
+                              </Text>
+                            </View>
+                          )}
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -1018,6 +1114,11 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
   },
+  existingEnrollmentContainer: {
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
   existingEnrollmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1041,6 +1142,92 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#374151',
+  },
+  enrolledBatchInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    marginLeft: 21,
+  },
+  enrolledBatchText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  statusInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  statusInfoBannerActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  statusInfoBannerInactive: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  statusInfoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginRight: 6,
+  },
+  statusInfoValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusInfoSubtitle: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  statusInfoNote: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  batchesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 2,
+  },
+  batchesList: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  batchPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  batchPillActive: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#DDD6FE',
+  },
+  batchPillCompleted: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  batchPillText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  batchPillActiveText: {
+    color: '#6D28D9',
+  },
+  batchPillCompletedText: {
+    color: '#6B7280',
   },
   filterTabsRow: {
     flexDirection: 'row',
