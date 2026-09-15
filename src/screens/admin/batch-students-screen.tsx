@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Animated, StatusBar, Platform,
+  TextInput, ActivityIndicator, Animated, StatusBar, Platform, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -61,11 +61,18 @@ function formatDate(d: string) {
 
 export default function BatchStudentsScreen({ batch, onBack }: Props) {
   const [students, setStudents] = useState<BatchStudent[]>([]);
+  const [allBatches, setAllBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  // Reassign Batch Modal State
+  const [reassignModalVisible, setReassignModalVisible] = useState(false);
+  const [selectedStudentForReassign, setSelectedStudentForReassign] = useState<BatchStudent | null>(null);
+  const [targetBatchId, setTargetBatchId] = useState<number | null>(null);
+  const [reassigning, setReassigning] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -76,7 +83,18 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
     ]).start(() => setToast(null));
   };
 
-  useEffect(() => { loadStudents(); }, []);
+  const loadAllBatches = async () => {
+    try {
+      const res = await api.getBatches();
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setAllBatches(list);
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadStudents();
+    loadAllBatches();
+  }, []);
 
   // Poll every 10s to keep online status fresh without showing spinner
   useEffect(() => {
@@ -145,6 +163,40 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
       showToast('Could not load students', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenReassignModal = (student: BatchStudent) => {
+    setSelectedStudentForReassign(student);
+    setTargetBatchId(null);
+    setReassignModalVisible(true);
+  };
+
+  const handleConfirmReassign = async () => {
+    if (!selectedStudentForReassign) return;
+    if (!targetBatchId) {
+      showToast('Please select a target batch to reassign to', 'error');
+      return;
+    }
+    const targetBatch = allBatches.find(b => b.id === targetBatchId);
+    setReassigning(true);
+    try {
+      const res = await api.reassignBatchStudent(batch.id, {
+        studentId: selectedStudentForReassign.id,
+        targetBatchId: targetBatchId,
+        targetBatchName: targetBatch?.batchName || '',
+      });
+      if (res && (res.success !== false)) {
+        showToast(`Student moved to ${targetBatch?.batchName || 'new batch'} successfully`, 'success');
+        setReassignModalVisible(false);
+        loadStudents();
+      } else {
+        showToast((res as any)?.message || 'Failed to reassign student', 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Error reassigning batch', 'error');
+    } finally {
+      setReassigning(false);
     }
   };
 
@@ -339,13 +391,19 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
 
                 {/* Actions */}
                 <View style={styles.cardActions}>
-                  <TouchableOpacity style={styles.editBtn}>
-                    <Ionicons name="create-outline" size={14} color="#7B2CBF" />
-                    <Text style={styles.editBtnText}>Edit</Text>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => handleOpenReassignModal(student)}
+                  >
+                    <Ionicons name="swap-horizontal-outline" size={14} color="#7B2CBF" />
+                    <Text style={styles.editBtnText}>Change Batch</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.removeBtn}>
-                    <Ionicons name="person-remove-outline" size={14} color="#EF4444" />
-                    <Text style={styles.removeBtnText}>Remove</Text>
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => handleOpenReassignModal(student)}
+                  >
+                    <Ionicons name="arrow-forward-circle-outline" size={14} color="#EF4444" />
+                    <Text style={styles.removeBtnText}>Move</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -354,6 +412,155 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
         )}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* ── REASSIGN BATCH MODAL ── */}
+      <Modal
+        visible={reassignModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setReassignModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Change Student Batch</Text>
+                <Text style={styles.modalSubtitle}>
+                  Move student to another batch of {batch.selectCourse}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setReassignModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {/* Student Card Summary */}
+              {selectedStudentForReassign && (
+                <View style={styles.studentSummaryCard}>
+                  <View style={styles.studentSummaryAvatar}>
+                    <Text style={styles.studentSummaryAvatarText}>
+                      {getInitials(selectedStudentForReassign.name)}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.studentSummaryName}>{selectedStudentForReassign.name}</Text>
+                    <Text style={styles.studentSummaryEmail}>{selectedStudentForReassign.email}</Text>
+                    <View style={styles.currentBatchRow}>
+                      <Text style={styles.currentBatchLabel}>Current Batch: </Text>
+                      <View style={styles.currentBatchBadge}>
+                        <Text style={styles.currentBatchBadgeText}>{batch.batchName}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Destination Batch Selection */}
+              <Text style={styles.sectionHeader}>Select Target Batch</Text>
+              <View style={styles.targetBatchesList}>
+                {allBatches
+                  .filter(b => b.id !== batch.id && (
+                    (b.selectCourse || '').toLowerCase() === (batch.selectCourse || '').toLowerCase() ||
+                    (b.selectCourse || '').toLowerCase().includes((batch.selectCourse || '').toLowerCase()) ||
+                    (batch.selectCourse || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
+                  ))
+                  .map(b => {
+                    const isSelected = targetBatchId === b.id;
+                    const isCompleted = b.status === 'COMPLETED';
+                    const isUpcoming = b.status === 'UPCOMING';
+                    return (
+                      <TouchableOpacity
+                        key={b.id}
+                        style={[styles.targetBatchCard, isSelected && styles.targetBatchCardSelected]}
+                        onPress={() => setTargetBatchId(b.id)}
+                      >
+                        <View style={styles.targetBatchTop}>
+                          <Ionicons
+                            name={isSelected ? "radio-button-on" : "radio-button-off"}
+                            size={20}
+                            color={isSelected ? "#7B2CBF" : "#9CA3AF"}
+                          />
+                          <View style={{ flex: 1, marginLeft: 8 }}>
+                            <Text style={[styles.targetBatchName, isSelected && styles.targetBatchNameSelected]}>
+                              {b.batchName}
+                            </Text>
+                            <Text style={styles.targetBatchCourse}>{b.selectCourse}</Text>
+                          </View>
+                          <View style={[
+                            styles.targetStatusBadge,
+                            isCompleted ? styles.targetStatusCompleted :
+                              isUpcoming ? styles.targetStatusUpcoming : styles.targetStatusActive
+                          ]}>
+                            <Text style={[
+                              styles.targetStatusText,
+                              isCompleted ? styles.targetStatusTextCompleted :
+                                isUpcoming ? styles.targetStatusTextUpcoming : styles.targetStatusTextActive
+                            ]}>
+                              {isCompleted ? 'Completed' : isUpcoming ? 'Upcoming' : 'Active'}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.targetBatchDetails}>
+                          <View style={styles.targetBatchDetailItem}>
+                            <Ionicons name="person-outline" size={12} color="#6B7280" />
+                            <Text style={styles.targetBatchDetailText}>{b.instructor || 'Faculty'}</Text>
+                          </View>
+                          {b.startDate ? (
+                            <View style={styles.targetBatchDetailItem}>
+                              <Ionicons name="calendar-outline" size={12} color="#6B7280" />
+                              <Text style={styles.targetBatchDetailText}>{formatDate(b.startDate)}</Text>
+                            </View>
+                          ) : null}
+                          {b.classTimings ? (
+                            <View style={styles.targetBatchDetailItem}>
+                              <Ionicons name="time-outline" size={12} color="#6B7280" />
+                              <Text style={styles.targetBatchDetailText}>{b.classTimings}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                {allBatches.filter(b => b.id !== batch.id && (
+                  (b.selectCourse || '').toLowerCase() === (batch.selectCourse || '').toLowerCase() ||
+                  (b.selectCourse || '').toLowerCase().includes((batch.selectCourse || '').toLowerCase()) ||
+                  (batch.selectCourse || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
+                )).length === 0 && (
+                  <View style={styles.emptyTargetBatches}>
+                    <Ionicons name="information-circle-outline" size={24} color="#9CA3AF" />
+                    <Text style={styles.emptyTargetBatchesText}>
+                      No other batches are currently available for {batch.selectCourse}. You can create a new batch in Batch Management.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Modal Actions */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setReassignModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalConfirmBtn, (!targetBatchId || reassigning) && styles.modalConfirmBtnDisabled]}
+                  onPress={handleConfirmReassign}
+                  disabled={!targetBatchId || reassigning}
+                >
+                  {reassigning ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalConfirmBtnText}>Confirm Change</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -562,5 +769,239 @@ const styles = StyleSheet.create({
   },
   removeBtnText: { fontSize: 12, fontWeight: 'bold', color: '#EF4444' },
 
-
+  /* ── Reassign Modal Styles ── */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 540,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  modalScroll: {
+    padding: 20,
+  },
+  studentSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 16,
+    gap: 12,
+  },
+  studentSummaryAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#7B2CBF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  studentSummaryAvatarText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  studentSummaryName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  studentSummaryEmail: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  currentBatchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  currentBatchLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  currentBatchBadge: {
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  currentBatchBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7B2CBF',
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 10,
+  },
+  targetBatchesList: {
+    gap: 10,
+    marginBottom: 20,
+  },
+  targetBatchCard: {
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  targetBatchCardSelected: {
+    borderColor: '#7B2CBF',
+    backgroundColor: '#FAF5FF',
+  },
+  targetBatchTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  targetBatchName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  targetBatchNameSelected: {
+    color: '#7B2CBF',
+  },
+  targetBatchCourse: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  targetStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  targetStatusActive: {
+    backgroundColor: '#ECFDF5',
+  },
+  targetStatusUpcoming: {
+    backgroundColor: '#FFFBEB',
+  },
+  targetStatusCompleted: {
+    backgroundColor: '#F3F4F6',
+  },
+  targetStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  targetStatusTextActive: {
+    color: '#10B981',
+  },
+  targetStatusTextUpcoming: {
+    color: '#F59E0B',
+  },
+  targetStatusTextCompleted: {
+    color: '#6B7280',
+  },
+  targetBatchDetails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  targetBatchDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  targetBatchDetailText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  emptyTargetBatches: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    gap: 8,
+  },
+  emptyTargetBatchesText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  modalCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7B2CBF',
+  },
+  modalConfirmBtnDisabled: {
+    opacity: 0.5,
+  },
+  modalConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
 });

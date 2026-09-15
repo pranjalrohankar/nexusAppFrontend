@@ -91,6 +91,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [newEnrollmentDate, setNewEnrollmentDate] = useState('');
   const [newPaymentStatus, setNewPaymentStatus] = useState('Pending');
   const [showNewBatchDropdown, setShowNewBatchDropdown] = useState(false);
+  const [enrollmentBatches, setEnrollmentBatches] = useState<Record<string, string>>({});
+  const [openBatchDropdownCourse, setOpenBatchDropdownCourse] = useState<string | null>(null);
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
 
@@ -198,6 +200,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setNewBatchName('');
     setNewEnrollmentDate(new Date().toISOString().split('T')[0]);
     setNewPaymentStatus('Pending');
+    setEnrollmentBatches({});
+    setOpenBatchDropdownCourse(null);
     setShowCourseDropdown(false);
     setShowBatchDropdown(false);
     setShowNewBatchDropdown(false);
@@ -240,6 +244,25 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormGuardianPhone(student.guardianPhone || '');
     setFormEnrollmentDate(student.enrollmentDate || '');
     setFormPaymentStatus(student.paymentStatus || 'Pending');
+
+    // Initialize mapping of enrolled course -> assigned batch name
+    const initialBatches: Record<string, string> = {};
+    student.enrollments?.forEach(enr => {
+      const directBatch = (enr as any).batchName;
+      if (directBatch) {
+        initialBatches[enr.courseTitle] = directBatch;
+      } else {
+        const matchingBatch = student.batches?.find(b =>
+          (b.selectCourse || '').toLowerCase() === (enr.courseTitle || '').toLowerCase() ||
+          (b.selectCourse || '').toLowerCase().includes((enr.courseTitle || '').toLowerCase()) ||
+          (enr.courseTitle || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
+        );
+        initialBatches[enr.courseTitle] = matchingBatch?.batchName || '';
+      }
+    });
+    setEnrollmentBatches(initialBatches);
+    setOpenBatchDropdownCourse(null);
+
     // Reset add-new-course fields
     setNewCourse('');
     setNewBatchName('');
@@ -293,7 +316,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     if (selectedStudent) {
       setSaving(true);
       try {
-        // 1. Update personal info
+        // 1. Update personal info + course batches
         const res = await api.updateStudent(selectedStudent.id, {
           firstName: formFirstName.trim(),
           lastName: formLastName.trim(),
@@ -308,6 +331,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           guardianPhone: formGuardianPhone,
           enrollmentDate: formEnrollmentDate,
           paymentStatus: formPaymentStatus,
+          courseBatches: enrollmentBatches,
         });
         if (!res?.success) {
           const reason = res?.message || 'Server rejected the update request.';
@@ -333,16 +357,28 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           }
           showToast('Student updated & enrolled in ' + newCourse, 'success');
         } else {
-          showToast('Student updated successfully', 'success');
+          showToast('Student details & batch updated successfully', 'success');
         }
         setIsModalVisible(false);
+
         // Optimistically update the card in local state immediately
+        const allAssignedBatchNames = Object.values(enrollmentBatches).filter(Boolean);
+        if (newCourse && newBatchName) allAssignedBatchNames.push(newBatchName);
+        
+        const assignedBatches = batches.filter(b => allAssignedBatchNames.includes(b.batchName));
+        const isNowActive = assignedBatches.length > 0
+          ? assignedBatches.some(b => b.status !== 'COMPLETED')
+          : true;
+
         const updatedName = `${formFirstName.trim()} ${formLastName.trim()}`.trim();
         setStudents(prev => prev.map(s => {
           if (s.id !== selectedStudent.id) return s;
           const updatedEnrollments = newCourse
-            ? [...(s.enrollments || []), { courseTitle: newCourse, enrollmentDate: newEnrollmentDate, paymentStatus: newPaymentStatus }]
-            : s.enrollments;
+            ? [
+                ...(s.enrollments || []).map(e => ({ ...e, batchName: enrollmentBatches[e.courseTitle] ?? (e as any).batchName })),
+                { courseTitle: newCourse, enrollmentDate: newEnrollmentDate, paymentStatus: newPaymentStatus, batchName: newBatchName }
+              ]
+            : (s.enrollments || []).map(e => ({ ...e, batchName: enrollmentBatches[e.courseTitle] ?? (e as any).batchName }));
           return {
             ...s,
             name: updatedName,
@@ -355,6 +391,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             pinCode: formPinCode,
             guardianName: formGuardianName,
             guardianPhone: formGuardianPhone,
+            active: isNowActive,
+            status: isNowActive ? 'Active' : 'Inactive',
+            batches: assignedBatches.map(b => ({
+              id: b.id,
+              batchName: b.batchName,
+              selectCourse: b.selectCourse,
+              status: b.status || 'ACTIVE',
+              startDate: b.startDate,
+              endDate: b.endDate,
+            })),
             enrollments: updatedEnrollments,
             coursesCount: updatedEnrollments?.length ?? s.coursesCount,
           };
@@ -869,21 +915,28 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                 </View>
               )}
 
-              {/* In edit mode: show existing enrollments as read-only */}
+              {/* In edit mode: show existing enrollments with interactive batch switcher */}
               {selectedStudent && selectedStudent.enrollments && selectedStudent.enrollments.length > 0 && (
                 <View style={styles.formGroup}>
-                  <Text style={styles.fieldLabel}>Current Enrollments & Batches</Text>
+                  <Text style={styles.fieldLabel}>Current Enrollments & Assigned Batches</Text>
                   <View style={styles.existingEnrollmentsBox}>
                     {selectedStudent.enrollments.map((enr, idx) => {
-                      const matchingBatch = selectedStudent.batches?.find(b =>
+                      const selectedBatchForCourse = enrollmentBatches[enr.courseTitle] !== undefined
+                        ? enrollmentBatches[enr.courseTitle]
+                        : ((enr as any).batchName || '');
+
+                      const courseBatchesList = batches.filter(b =>
                         (b.selectCourse || '').toLowerCase() === (enr.courseTitle || '').toLowerCase() ||
                         (b.selectCourse || '').toLowerCase().includes((enr.courseTitle || '').toLowerCase()) ||
                         (enr.courseTitle || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
                       );
+                      const isOpen = openBatchDropdownCourse === enr.courseTitle;
+                      const currentBatchObj = batches.find(b => b.batchName === selectedBatchForCourse);
+
                       return (
                         <View key={idx} style={styles.existingEnrollmentContainer}>
                           <View style={styles.existingEnrollmentRow}>
-                            <Ionicons name="book-outline" size={13} color="#7B2CBF" />
+                            <Ionicons name="book-outline" size={14} color="#7B2CBF" />
                             <Text style={styles.existingEnrollmentText}>{enr.courseTitle}</Text>
                             <View style={[
                               styles.existingEnrollmentBadge,
@@ -893,19 +946,86 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                               <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
                             </View>
                           </View>
-                          {matchingBatch ? (
-                            <View style={styles.enrolledBatchInfo}>
-                              <Ionicons name="people-outline" size={11} color="#6B7280" />
-                              <Text style={styles.enrolledBatchText}>
-                                Batch: {matchingBatch.batchName} ({matchingBatch.status === 'COMPLETED' ? 'Completed' : matchingBatch.status === 'UPCOMING' ? 'Upcoming' : 'Active'})
+
+                          {/* Batch Selector Row */}
+                          <View style={styles.batchSelectorRow}>
+                            <Text style={styles.batchSelectorLabel}>Batch:</Text>
+                            <TouchableOpacity
+                              style={[
+                                styles.batchSelectorButton,
+                                isOpen && styles.batchSelectorButtonOpen,
+                                selectedBatchForCourse ? styles.batchSelectorButtonSelected : null
+                              ]}
+                              onPress={() => setOpenBatchDropdownCourse(isOpen ? null : enr.courseTitle)}
+                            >
+                              <Ionicons
+                                name="people-outline"
+                                size={13}
+                                color={selectedBatchForCourse ? "#7B2CBF" : "#9CA3AF"}
+                              />
+                              <Text style={[
+                                styles.batchSelectorButtonText,
+                                !selectedBatchForCourse && styles.batchSelectorButtonPlaceholder
+                              ]}>
+                                {selectedBatchForCourse
+                                  ? `${selectedBatchForCourse} (${currentBatchObj?.status === 'COMPLETED' ? 'Completed' : currentBatchObj?.status === 'UPCOMING' ? 'Upcoming' : 'Active'})`
+                                  : '— No Batch (Select to assign) —'}
                               </Text>
-                            </View>
-                          ) : (
-                            <View style={styles.enrolledBatchInfo}>
-                              <Ionicons name="information-circle-outline" size={11} color="#9CA3AF" />
-                              <Text style={[styles.enrolledBatchText, { color: '#9CA3AF' }]}>
-                                No specific batch linked yet
-                              </Text>
+                              <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={14} color="#6B7280" />
+                            </TouchableOpacity>
+                          </View>
+
+                          {/* Dropdown Options for this enrolled course */}
+                          {isOpen && (
+                            <View style={styles.batchOptionsDropdown}>
+                              <TouchableOpacity
+                                style={[styles.batchOptionItem, !selectedBatchForCourse && styles.batchOptionItemSelected]}
+                                onPress={() => {
+                                  setEnrollmentBatches(prev => ({ ...prev, [enr.courseTitle]: '' }));
+                                  setOpenBatchDropdownCourse(null);
+                                }}
+                              >
+                                <Text style={[styles.batchOptionItemText, !selectedBatchForCourse && styles.batchOptionItemTextSelected]}>
+                                  — No Batch —
+                                </Text>
+                                {!selectedBatchForCourse && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                              </TouchableOpacity>
+
+                              {courseBatchesList.map(b => {
+                                const isSelected = selectedBatchForCourse === b.batchName;
+                                const isCompleted = b.status === 'COMPLETED';
+                                const isUpcoming = b.status === 'UPCOMING';
+                                return (
+                                  <TouchableOpacity
+                                    key={b.id}
+                                    style={[styles.batchOptionItem, isSelected && styles.batchOptionItemSelected]}
+                                    onPress={() => {
+                                      setEnrollmentBatches(prev => ({ ...prev, [enr.courseTitle]: b.batchName }));
+                                      setOpenBatchDropdownCourse(null);
+                                    }}
+                                  >
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={[styles.batchOptionItemText, isSelected && styles.batchOptionItemTextSelected]}>
+                                        {b.batchName}
+                                      </Text>
+                                      <Text style={styles.batchOptionSubtext}>
+                                        {isCompleted ? 'Completed' : isUpcoming ? 'Upcoming' : 'Active'}
+                                        {b.startDate ? ` • Starts: ${b.startDate}` : ''}
+                                        {b.endDate ? ` • Ends: ${b.endDate}` : ''}
+                                      </Text>
+                                    </View>
+                                    {isSelected && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                                  </TouchableOpacity>
+                                );
+                              })}
+
+                              {courseBatchesList.length === 0 && (
+                                <View style={styles.batchOptionItem}>
+                                  <Text style={[styles.batchOptionItemText, { color: '#9CA3AF' }]}>
+                                    No batches created for this course yet
+                                  </Text>
+                                </View>
+                              )}
                             </View>
                           )}
                         </View>
@@ -1142,6 +1262,87 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#374151',
+  },
+  batchSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  batchSelectorLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+    width: 44,
+  },
+  batchSelectorButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    gap: 6,
+  },
+  batchSelectorButtonOpen: {
+    borderColor: '#7B2CBF',
+    backgroundColor: '#FAF5FF',
+  },
+  batchSelectorButtonSelected: {
+    borderColor: '#DDD6FE',
+  },
+  batchSelectorButtonText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  batchSelectorButtonPlaceholder: {
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  batchOptionsDropdown: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    marginTop: 6,
+    marginLeft: 52,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  batchOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  batchOptionItemSelected: {
+    backgroundColor: '#FAF5FF',
+  },
+  batchOptionItemText: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  batchOptionItemTextSelected: {
+    color: '#7B2CBF',
+    fontWeight: '700',
+  },
+  batchOptionSubtext: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
   },
   enrolledBatchInfo: {
     flexDirection: 'row',

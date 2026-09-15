@@ -390,6 +390,10 @@ export const api = {
   getTeacher: (id: number | string) => get(`/teachers/${id}`),
   updateStudent: (id: number | string, data: object) =>
     put(`/admin/students/${id}`, data),
+  changeStudentBatch: (id: number | string, data: object) =>
+    put(`/admin/students/${id}/change-batch`, data),
+  reassignBatchStudent: (batchId: number | string, data: object) =>
+    put(`/batches/${batchId}/reassign-student`, data),
   enrollStudent: (id: number | string, data: object) =>
     post(`/admin/students/${id}/enroll`, data),
   deleteStudent: (id: number | string) => del(`/admin/students/${id}`),
