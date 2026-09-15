@@ -130,33 +130,16 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
         : Array.isArray(res?.content) ? res.content
         : [];
 
-      if (raw.length > 0) {
-        list = raw.map((e: any) => ({
-          id: e.id ?? e.studentId ?? e.enrollmentId ?? Math.random(),
-          name: e.name ?? e.studentName ?? `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim(),
-          email: e.email ?? e.studentEmail ?? '',
-          phone: e.phone ?? e.studentPhone ?? '',
-          active: e.active !== false,
-          onlineStatus: e.onlineStatus,
-          joinedDate: e.joinedDate ?? e.enrollmentDate ?? e.createdAt ?? '',
-          attendance: typeof e.attendance === 'number' ? e.attendance : 0,
-        })).filter((s: BatchStudent) => s.name.trim() !== '');
-      } else {
-        // Fallback: fetch by course title enrollment
-        const fallback = await api.getEnrollmentsByCourse(batch.selectCourse);
-        const rawFallback = Array.isArray(fallback) ? fallback
-          : Array.isArray(fallback?.data) ? fallback.data
-          : [];
-        list = rawFallback.map((e: any) => ({
-          id: e.id ?? e.studentId ?? Math.random(),
-          name: e.studentName ?? e.name ?? `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim(),
-          email: e.email ?? e.studentEmail ?? '',
-          phone: e.phone ?? e.studentPhone ?? '',
-          active: e.paymentStatus === 'Paid' || e.active !== false,
-          joinedDate: e.enrollmentDate ?? e.joinedDate ?? '',
-          attendance: 0,
-        })).filter((s: BatchStudent) => s.name.trim() !== '');
-      }
+      list = raw.map((e: any) => ({
+        id: e.id ?? e.studentId ?? e.enrollmentId ?? Math.random(),
+        name: e.name ?? e.studentName ?? `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim(),
+        email: e.email ?? e.studentEmail ?? '',
+        phone: e.phone ?? e.studentPhone ?? '',
+        active: e.active !== false,
+        onlineStatus: e.onlineStatus,
+        joinedDate: e.joinedDate ?? e.enrollmentDate ?? e.createdAt ?? '',
+        attendance: typeof e.attendance === 'number' ? e.attendance : 0,
+      })).filter((s: BatchStudent) => s.name.trim() !== '');
 
       setStudents(list);
     } catch (err: any) {

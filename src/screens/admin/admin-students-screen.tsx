@@ -247,19 +247,15 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 
     // Initialize mapping of enrolled course -> assigned batch name
     const initialBatches: Record<string, string> = {};
-    student.enrollments?.forEach(enr => {
-      const directBatch = (enr as any).batchName;
-      if (directBatch) {
-        initialBatches[enr.courseTitle] = directBatch;
-      } else {
-        const matchingBatch = student.batches?.find(b =>
-          (b.selectCourse || '').toLowerCase() === (enr.courseTitle || '').toLowerCase() ||
-          (b.selectCourse || '').toLowerCase().includes((enr.courseTitle || '').toLowerCase()) ||
-          (enr.courseTitle || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
-        );
-        initialBatches[enr.courseTitle] = matchingBatch?.batchName || '';
-      }
-    });
+    if (student.enrollments && student.enrollments.length > 0) {
+      student.enrollments.forEach(enr => {
+        const directBatch = (enr as any).batchName;
+        initialBatches[enr.courseTitle] = directBatch || '';
+      });
+    } else if (student.course) {
+      const directBatch = (student.batches && student.batches.length > 0) ? student.batches[0].batchName : '';
+      initialBatches[student.course] = directBatch || '';
+    }
     setEnrollmentBatches(initialBatches);
     setOpenBatchDropdownCourse(null);
 
@@ -623,7 +619,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       ))}
                     </View>
                   )}
-                  {item.batches && item.batches.length > 0 && (
+                  {item.batches && item.batches.length > 0 ? (
                     <View style={styles.batchesRow}>
                       <Ionicons name="time-outline" size={13} color="#6B7280" />
                       <View style={styles.batchesList}>
@@ -646,6 +642,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                           </View>
                         ))}
                       </View>
+                    </View>
+                  ) : (
+                    <View style={styles.batchesRow}>
+                      <Ionicons name="time-outline" size={13} color="#9CA3AF" />
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', marginLeft: 4 }}>No batch assigned</Text>
                     </View>
                   )}
                 </View>
@@ -916,28 +917,36 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
               )}
 
               {/* In edit mode: show existing enrollments with interactive batch switcher */}
-              {selectedStudent && selectedStudent.enrollments && selectedStudent.enrollments.length > 0 && (
+              {selectedStudent && (
+                ((selectedStudent.enrollments && selectedStudent.enrollments.length > 0) || !!selectedStudent.course)
+              ) && (
                 <View style={styles.formGroup}>
                   <Text style={styles.fieldLabel}>Current Enrollments & Assigned Batches</Text>
                   <View style={styles.existingEnrollmentsBox}>
-                    {selectedStudent.enrollments.map((enr, idx) => {
-                      const selectedBatchForCourse = enrollmentBatches[enr.courseTitle] !== undefined
-                        ? enrollmentBatches[enr.courseTitle]
+                    {(
+                      selectedStudent.enrollments && selectedStudent.enrollments.length > 0
+                        ? selectedStudent.enrollments
+                        : [{ id: 0, courseTitle: selectedStudent.course || '', paymentStatus: selectedStudent.paymentStatus || 'Pending', batchName: '' }]
+                    ).map((enr, idx) => {
+                      const cTitle = enr.courseTitle || '';
+                      if (!cTitle) return null;
+                      const selectedBatchForCourse = enrollmentBatches[cTitle] !== undefined
+                        ? enrollmentBatches[cTitle]
                         : ((enr as any).batchName || '');
 
                       const courseBatchesList = batches.filter(b =>
-                        (b.selectCourse || '').toLowerCase() === (enr.courseTitle || '').toLowerCase() ||
-                        (b.selectCourse || '').toLowerCase().includes((enr.courseTitle || '').toLowerCase()) ||
-                        (enr.courseTitle || '').toLowerCase().includes((b.selectCourse || '').toLowerCase())
+                        (b.selectCourse || '').toLowerCase() === cTitle.toLowerCase() ||
+                        (b.selectCourse || '').toLowerCase().includes(cTitle.toLowerCase()) ||
+                        cTitle.toLowerCase().includes((b.selectCourse || '').toLowerCase())
                       );
-                      const isOpen = openBatchDropdownCourse === enr.courseTitle;
+                      const isOpen = openBatchDropdownCourse === cTitle;
                       const currentBatchObj = batches.find(b => b.batchName === selectedBatchForCourse);
 
                       return (
                         <View key={idx} style={styles.existingEnrollmentContainer}>
                           <View style={styles.existingEnrollmentRow}>
                             <Ionicons name="book-outline" size={14} color="#7B2CBF" />
-                            <Text style={styles.existingEnrollmentText}>{enr.courseTitle}</Text>
+                            <Text style={styles.existingEnrollmentText}>{cTitle}</Text>
                             <View style={[
                               styles.existingEnrollmentBadge,
                               enr.paymentStatus === 'Paid' ? styles.badgePaid :
@@ -956,7 +965,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                                 isOpen && styles.batchSelectorButtonOpen,
                                 selectedBatchForCourse ? styles.batchSelectorButtonSelected : null
                               ]}
-                              onPress={() => setOpenBatchDropdownCourse(isOpen ? null : enr.courseTitle)}
+                              onPress={() => setOpenBatchDropdownCourse(isOpen ? null : cTitle)}
                             >
                               <Ionicons
                                 name="people-outline"
@@ -981,7 +990,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                               <TouchableOpacity
                                 style={[styles.batchOptionItem, !selectedBatchForCourse && styles.batchOptionItemSelected]}
                                 onPress={() => {
-                                  setEnrollmentBatches(prev => ({ ...prev, [enr.courseTitle]: '' }));
+                                  setEnrollmentBatches(prev => ({ ...prev, [cTitle]: '' }));
                                   setOpenBatchDropdownCourse(null);
                                 }}
                               >
@@ -1000,7 +1009,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                                     key={b.id}
                                     style={[styles.batchOptionItem, isSelected && styles.batchOptionItemSelected]}
                                     onPress={() => {
-                                      setEnrollmentBatches(prev => ({ ...prev, [enr.courseTitle]: b.batchName }));
+                                      setEnrollmentBatches(prev => ({ ...prev, [cTitle]: b.batchName }));
                                       setOpenBatchDropdownCourse(null);
                                     }}
                                   >
