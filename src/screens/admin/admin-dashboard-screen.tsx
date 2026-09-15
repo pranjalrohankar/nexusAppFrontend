@@ -15,6 +15,8 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
   const [dashData, setDashData] = useState<any>(adminDataCache.dashboard);
   const [enquiries, setEnquiries] = useState<any[]>(adminDataCache.enquiries);
   const [showEnquiries, setShowEnquiries] = useState(false);
+  const [enquiriesTab, setEnquiriesTab] = useState<'enquiries' | 'resets'>('enquiries');
+  const [pendingResetCount, setPendingResetCount] = useState<number>(adminDataCache.pendingResetCount || 0);
 
   // Track last known enquiry count so we only re-render when something
   // actually changed — prevents cascading setEnquiries calls from the
@@ -62,13 +64,23 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     });
   };
 
-  const fetchEnquiries = () => {
+  const fetchEnquiriesAndResets = () => {
     api.getEnquiries()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
         adminDataCache.enquiries = list;
         setEnquiries(list);
         lastEnqCountRef.current = list.length;
+      })
+      .catch(() => {});
+
+    api.getPasswordResetRequests()
+      .then((res: any) => {
+        const list = Array.isArray(res?.data?.requests) ? res.data.requests : Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const count = res?.data?.pendingCount ?? list.filter((r: any) => r.status === 'PENDING').length;
+        adminDataCache.passwordResets = list;
+        adminDataCache.pendingResetCount = count;
+        setPendingResetCount(count);
       })
       .catch(() => {});
   };
@@ -78,7 +90,8 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     Promise.all([
       api.getDashboard().catch(() => null),
       api.getEnquiries().catch(() => null),
-    ]).then(([dashRes, enqRes]) => {
+      api.getPasswordResetRequests().catch(() => null),
+    ]).then(([dashRes, enqRes, resetRes]) => {
       const d = dashRes?.data ?? null;
       const list = Array.isArray(enqRes) ? enqRes : Array.isArray(enqRes?.data) ? enqRes.data : [];
       adminDataCache.dashboard = d;
@@ -87,17 +100,25 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
       dashDataRef.current = d;
       setEnquiries(list);
       lastEnqCountRef.current = list.length;
+
+      const resetList = Array.isArray(resetRes?.data?.requests) ? resetRes.data.requests : Array.isArray(resetRes?.data) ? resetRes.data : Array.isArray(resetRes) ? resetRes : [];
+      const count = resetRes?.data?.pendingCount ?? resetList.filter((r: any) => r.status === 'PENDING').length;
+      adminDataCache.passwordResets = resetList;
+      adminDataCache.pendingResetCount = count;
+      setPendingResetCount(count);
     });
 
     // Sync badge count from cache every 5 s (picks up badge updates written
     // by app-tabs polling), but ONLY update React state when the count
-    // actually changed so we don't cause unnecessary re-renders (and the
-    // flood of "Sending request with token" console lines that came with them).
+    // actually changed so we don't cause unnecessary re-renders.
     const sync = setInterval(() => {
       const cached = adminDataCache.enquiries;
       if (cached.length !== lastEnqCountRef.current) {
         lastEnqCountRef.current = cached.length;
         setEnquiries([...cached]);
+      }
+      if (adminDataCache.pendingResetCount !== undefined && adminDataCache.pendingResetCount !== pendingResetCount) {
+        setPendingResetCount(adminDataCache.pendingResetCount);
       }
       // Also pick up dashboard cache changes (e.g. teacher added/deleted)
       const cachedDash = adminDataCache.dashboard;
@@ -159,6 +180,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     return (
       <AdminEnquiriesScreen
         enquiries={enquiries}
+        initialTab={enquiriesTab}
         onClose={() => setShowEnquiries(false)}
         onEnquiriesUpdate={(updated) => {
           setEnquiries(updated);
@@ -193,23 +215,68 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             <Text style={styles.headerTitle}>Admin Dashboard</Text>
             <Text style={styles.headerSubtitle}>Overview of your training center</Text>
           </View>
-          <TouchableOpacity
-            style={styles.alertBtn}
-            onPress={() => { fetchEnquiries(); setShowEnquiries(true); }}
-          >
-            <View style={styles.iconContainer}>
-              <Ionicons name="mail-outline" size={24} color="#FFF" />
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeCount}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {/* Password Reset Requests Button */}
+            <TouchableOpacity
+              style={styles.alertBtn}
+              onPress={() => { fetchEnquiriesAndResets(); setEnquiriesTab('resets'); setShowEnquiries(true); }}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="key-outline" size={22} color="#FFF" />
+                {pendingResetCount > 0 && (
+                  <View style={[styles.badge, { backgroundColor: '#EF4444' }]}>
+                    <Text style={styles.badgeCount}>{pendingResetCount > 99 ? '99+' : pendingResetCount}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {/* Enquiries Button */}
+            <TouchableOpacity
+              style={styles.alertBtn}
+              onPress={() => { fetchEnquiriesAndResets(); setEnquiriesTab('enquiries'); setShowEnquiries(true); }}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="mail-outline" size={24} color="#FFF" />
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeCount}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* PENDING PASSWORD RESET BANNER */}
+        {pendingResetCount > 0 && (
+          <TouchableOpacity
+            style={styles.resetAlertBanner}
+            onPress={() => { fetchEnquiriesAndResets(); setEnquiriesTab('resets'); setShowEnquiries(true); }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.resetAlertLeft}>
+              <View style={styles.resetAlertIconBox}>
+                <Ionicons name="key" size={18} color="#DC2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resetAlertTitle}>
+                  {pendingResetCount} Password Reset {pendingResetCount === 1 ? 'Request' : 'Requests'} Pending
+                </Text>
+                <Text style={styles.resetAlertSubtitle}>
+                  Users requested password assistance. Tap to review & resolve.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.resetAlertAction}>
+              <Text style={styles.resetAlertActionText}>Review</Text>
+              <Ionicons name="chevron-forward" size={14} color="#7B2CBF" />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* KPI METRICS GRID */}
         <View style={styles.metricsGrid}>
@@ -516,6 +583,59 @@ const styles = StyleSheet.create({
   modalSaveText: {
     color: '#FFF',
     fontWeight: '600',
+  },
+
+  resetAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  resetAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  resetAlertIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetAlertTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+  },
+  resetAlertSubtitle: {
+    fontSize: 11,
+    color: '#B91C1C',
+    marginTop: 2,
+  },
+  resetAlertAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    marginLeft: 8,
+  },
+  resetAlertActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7B2CBF',
   },
 
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginBottom: 24 },

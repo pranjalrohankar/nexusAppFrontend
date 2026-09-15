@@ -68,6 +68,8 @@ interface ClassRecording {
   course: string;
   batch: string;
   uploadedAt?: string;
+  videoUrl?: string;
+  fileUrl?: string;
 }
 
 // Duration probe unused
@@ -1325,6 +1327,9 @@ const s = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  webDateContainer: {
+    width: '100%',
   },
   emptyText: { fontSize: 14, color: '#64748B', marginTop: 12, textAlign: 'center' },
 });

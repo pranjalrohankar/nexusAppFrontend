@@ -372,6 +372,12 @@ export const api = {
   forgotPassword: (email: string) =>
     post("/auth/forgot-password", { email }, "application/json", true),
 
+  getPasswordResetRequests: () => get("/admin/password-resets"),
+  resolvePasswordResetRequest: (id: number | string, newPassword?: string) =>
+    put(`/admin/password-resets/${id}/resolve`, newPassword ? { newPassword } : {}),
+  deletePasswordResetRequest: (id: number | string) =>
+    del(`/admin/password-resets/${id}`),
+
   createUser: (data: object) => post("/admin/users", data),
 
   getStudents: () => get("/admin/students"),
