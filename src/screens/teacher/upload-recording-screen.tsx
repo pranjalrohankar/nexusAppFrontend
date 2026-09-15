@@ -25,6 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
+import { showFormErrorPopup } from '@/utils/alert-helper';
 
 const API_BASE = getApiBaseUrl().replace('/api', '');
 const IS_WEB = Platform.OS === 'web';
@@ -68,6 +69,8 @@ interface ClassRecording {
   course: string;
   batch: string;
   uploadedAt?: string;
+  videoUrl?: string;
+  fileUrl?: string;
 }
 
 // Duration probe unused
@@ -505,8 +508,12 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
 
   const handleSaveEdit = async () => {
     if (!editingRecording) return;
-    if (!editTitle.trim() && !editVideoUrl.trim()) {
-      Alert.alert('Error', 'Please provide a title or video link.');
+    const validationErrors: string[] = [];
+    if (!editTitle.trim()) validationErrors.push('• Recording Title cannot be empty.');
+    if (!editVideoUrl.trim()) validationErrors.push('• Video URL or link cannot be empty.');
+
+    if (validationErrors.length > 0) {
+      showFormErrorPopup('Cannot Save Recording', `The recording cannot be saved due to the following reasons:\n\n${validationErrors.join('\n')}`);
       return;
     }
     try {
@@ -519,20 +526,27 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
       await fetchRecentUploads();
       showToast('Recording updated successfully!', 'success');
     } catch (err: any) {
-      Alert.alert('Update failed', err?.message || 'Could not update recording.');
+      const reason = err?.message || 'Could not update recording.';
+      showFormErrorPopup('Save Error', `Could not update recording:\n\n${reason}`);
     } finally {
       setSavingEdit(false);
     }
   };
 
   const handleUpload = async () => {
+    const validationErrors: string[] = [];
     if (uploadMode === 'link') {
-      if (!videoLink.trim()) return Alert.alert('Error', 'Please enter a video URL (YouTube, Google Drive, Vimeo, or MP4 link).');
+      if (!videoLink.trim()) validationErrors.push('• Please enter a video URL (YouTube, Google Drive, Vimeo, or MP4 link).');
     } else {
-      if (!selectedFile) return Alert.alert('Error', 'Please select a video file.');
+      if (!selectedFile) validationErrors.push('• Please select a video file.');
     }
-    if (!course.trim()) return Alert.alert('Error', 'Please select a course.');
-    if (!batch.trim()) return Alert.alert('Error', 'Please select a batch.');
+    if (!course.trim()) validationErrors.push('• Please select a course.');
+    if (!batch.trim()) validationErrors.push('• Please select a batch.');
+
+    if (validationErrors.length > 0) {
+      showFormErrorPopup('Cannot Upload Recording', `Please resolve the following issues:\n\n${validationErrors.join('\n')}`);
+      return;
+    }
 
     const formData = new FormData();
 
@@ -549,11 +563,11 @@ export default function UploadRecordingScreen({ onClose }: UploadRecordingScreen
           if (fileBlob) {
             formData.append('file', fileBlob, fileName);
           } else {
-            Alert.alert('Error', 'Unable to read selected video file.');
+            showFormErrorPopup('Upload Error', 'Unable to read selected video file.');
             return;
           }
         } catch {
-          Alert.alert('Error', 'Unable to read selected video file.');
+          showFormErrorPopup('Upload Error', 'Unable to read selected video file.');
           return;
         }
       } else {
@@ -1325,6 +1339,9 @@ const s = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  webDateContainer: {
+    width: '100%',
   },
   emptyText: { fontSize: 14, color: '#64748B', marginTop: 12, textAlign: 'center' },
 });

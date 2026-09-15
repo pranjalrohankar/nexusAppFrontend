@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 
 interface Teacher {
   id: string;
@@ -54,7 +55,6 @@ const mapTeachers = (data: any[]): Teacher[] =>
 
 export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { onRegisterAdd?: (fn: () => void) => void; onCountChange?: (count: number) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'All' | 'Active' | 'Inactive'>('All');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
 
@@ -89,6 +89,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   const [totalStudents, setTotalStudents] = useState(0);
 
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
@@ -154,6 +155,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setFormEmploymentType('Full Time');
     setFormPassword('');
     setSelectedCourseIds([]);
+    setFormError(null);
     if (adminDataCache.courses.length === 0) await fetchCourses();
     else setCourses(adminDataCache.courses as Course[]);
     setIsModalVisible(true);
@@ -176,19 +178,16 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   }, [onRegisterAdd, handleOpenAddModal]);
 
   const filteredTeachers = teachers.filter(teacher => {
-    const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      teacher.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const isLogged = teacher.onlineStatus === 'online' || teacher.onlineStatus === 'always_online';
-    if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Active') return matchesSearch && isLogged;
-    if (activeTab === 'Inactive') return matchesSearch && !isLogged;
-    return matchesSearch;
+    return (
+      teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      teacher.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      teacher.phone.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
   const totalPages = Math.ceil(filteredTeachers.length / PAGE_SIZE);
   const paginatedTeachers = filteredTeachers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const activeCount = teachers.filter(t => t.onlineStatus === 'online' || t.onlineStatus === 'always_online').length;
-  const inactiveCount = teachers.filter(t => t.onlineStatus !== 'online' && t.onlineStatus !== 'always_online').length;
 
   const handleOpenEditModal = async (teacher: Teacher) => {
     setSelectedTeacher(teacher);
@@ -209,25 +208,51 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setFormEmploymentType('');
     setFormPassword('');
     setSelectedCourseIds(teacher.assignedCourseIds || []);
+    setFormError(null);
     if (courses.length === 0) await fetchCourses();
     setIsModalVisible(true);
   };
 
   const handleSaveTeacher = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedTeacher && !formPassword)) {
-      showToast('Please fill out all required fields including password.', 'error');
+    const validationErrors: string[] = [];
+    if (!formFirstName.trim()) validationErrors.push('• First Name is required.');
+    if (!formLastName.trim()) validationErrors.push('• Last Name is required.');
+    
+    if (!formEmail.trim()) {
+      validationErrors.push('• Email Address is required.');
+    } else if (!/^\S+@\S+\.\S+$/.test(formEmail.trim())) {
+      validationErrors.push('• Email Address is not a valid format (e.g., teacher@example.com).');
+    }
+
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!formPhone.trim()) {
+      validationErrors.push('• Mobile Number is required.');
+    } else if (!phoneRegex.test(formPhone.trim())) {
+      validationErrors.push('• Mobile Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
+    }
+
+    if (!selectedTeacher && !formPassword.trim()) {
+      validationErrors.push('• Password is required for new teacher accounts.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      setFormError(errorMsg);
+      showFormErrorPopup('Cannot Save Teacher Details', `The form cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
       return;
     }
 
+    setFormError(null);
     setSaving(true);
     try {
       if (selectedTeacher && selectedTeacher.id && selectedTeacher.id !== 'undefined') {
         // ── EDIT existing teacher ────────────────────────────────────────────
         const res = await api.updateTeacher(selectedTeacher.id, {
-          firstName: formFirstName,
-          lastName: formLastName,
-          email: formEmail,
-          phone: formPhone,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
           dob: formDob,
           street: formStreet,
           city: formCity,
@@ -245,13 +270,13 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           setIsModalVisible(false);
           showToast('Teacher details saved successfully.', 'success');
         } else {
-          showToast(res.message || 'Failed to update teacher.', 'error');
+          const reason = res.message || 'Failed to update teacher.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Teacher Details', `Failed to update teacher:\n\n${reason}`);
+          showToast(reason, 'error');
         }
       } else {
         // ── CREATE new teacher ───────────────────────────────────────────────
-        // Step 1: Create the teacher account WITHOUT courseIds.
-        // Passing courseIds here hits the student-enrollment logic on the
-        // backend and returns 400 "Student is already enrolled in this course."
         const res = await api.createUser({
           firstName: formFirstName.trim(),
           lastName: formLastName.trim(),
@@ -269,14 +294,11 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           joinDate: formJoinDate,
           employmentType: formEmploymentType,
           role: 'TEACHER',
-          // ✅ courseIds intentionally omitted — assigned separately below
         });
 
         console.log('[createTeacher] API response:', JSON.stringify(res));
 
         if (res.success) {
-          // Step 2: Resolve the real Teacher ID by fetching the updated teacher list.
-          // createUser returns the User ID, but assignCourse needs the Teacher ID.
           if (selectedCourseIds.length > 0) {
             try {
               const teachersRes = await api.getTeachers();
@@ -302,10 +324,8 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           }
 
           await fetchTeachers();
-          setPage(1); // reset to page 1 so the new teacher is visible
+          setPage(1);
 
-          // Invalidate the dashboard cache so it re-fetches with the updated
-          // teacher count the next time the dashboard tab is visited.
           if (adminDataCache.dashboard) {
             adminDataCache.dashboard = {
               ...adminDataCache.dashboard,
@@ -316,16 +336,19 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           setIsModalVisible(false);
           showToast('Teacher registered! Credentials sent to ' + formEmail, 'success');
         } else {
-          showToast(res.message || 'Failed to register teacher.', 'error');
+          const reason = res.message || 'Failed to register teacher.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Teacher Details', `Failed to register teacher:\n\n${reason}`);
+          showToast(reason, 'error');
         }
       }
     } catch (err: any) {
-      // Surface the actual server message instead of a generic string so it's
-      // easier to diagnose future validation errors.
       const msg = err?.message?.includes('HTTP')
         ? err.message.split(': ').slice(1).join(': ')
-        : 'Could not connect to server.';
-      showToast(msg || 'Could not connect to server.', 'error');
+        : (err?.message || 'Could not connect to server.');
+      setFormError(msg);
+      showFormErrorPopup('Save Error', `Could not save teacher details:\n\n${msg}`);
+      showToast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -376,38 +399,16 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
               <Ionicons name="close-circle" size={16} color="#9CA3AF" />
             </TouchableOpacity>
           ) : null}
-        </View>
-
-        {/* FILTER PILL TABS */}
-        <View style={styles.filterTabsRow}>
-          <TouchableOpacity
-            style={[styles.filterPill, activeTab === 'All' && styles.filterPillActive]}
-            onPress={() => { setActiveTab('All'); setPage(1); }}
-          >
-            <Text style={[styles.filterPillText, activeTab === 'All' && styles.filterPillTextActive]}>All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterPill, styles.filterPillActive2, activeTab === 'Active' && styles.filterPillActive]}
-            onPress={() => { setActiveTab('Active'); setPage(1); }}
-          >
-            <Text style={[styles.filterPillText, activeTab === 'Active' && styles.filterPillTextActive]}>
-              Active {activeCount}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterPill, styles.filterPillInactive2, activeTab === 'Inactive' && styles.filterPillActive]}
-            onPress={() => { setActiveTab('Inactive'); setPage(1); }}
-          >
-            <Text style={[styles.filterPillText, activeTab === 'Inactive' && styles.filterPillTextActive]}>
-              Inactive {teachers.filter(t => t.status === 'Inactive').length}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* STATS ROW */}
@@ -583,6 +584,19 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
             </View>
 
             <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {formError && (
+                <View style={styles.modalErrorBox}>
+                  <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.modalErrorTitle}>Cannot Save Teacher</Text>
+                    <Text style={styles.modalErrorMessage}>{formError}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setFormError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Personal Information */}
               <Text style={styles.formSectionTitle}>Personal Information</Text>
               <View style={styles.formGroup}>
@@ -608,6 +622,11 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                       placeholder="Set login password"
                       placeholderTextColor="#9CA3AF"
                       secureTextEntry={!formShowPassword}
+                      autoComplete="new-password"
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      textContentType="none"
                     />
                     <TouchableOpacity onPress={() => setFormShowPassword(!formShowPassword)}>
                       <Ionicons name={formShowPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9CA3AF" />
@@ -616,8 +635,16 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                 </View>
               )}
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Phone *</Text>
-                <TextInput style={styles.modalInput} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" placeholder="e.g. +91 98765 43210" placeholderTextColor="#9CA3AF" />
+                <Text style={styles.fieldLabel}>Phone * (10 digits starting 6-9)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={formPhone}
+                  onChangeText={(t) => setFormPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  placeholder="e.g. 9876543210"
+                  placeholderTextColor="#9CA3AF"
+                />
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>Date of Birth</Text>
@@ -709,14 +736,28 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
 }
 
 const styles = StyleSheet.create({
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  modalErrorMessage: {
+    fontSize: 12,
+    color: '#B91C1C',
+    lineHeight: 18,
+  },
   safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
-  filterTabsRow: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
-  filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(123,44,191,0.10)' },
-  filterPillActive: { backgroundColor: '#7B2CBF' },
-  filterPillActive2: { backgroundColor: 'rgba(16,185,129,0.12)' },
-  filterPillInactive2: { backgroundColor: 'rgba(107,114,128,0.10)' },
-  filterPillText: { fontSize: 13, fontWeight: '600', color: '#7B2CBF' },
-  filterPillTextActive: { color: '#FFFFFF' },
   statsCard: {
     backgroundColor: '#EFF6FF', borderRadius: 16, marginBottom: 16,
     paddingVertical: 16, paddingHorizontal: 12, flexDirection: 'row',

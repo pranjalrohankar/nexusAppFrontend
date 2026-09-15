@@ -10,11 +10,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
 import AdminEnquiriesScreen from './admin-enquiries-screen';
+import AdminPasswordResetsScreen from './admin-password-resets-screen';
 
 export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewAllEnrollments?: () => void }) {
   const [dashData, setDashData] = useState<any>(adminDataCache.dashboard);
   const [enquiries, setEnquiries] = useState<any[]>(adminDataCache.enquiries);
   const [showEnquiries, setShowEnquiries] = useState(false);
+  const [showPasswordResets, setShowPasswordResets] = useState(false);
+  const [pendingResetCount, setPendingResetCount] = useState<number>(adminDataCache.pendingResetCount || 0);
 
   // Track last known enquiry count so we only re-render when something
   // actually changed — prevents cascading setEnquiries calls from the
@@ -62,13 +65,23 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     });
   };
 
-  const fetchEnquiries = () => {
+  const fetchEnquiriesAndResets = () => {
     api.getEnquiries()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
         adminDataCache.enquiries = list;
         setEnquiries(list);
         lastEnqCountRef.current = list.length;
+      })
+      .catch(() => {});
+
+    api.getPasswordResetRequests()
+      .then((res: any) => {
+        const list = Array.isArray(res?.data?.requests) ? res.data.requests : Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const count = res?.data?.pendingCount ?? list.filter((r: any) => r.status === 'PENDING').length;
+        adminDataCache.passwordResets = list;
+        adminDataCache.pendingResetCount = count;
+        setPendingResetCount(count);
       })
       .catch(() => {});
   };
@@ -78,7 +91,8 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     Promise.all([
       api.getDashboard().catch(() => null),
       api.getEnquiries().catch(() => null),
-    ]).then(([dashRes, enqRes]) => {
+      api.getPasswordResetRequests().catch(() => null),
+    ]).then(([dashRes, enqRes, resetRes]) => {
       const d = dashRes?.data ?? null;
       const list = Array.isArray(enqRes) ? enqRes : Array.isArray(enqRes?.data) ? enqRes.data : [];
       adminDataCache.dashboard = d;
@@ -87,17 +101,25 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
       dashDataRef.current = d;
       setEnquiries(list);
       lastEnqCountRef.current = list.length;
+
+      const resetList = Array.isArray(resetRes?.data?.requests) ? resetRes.data.requests : Array.isArray(resetRes?.data) ? resetRes.data : Array.isArray(resetRes) ? resetRes : [];
+      const count = resetRes?.data?.pendingCount ?? resetList.filter((r: any) => r.status === 'PENDING').length;
+      adminDataCache.passwordResets = resetList;
+      adminDataCache.pendingResetCount = count;
+      setPendingResetCount(count);
     });
 
     // Sync badge count from cache every 5 s (picks up badge updates written
     // by app-tabs polling), but ONLY update React state when the count
-    // actually changed so we don't cause unnecessary re-renders (and the
-    // flood of "Sending request with token" console lines that came with them).
+    // actually changed so we don't cause unnecessary re-renders.
     const sync = setInterval(() => {
       const cached = adminDataCache.enquiries;
       if (cached.length !== lastEnqCountRef.current) {
         lastEnqCountRef.current = cached.length;
         setEnquiries([...cached]);
+      }
+      if (adminDataCache.pendingResetCount !== undefined && adminDataCache.pendingResetCount !== pendingResetCount) {
+        setPendingResetCount(adminDataCache.pendingResetCount);
       }
       // Also pick up dashboard cache changes (e.g. teacher added/deleted)
       const cachedDash = adminDataCache.dashboard;
@@ -155,6 +177,19 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
 
+  if (showPasswordResets) {
+    return (
+      <AdminPasswordResetsScreen
+        onClose={() => setShowPasswordResets(false)}
+        onResetsUpdate={(requests, pCount) => {
+          setPendingResetCount(pCount);
+          adminDataCache.passwordResets = requests;
+          adminDataCache.pendingResetCount = pCount;
+        }}
+      />
+    );
+  }
+
   if (showEnquiries) {
     return (
       <AdminEnquiriesScreen
@@ -193,19 +228,37 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             <Text style={styles.headerTitle}>Admin Dashboard</Text>
             <Text style={styles.headerSubtitle}>Overview of your training center</Text>
           </View>
-          <TouchableOpacity
-            style={styles.alertBtn}
-            onPress={() => { fetchEnquiries(); setShowEnquiries(true); }}
-          >
-            <View style={styles.iconContainer}>
-              <Ionicons name="mail-outline" size={24} color="#FFF" />
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeCount}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {/* Password Reset Requests Button */}
+            <TouchableOpacity
+              style={styles.alertBtn}
+              onPress={() => { fetchEnquiriesAndResets(); setShowPasswordResets(true); }}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="key-outline" size={22} color="#FFF" />
+                {pendingResetCount > 0 && (
+                  <View style={[styles.badge, { backgroundColor: '#EF4444' }]}>
+                    <Text style={styles.badgeCount}>{pendingResetCount > 99 ? '99+' : pendingResetCount}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {/* Enquiries Button */}
+            <TouchableOpacity
+              style={styles.alertBtn}
+              onPress={() => { fetchEnquiriesAndResets(); setShowEnquiries(true); }}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="mail-outline" size={24} color="#FFF" />
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeCount}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 

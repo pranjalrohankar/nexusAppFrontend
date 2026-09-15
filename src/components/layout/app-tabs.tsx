@@ -91,7 +91,8 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
         api.getAllCourses().catch(() => null),
         api.getBatches().catch(() => null),
         api.getEnquiries().catch(() => null),
-      ]).then(([dash, students, teachers, courses, batches, enquiries]) => {
+        api.getPasswordResetRequests().catch(() => null),
+      ]).then(([dash, students, teachers, courses, batches, enquiries, resets]) => {
         if (dash?.data) adminDataCache.dashboard = dash.data;
         if (students?.data) adminDataCache.students = students.data;
         if (teachers?.data) adminDataCache.teachers = teachers.data;
@@ -99,14 +100,23 @@ export default function AppTabs({ userRole, userName, userEmail, onLogout, lastL
         if (Array.isArray(batches)) adminDataCache.batches = batches;
         const enqList = Array.isArray(enquiries) ? enquiries : Array.isArray(enquiries?.data) ? enquiries.data : [];
         adminDataCache.enquiries = enqList;
+        const resetList = Array.isArray(resets?.data?.requests) ? resets.data.requests : Array.isArray(resets?.data) ? resets.data : Array.isArray(resets) ? resets : [];
+        adminDataCache.passwordResets = resetList;
+        adminDataCache.pendingResetCount = resets?.data?.pendingCount ?? resetList.filter((r: any) => r.status === 'PENDING').length;
       });
 
-      // Poll enquiries every 30s to keep badge count live
+      // Poll enquiries and password reset requests every 30s to keep badge counts live
       const interval = setInterval(() => {
         api.getEnquiries().catch(() => null).then((enquiries: any) => {
           if (!enquiries) return;
           const enqList = Array.isArray(enquiries) ? enquiries : Array.isArray(enquiries?.data) ? enquiries.data : [];
           if (enqList.length > 0) adminDataCache.enquiries = enqList;
+        });
+        api.getPasswordResetRequests().catch(() => null).then((resets: any) => {
+          if (!resets) return;
+          const resetList = Array.isArray(resets?.data?.requests) ? resets.data.requests : Array.isArray(resets?.data) ? resets.data : Array.isArray(resets) ? resets : [];
+          adminDataCache.passwordResets = resetList;
+          adminDataCache.pendingResetCount = resets?.data?.pendingCount ?? resetList.filter((r: any) => r.status === 'PENDING').length;
         });
       }, 30000);
 
@@ -500,6 +510,9 @@ const styles = StyleSheet.create({
   tabLabelActive: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  screenWithTabBar: {
+    paddingBottom: 70,
   },
   // Web specific styles
   webContainer: {

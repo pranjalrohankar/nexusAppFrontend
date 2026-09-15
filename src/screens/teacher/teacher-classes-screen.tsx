@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../services/api';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { getCompletedTopicsForCourse, toggleTopicCompleted, isTopicCovered } from '../../utils/syllabus-progress-store';
-import { coursesData } from '@/screens/home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

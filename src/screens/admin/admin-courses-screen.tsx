@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 import { parseSyllabus, serializeSyllabus } from '../../utils/syllabus-parser';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 
 import { Course, Teacher, CourseFormData, DEFAULT_FORM_DATA } from './courses-components/types';
 import { CourseCardItem } from './courses-components/CourseCardItem';
@@ -30,6 +31,7 @@ export default function AdminCoursesScreen() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<CourseFormData>(DEFAULT_FORM_DATA);
@@ -175,6 +177,7 @@ export default function AdminCoursesScreen() {
     setSelectedCourse(null);
     setFormData(DEFAULT_FORM_DATA);
     setShowInstructorDropdown(false);
+    setFormError(null);
     setIsModalVisible(true);
   }, []);
 
@@ -209,14 +212,39 @@ export default function AdminCoursesScreen() {
       googleMeetLink: course.googleMeetLink || '',
     });
     setShowInstructorDropdown(false);
+    setFormError(null);
     setIsModalVisible(true);
   }, []);
 
   const handleSaveCourse = useCallback(async () => {
-    if (!formData.title || !formData.capacity || !formData.price) {
-      showToast('Please fill out all required fields.', 'error');
+    const validationErrors: string[] = [];
+    if (!formData.title.trim()) validationErrors.push('• Course Title is required.');
+    
+    if (!formData.capacity.trim()) {
+      validationErrors.push('• Maximum Capacity is required.');
+    } else if (isNaN(Number(formData.capacity)) || Number(formData.capacity) <= 0) {
+      validationErrors.push('• Maximum Capacity must be a positive number.');
+    }
+
+    if (!formData.price.trim()) {
+      validationErrors.push('• Price is required.');
+    } else if (isNaN(Number(formData.price)) || Number(formData.price) < 0) {
+      validationErrors.push('• Price must be a valid non-negative number.');
+    }
+
+    if (formData.startDate && formData.endDate && new Date(formData.startDate) > new Date(formData.endDate)) {
+      validationErrors.push('• Start Date cannot be after End Date.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      setFormError(errorMsg);
+      showFormErrorPopup('Cannot Save Course Details', `The course cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
       return;
     }
+
+    setFormError(null);
 
     const backendStatus =
       formData.status === 'Active'
@@ -231,19 +259,19 @@ export default function AdminCoursesScreen() {
         : formData.syllabusTopics;
 
     const payload: any = {
-      title: formData.title,
-      category: formData.category || null,
-      description: formData.description || null,
-      duration: formData.duration || null,
+      title: formData.title.trim(),
+      category: formData.category ? formData.category.trim() : null,
+      description: formData.description ? formData.description.trim() : null,
+      duration: formData.duration ? formData.duration.trim() : null,
       totalSessions: formData.totalSessions ? Number(formData.totalSessions) : null,
-      classTimings: formData.classTime || null,
+      classTimings: formData.classTime ? formData.classTime.trim() : null,
       classDays: formData.classDays.length > 0 ? formData.classDays.join(', ') : null,
       maxCapacity: Number(formData.capacity),
       price: Number(formData.price),
       status: backendStatus,
       syllabusTopics: finalSyllabus || null,
-      whatYouWillLearn: formData.whatYouWillLearn || null,
-      googleMeetLink: formData.googleMeetLink || null,
+      whatYouWillLearn: formData.whatYouWillLearn ? formData.whatYouWillLearn.trim() : null,
+      googleMeetLink: formData.googleMeetLink ? formData.googleMeetLink.trim() : null,
     };
 
     if (formData.startDate && /^\d{4}-\d{2}-\d{2}$/.test(formData.startDate)) {
@@ -255,17 +283,34 @@ export default function AdminCoursesScreen() {
 
     try {
       if (selectedCourse) {
-        await api.updateCourse(selectedCourse.id, payload);
+        const res: any = await api.updateCourse(selectedCourse.id, payload);
+        if (res && res.success === false) {
+          const reason = res.message || 'Failed to update course.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Course Details', `Failed to update course:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
         setIsModalVisible(false);
         showToast('Course updated successfully.');
       } else {
-        await api.createCourse(payload);
+        const res: any = await api.createCourse(payload);
+        if (res && res.success === false) {
+          const reason = res.message || 'Failed to create course.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Course Details', `Failed to create course:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
         setIsModalVisible(false);
         showToast('New course created successfully.');
       }
       fetchCourses();
     } catch (err: any) {
-      showToast(err?.message ?? 'Failed to save course.', 'error');
+      const reason = err?.message ?? 'Failed to save course.';
+      setFormError(reason);
+      showFormErrorPopup('Save Error', `Could not save course:\n\n${reason}`);
+      showToast(reason, 'error');
       console.error('handleSaveCourse error:', err);
     }
   }, [formData, selectedCourse, fetchCourses, showToast]);
@@ -505,6 +550,8 @@ export default function AdminCoursesScreen() {
         teachers={teachers}
         formData={formData}
         showInstructorDropdown={showInstructorDropdown}
+        errorMessage={formError}
+        onClearError={() => setFormError(null)}
         onClose={() => setIsModalVisible(false)}
         onUpdateField={updateFormField}
         onToggleDropdown={() => setShowInstructorDropdown((prev) => !prev)}

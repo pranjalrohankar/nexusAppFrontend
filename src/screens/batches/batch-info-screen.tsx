@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { getCompletedTopicsForCourse, parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
 import { api } from '../../services/api';
-import { coursesData } from '@/screens/home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 interface Batch {
   id: string;

@@ -232,10 +232,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1F2937',
     borderWidth: 0,
-    outlineStyle: 'none',
-    outlineWidth: 0,
-    outlineColor: 'transparent',
-    ...(Platform.OS === 'web' ? ({ outline: 'none', boxShadow: 'none' } as any) : {}),
   },
 
   scroll: { flex: 1, backgroundColor: '#F9FAFB' },

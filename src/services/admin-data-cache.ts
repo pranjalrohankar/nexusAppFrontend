@@ -6,6 +6,8 @@ export const adminDataCache: {
   courses: any[];
   batches: any[];
   enquiries: any[];
+  passwordResets: any[];
+  pendingResetCount: number;
 } = {
   dashboard: null,
   students: [],
@@ -13,4 +15,6 @@ export const adminDataCache: {
   courses: [],
   batches: [],
   enquiries: [],
+  passwordResets: [],
+  pendingResetCount: 0,
 };

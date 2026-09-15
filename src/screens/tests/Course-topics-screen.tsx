@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api, getApiBaseUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
-import { coursesData } from '@/screens/home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 const API_BASE = getApiBaseUrl().replace('/api', '');
 
