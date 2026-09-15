@@ -531,8 +531,10 @@ export const api = {
   getPrivacySettings: () => get('/student/privacy-settings'),
   updatePrivacySettings: (data: object) => put('/student/privacy-settings', data),
 
-  // Teacher notification endpoints
+  // Notification endpoints
   getTeacherNotifications: () => get('/notifications/teacher'),
+  getAdminNotifications: () => get('/notifications/admin'),
+  getMyNotifications: () => get('/notifications/my'),
   markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
   markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
 
