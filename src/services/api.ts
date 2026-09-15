@@ -369,6 +369,9 @@ export const api = {
     deviceFingerprint?: string,
   ) => post("/auth/login", { email, password, role, deviceFingerprint }, "application/json", true),
 
+  forgotPassword: (email: string) =>
+    post("/auth/forgot-password", { email }, "application/json", true),
+
   createUser: (data: object) => post("/admin/users", data),
 
   getStudents: () => get("/admin/students"),
@@ -475,6 +478,7 @@ export const api = {
     get(`/auth/login-history?userId=${userId}`),
   getSecuritySettings: (userId: number | string) =>
     get(`/auth/security-settings?userId=${userId}`),
+  updateSecuritySettings: (data: object) => put('/auth/security-settings', data),
   // Batch and Course covered topics
   getBatchCoveredTopics: (batchId: number | string) => get(`/batches/${batchId}/covered-topics`),
   updateBatchCoveredTopics: (batchId: number | string, topics: string[] | string) =>
