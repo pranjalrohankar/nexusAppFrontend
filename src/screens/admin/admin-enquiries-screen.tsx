@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Platform, Linking, StatusBar, ActivityIndicator, Alert, Modal
+  TextInput, StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
-import { adminDataCache } from '../../services/admin-data-cache';
 
 const AVATAR_COLORS = ['#7B2CBF', '#2563EB', '#EA580C', '#16A34A', '#DB2777', '#0891B2'];
 const PILL_STYLES: Record<number, { bg: string; color: string }> = {
@@ -152,28 +151,25 @@ function EnquiryDetail({
         <View style={det.section}>
           <Text style={det.sectionLabel}>QUICK ACTIONS</Text>
           <View style={det.actionsRow}>
-            <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`tel:${enquiry.phoneNumber}`)}>
-              <Ionicons name="call-outline" size={15} color="#16A34A" />
+            <TouchableOpacity style={det.actionBtn} onPress={() => {}}>
+              <Ionicons name="mail-outline" size={16} color="#7B2CBF" />
+              <Text style={[det.actionText, { color: '#7B2CBF' }]}>Email</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={det.actionBtn} onPress={() => {}}>
+              <Ionicons name="call-outline" size={16} color="#16A34A" />
               <Text style={[det.actionText, { color: '#16A34A' }]}>Call</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`mailto:${enquiry.email}`)}>
-              <Ionicons name="mail-outline" size={15} color="#2563EB" />
-              <Text style={[det.actionText, { color: '#2563EB' }]}>Email</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`https://wa.me/${enquiry.phoneNumber?.replace(/\D/g, '')}`)}>
-              <Ionicons name="logo-whatsapp" size={15} color="#25D366" />
+            <TouchableOpacity style={det.actionBtn} onPress={() => {}}>
+              <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
               <Text style={[det.actionText, { color: '#25D366' }]}>WhatsApp</Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Footer */}
       <View style={det.footer}>
         <TouchableOpacity style={det.closeBtn} onPress={onClose}>
-          <Text style={det.closeBtnText}>Close</Text>
+          <Text style={det.closeBtnText}>Back to Enquiries</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -185,20 +181,20 @@ const det = StyleSheet.create({
   header: { backgroundColor: '#7B2CBF', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   accentLine: { height: 3, borderRadius: 2, marginBottom: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
+  backBtn: { padding: 4 },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#FFF' },
-  newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
-  newBadgeText: { fontSize: 11, color: '#FFF', fontWeight: '600' },
-  scroll: { flex: 1, backgroundColor: '#F3F4F6' },
+  newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, gap: 3 },
+  newBadgeText: { fontSize: 11, color: '#2563EB', fontWeight: '600' },
+  scroll: { flex: 1, backgroundColor: '#F9FAFB' },
   scrollContent: { padding: 16 },
-  personCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 18, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-  avatar: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 17 },
+  personCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  avatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   personMid: { flex: 1 },
-  name: { fontSize: 17, fontWeight: 'bold', color: '#1F2937' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' },
+  name: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   metaText: { fontSize: 11, color: '#9CA3AF' },
-  metaDot: { fontSize: 11, color: '#9CA3AF' },
+  metaDot: { fontSize: 11, color: '#D1D5DB' },
   section: { borderWidth: 1.5, borderColor: '#E5E7EB', borderStyle: 'dashed', borderRadius: 14, padding: 16, marginBottom: 14, backgroundColor: '#FFF' },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 1, marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
@@ -219,54 +215,16 @@ const det = StyleSheet.create({
 
 interface Props {
   enquiries: any[];
-  initialTab?: 'enquiries' | 'resets';
   onClose: () => void;
   onEnquiriesUpdate?: (updated: any[]) => void;
 }
 
-export default function AdminEnquiriesScreen({ enquiries, initialTab = 'enquiries', onClose, onEnquiriesUpdate }: Props) {
-  const [activeTab, setActiveTab] = useState<'enquiries' | 'resets'>(initialTab);
+export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUpdate }: Props) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<{ enquiry: any; idx: number } | null>(null);
   const [localEnquiries, setLocalEnquiries] = useState(
     [...enquiries].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
   );
-
-  // Password reset requests states
-  const [resetRequests, setResetRequests] = useState<any[]>(adminDataCache.passwordResets || []);
-  const [loadingResets, setLoadingResets] = useState(false);
-  const [selectedReset, setSelectedReset] = useState<any | null>(null);
-  const [newPasswordInput, setNewPasswordInput] = useState('');
-  const [resolvingId, setResolvingId] = useState<number | null>(null);
-
-  useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
-
-  const fetchPasswordResets = useCallback(async () => {
-    setLoadingResets(true);
-    try {
-      const res: any = await api.getPasswordResetRequests();
-      const list = Array.isArray(res?.data?.requests)
-        ? res.data.requests
-        : Array.isArray(res?.data)
-        ? res.data
-        : Array.isArray(res)
-        ? res
-        : [];
-      setResetRequests(list);
-      adminDataCache.passwordResets = list;
-      adminDataCache.pendingResetCount = res?.data?.pendingCount ?? list.filter((r: any) => r.status === 'PENDING').length;
-    } catch {
-      setResetRequests([]);
-    } finally {
-      setLoadingResets(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPasswordResets();
-  }, [fetchPasswordResets]);
 
   const handleMarkAllRead = () => {
     const unread = localEnquiries.filter(e => !e.isRead);
@@ -282,36 +240,6 @@ export default function AdminEnquiriesScreen({ enquiries, initialTab = 'enquirie
     const updated = localEnquiries.map(e => e.id === id ? { ...e, isRead: true } : e);
     setLocalEnquiries(updated);
     if (onEnquiriesUpdate) onEnquiriesUpdate(updated);
-  };
-
-  const handleResolveReset = async (item: any) => {
-    setResolvingId(item.id);
-    try {
-      const pass = newPasswordInput.trim();
-      await api.resolvePasswordResetRequest(item.id, pass ? pass : undefined);
-      Alert.alert(
-        'Success',
-        pass
-          ? `Password reset for ${item.name} (${item.email}) to "${pass}" and request marked as resolved.`
-          : `Request for ${item.name} marked as resolved.`
-      );
-      setSelectedReset(null);
-      setNewPasswordInput('');
-      fetchPasswordResets();
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to resolve request.');
-    } finally {
-      setResolvingId(null);
-    }
-  };
-
-  const handleDeleteReset = async (id: number) => {
-    try {
-      await api.deletePasswordResetRequest(id);
-      setResetRequests(prev => prev.filter(r => r.id !== id));
-    } catch {
-      Alert.alert('Error', 'Failed to delete request.');
-    }
   };
 
   if (selected) {
@@ -331,15 +259,6 @@ export default function AdminEnquiriesScreen({ enquiries, initialTab = 'enquirie
     )
   );
 
-  const filteredResets = resetRequests.filter(r =>
-    [r.name, r.email, r.role, r.status].some(v =>
-      v?.toLowerCase().includes(search.toLowerCase())
-    )
-  );
-
-  const pendingResetCount = resetRequests.filter(r => r.status === 'PENDING').length;
-  const unreadEnquiryCount = localEnquiries.filter(e => !e.isRead).length;
-
   return (
     <SafeAreaView style={eq.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#7B2CBF" />
@@ -350,53 +269,10 @@ export default function AdminEnquiriesScreen({ enquiries, initialTab = 'enquirie
           <TouchableOpacity style={eq.backBtn} onPress={onClose}>
             <Ionicons name="arrow-back" size={20} color="#FFF" />
           </TouchableOpacity>
-          <Text style={eq.headerTitle}>
-            {activeTab === 'enquiries' ? 'Student Enquiries' : 'Password Reset Requests'}
-          </Text>
-          {activeTab === 'enquiries' && (
-            <TouchableOpacity style={eq.markAllBtn} onPress={handleMarkAllRead}>
-              <Ionicons name="checkmark-done-outline" size={15} color="#7B2CBF" />
-              <Text style={eq.markAllText}>Read All</Text>
-            </TouchableOpacity>
-          )}
-          {activeTab === 'resets' && (
-            <TouchableOpacity style={eq.markAllBtn} onPress={fetchPasswordResets}>
-              <Ionicons name="refresh-outline" size={15} color="#7B2CBF" />
-              <Text style={eq.markAllText}>Refresh</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Tab Switcher */}
-        <View style={eq.tabSwitcher}>
-          <TouchableOpacity
-            style={[eq.tabBtn, activeTab === 'enquiries' && eq.tabBtnActive]}
-            onPress={() => setActiveTab('enquiries')}
-          >
-            <Ionicons name="mail-outline" size={16} color={activeTab === 'enquiries' ? '#7B2CBF' : '#E9D5FF'} />
-            <Text style={[eq.tabBtnText, activeTab === 'enquiries' && eq.tabBtnTextActive]}>
-              Enquiries ({localEnquiries.length})
-            </Text>
-            {unreadEnquiryCount > 0 && (
-              <View style={eq.tabBadge}>
-                <Text style={eq.tabBadgeText}>{unreadEnquiryCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[eq.tabBtn, activeTab === 'resets' && eq.tabBtnActive]}
-            onPress={() => setActiveTab('resets')}
-          >
-            <Ionicons name="key-outline" size={16} color={activeTab === 'resets' ? '#7B2CBF' : '#E9D5FF'} />
-            <Text style={[eq.tabBtnText, activeTab === 'resets' && eq.tabBtnTextActive]}>
-              Reset Requests ({resetRequests.length})
-            </Text>
-            {pendingResetCount > 0 && (
-              <View style={[eq.tabBadge, { backgroundColor: '#EF4444' }]}>
-                <Text style={eq.tabBadgeText}>{pendingResetCount}</Text>
-              </View>
-            )}
+          <Text style={eq.headerTitle}>Student Enquiries</Text>
+          <TouchableOpacity style={eq.markAllBtn} onPress={handleMarkAllRead}>
+            <Ionicons name="checkmark-done-outline" size={15} color="#7B2CBF" />
+            <Text style={eq.markAllText}>Read All</Text>
           </TouchableOpacity>
         </View>
 
@@ -404,218 +280,76 @@ export default function AdminEnquiriesScreen({ enquiries, initialTab = 'enquirie
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
             style={eq.searchInput}
-            placeholder={activeTab === 'enquiries' ? "Search name, email, phone, course..." : "Search user name, email, role..."}
+            placeholder="Search name, email, phone, course..."
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
           />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
       {/* BODY CONTENT */}
-      {activeTab === 'enquiries' ? (
-        <ScrollView style={eq.list} contentContainerStyle={eq.listContent} showsVerticalScrollIndicator={false}>
-          {filteredEnquiries.length === 0 ? (
-            <View style={eq.emptyBox}>
-              <Ionicons name="mail-outline" size={44} color="#D1D5DB" />
-              <Text style={eq.emptyText}>No enquiries found</Text>
-            </View>
-          ) : (
-            filteredEnquiries.map((e: any, idx: number) => {
-              const pill = PILL_STYLES[idx % 5];
-              const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-              const initials = (e.fullName ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-              const src = sourceIcon(e.source);
-              const isNew = !e.isRead;
-              return (
-                <TouchableOpacity key={e.id} style={eq.card} activeOpacity={0.85} onPress={() => setSelected({ enquiry: e, idx })}>
-                  <View style={eq.cardTop}>
-                    <View style={[eq.avatar, { backgroundColor: avatarColor }]}>
-                      <Text style={eq.avatarText}>{initials}</Text>
-                    </View>
-                    <View style={eq.cardMid}>
-                      <View style={eq.nameRow}>
-                        <Text style={eq.name}>{e.fullName}</Text>
-                        {isNew && (
-                          <View style={eq.newBadge}>
-                            <View style={eq.newDot} />
-                            <Ionicons name="information-circle-outline" size={11} color="#2563EB" />
-                            <Text style={eq.newBadgeText}>New</Text>
-                          </View>
-                        )}
-                      </View>
-                      {e.course ? (
-                        <View style={[eq.coursePill, { backgroundColor: pill.bg }]}>
-                          <Text style={[eq.coursePillText, { color: pill.color }]}>{e.course}</Text>
-                        </View>
-                      ) : null}
-                    </View>
+      <ScrollView style={eq.list} contentContainerStyle={eq.listContent} showsVerticalScrollIndicator={false}>
+        {filteredEnquiries.length === 0 ? (
+          <View style={eq.emptyBox}>
+            <Ionicons name="mail-outline" size={44} color="#D1D5DB" />
+            <Text style={eq.emptyText}>No enquiries found</Text>
+          </View>
+        ) : (
+          filteredEnquiries.map((e: any, idx: number) => {
+            const pill = PILL_STYLES[idx % 5];
+            const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+            const initials = (e.fullName ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+            const src = sourceIcon(e.source);
+            const isNew = !e.isRead;
+            return (
+              <TouchableOpacity key={e.id} style={eq.card} activeOpacity={0.85} onPress={() => setSelected({ enquiry: e, idx })}>
+                <View style={eq.cardTop}>
+                  <View style={[eq.avatar, { backgroundColor: avatarColor }]}>
+                    <Text style={eq.avatarText}>{initials}</Text>
                   </View>
-                  {e.message ? <Text style={eq.message} numberOfLines={2}>{e.message}</Text> : null}
-                  <View style={eq.infoRow}>
-                    <View style={eq.infoItem}>
-                      <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
-                      <Text style={eq.infoText}>{formatDate(e.createdAt)}</Text>
+                  <View style={eq.cardMid}>
+                    <View style={eq.nameRow}>
+                      <Text style={eq.name}>{e.fullName}</Text>
+                      {isNew && (
+                        <View style={eq.newBadge}>
+                          <View style={eq.newDot} />
+                          <Ionicons name="information-circle-outline" size={11} color="#2563EB" />
+                          <Text style={eq.newBadgeText}>New</Text>
+                        </View>
+                      )}
                     </View>
-                    {e.source ? (
-                      <View style={eq.infoItem}>
-                        <Ionicons name={src.name} size={12} color={src.color} />
-                        <Text style={[eq.infoText, { color: src.color }]}>{e.source}</Text>
+                    {e.course ? (
+                      <View style={[eq.coursePill, { backgroundColor: pill.bg }]}>
+                        <Text style={[eq.coursePillText, { color: pill.color }]}>{e.course}</Text>
                       </View>
                     ) : null}
                   </View>
-                </TouchableOpacity>
-              );
-            })
-          )}
-          <View style={{ height: 80 }} />
-        </ScrollView>
-      ) : (
-        /* PASSWORD RESET REQUESTS TAB */
-        <ScrollView style={eq.list} contentContainerStyle={eq.listContent} showsVerticalScrollIndicator={false}>
-          {loadingResets ? (
-            <View style={eq.emptyBox}>
-              <ActivityIndicator size="large" color="#7B2CBF" />
-              <Text style={[eq.emptyText, { marginTop: 10 }]}>Loading reset requests...</Text>
-            </View>
-          ) : filteredResets.length === 0 ? (
-            <View style={eq.emptyBox}>
-              <Ionicons name="key-outline" size={44} color="#D1D5DB" />
-              <Text style={eq.emptyText}>No password reset requests found</Text>
-            </View>
-          ) : (
-            filteredResets.map((r: any, idx: number) => {
-              const isPending = (r.status ?? '').toUpperCase() === 'PENDING';
-              const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
-              const initials = (r.name ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-              return (
-                <View key={r.id} style={eq.resetCard}>
-                  <View style={eq.cardTop}>
-                    <View style={[eq.avatar, { backgroundColor: avatarColor }]}>
-                      <Text style={eq.avatarText}>{initials}</Text>
-                    </View>
-                    <View style={eq.cardMid}>
-                      <View style={eq.nameRow}>
-                        <Text style={eq.name}>{r.name}</Text>
-                        <View style={[eq.roleBadge, r.role === 'TEACHER' ? eq.roleTeacher : eq.roleStudent]}>
-                          <Text style={eq.roleBadgeText}>{r.role || 'STUDENT'}</Text>
-                        </View>
-                      </View>
-                      <Text style={eq.emailText}>{r.email}</Text>
-                    </View>
-                  </View>
-
-                  <View style={eq.resetMetaRow}>
-                    <View style={eq.infoItem}>
-                      <Ionicons name="time-outline" size={13} color="#9CA3AF" />
-                      <Text style={eq.infoText}>{formatDateTime(r.createdAt)}</Text>
-                    </View>
-                    <View style={[eq.statusBadge, isPending ? eq.statusPending : eq.statusResolved]}>
-                      <Ionicons
-                        name={isPending ? "alert-circle-outline" : "checkmark-circle-outline"}
-                        size={13}
-                        color={isPending ? "#D97706" : "#059669"}
-                      />
-                      <Text style={[eq.statusBadgeText, isPending ? eq.statusTextPending : eq.statusTextResolved]}>
-                        {isPending ? 'Pending' : 'Resolved'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Actions */}
-                  <View style={eq.resetActionsRow}>
-                    {isPending ? (
-                      <TouchableOpacity
-                        style={eq.resolveBtn}
-                        activeOpacity={0.85}
-                        onPress={() => {
-                          setSelectedReset(r);
-                          setNewPasswordInput('');
-                        }}
-                      >
-                        <Ionicons name="key-outline" size={14} color="#FFF" />
-                        <Text style={eq.resolveBtnText}>Reset / Resolve</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={eq.resolvedInfo}>
-                        <Ionicons name="checkmark-done" size={14} color="#059669" />
-                        <Text style={eq.resolvedInfoText}>Resolved {r.resolvedBy ? `by ${r.resolvedBy}` : ''}</Text>
-                      </View>
-                    )}
-
-                    <TouchableOpacity
-                      style={eq.deleteBtn}
-                      activeOpacity={0.7}
-                      onPress={() => handleDeleteReset(r.id)}
-                    >
-                      <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                    </TouchableOpacity>
-                  </View>
                 </View>
-              );
-            })
-          )}
-          <View style={{ height: 80 }} />
-        </ScrollView>
-      )}
-
-      {/* RESOLVE / RESET PASSWORD MODAL */}
-      <Modal
-        visible={Boolean(selectedReset)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { if (!resolvingId) setSelectedReset(null); }}
-      >
-        <View style={eq.modalOverlay}>
-          <View style={eq.modalCard}>
-            <View style={eq.modalHeader}>
-              <View style={eq.modalIconCircle}>
-                <Ionicons name="key-outline" size={26} color="#7B2CBF" />
-              </View>
-              <Text style={eq.modalTitle}>Resolve Reset Request</Text>
-              <Text style={eq.modalSubtitle}>
-                For {selectedReset?.name} ({selectedReset?.email})
-              </Text>
-            </View>
-
-            <View style={eq.modalForm}>
-              <Text style={eq.inputLabel}>Set New Password (Optional)</Text>
-              <TextInput
-                style={eq.modalInput}
-                placeholder="e.g. newPass123 (or leave blank to just mark resolved)"
-                placeholderTextColor="#9CA3AF"
-                value={newPasswordInput}
-                onChangeText={setNewPasswordInput}
-                autoCapitalize="none"
-              />
-              <Text style={eq.inputHint}>
-                If entered, the user's password will be immediately updated to this value in the database.
-              </Text>
-            </View>
-
-            <View style={eq.modalBtnRow}>
-              <TouchableOpacity
-                style={eq.modalCancelBtn}
-                onPress={() => setSelectedReset(null)}
-                disabled={Boolean(resolvingId)}
-              >
-                <Text style={eq.modalCancelText}>Cancel</Text>
+                {e.message ? <Text style={eq.message} numberOfLines={2}>{e.message}</Text> : null}
+                <View style={eq.infoRow}>
+                  <View style={eq.infoItem}>
+                    <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
+                    <Text style={eq.infoText}>{formatDate(e.createdAt)}</Text>
+                  </View>
+                  {e.source ? (
+                    <View style={eq.infoItem}>
+                      <Ionicons name={src.name} size={12} color={src.color} />
+                      <Text style={[eq.infoText, { color: src.color }]}>{e.source}</Text>
+                    </View>
+                  ) : null}
+                </View>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={eq.modalSubmitBtn}
-                onPress={() => handleResolveReset(selectedReset)}
-                disabled={Boolean(resolvingId)}
-              >
-                {resolvingId ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={eq.modalSubmitText}>Confirm & Resolve</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+            );
+          })
+        )}
+        <View style={{ height: 80 }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -629,51 +363,6 @@ const eq = StyleSheet.create({
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#FFF' },
   markAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   markAllText: { fontSize: 12, fontWeight: '700', color: '#7B2CBF' },
-  tabSwitcher: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 12,
-    gap: 6,
-  },
-  tabBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 10,
-    gap: 6,
-  },
-  tabBtnActive: {
-    backgroundColor: '#FFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  tabBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#E9D5FF',
-  },
-  tabBtnTextActive: {
-    color: '#7B2CBF',
-    fontWeight: '700',
-  },
-  tabBadge: {
-    backgroundColor: '#7B2CBF',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  tabBadgeText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, paddingHorizontal: 14, height: 44, gap: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#1F2937' },
   list: { flex: 1, backgroundColor: '#F3F4F6' },
@@ -681,150 +370,19 @@ const eq = StyleSheet.create({
   emptyBox: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { fontSize: 14, color: '#9CA3AF' },
   card: { backgroundColor: '#FFF', borderRadius: 18, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-  resetCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 18,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    borderLeftWidth: 4,
-    borderLeftColor: '#7B2CBF',
-  },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 8 },
   avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
   cardMid: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   name: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', flex: 1 },
-  emailText: { fontSize: 13, color: '#6B7280', marginTop: 2 },
   newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, gap: 3 },
   newDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
   newBadgeText: { fontSize: 11, color: '#2563EB', fontWeight: '600' },
-  roleBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  roleTeacher: { backgroundColor: '#EDE9FE' },
-  roleStudent: { backgroundColor: '#DBEAFE' },
-  roleBadgeText: { fontSize: 10, fontWeight: '700', color: '#7B2CBF' },
   coursePill: { alignSelf: 'flex-start', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   coursePillText: { fontSize: 12, fontWeight: '600' },
   message: { fontSize: 13, color: '#4B5563', lineHeight: 19, marginBottom: 10 },
   infoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
-  resetMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    marginTop: 6,
-  },
   infoItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   infoText: { fontSize: 11, color: '#9CA3AF' },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  statusPending: { backgroundColor: '#FEF3C7' },
-  statusResolved: { backgroundColor: '#D1FAE5' },
-  statusBadgeText: { fontSize: 11, fontWeight: '600' },
-  statusTextPending: { color: '#D97706' },
-  statusTextResolved: { color: '#059669' },
-  resetActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  resolveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#7B2CBF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  resolveBtnText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
-  resolvedInfo: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  resolvedInfoText: { fontSize: 12, color: '#059669', fontWeight: '500' },
-  deleteBtn: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    elevation: 12,
-  },
-  modalHeader: { alignItems: 'center', marginBottom: 16 },
-  modalIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#F3E8FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  modalSubtitle: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
-  modalForm: { marginVertical: 14 },
-  inputLabel: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 6 },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 46,
-    fontSize: 14,
-    color: '#1F2937',
-  },
-  inputHint: { fontSize: 11, color: '#9CA3AF', marginTop: 6, lineHeight: 15 },
-  modalBtnRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  modalCancelBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCancelText: { color: '#4B5563', fontSize: 14, fontWeight: '600' },
-  modalSubmitBtn: {
-    flex: 1.5,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#7B2CBF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalSubmitText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
 });

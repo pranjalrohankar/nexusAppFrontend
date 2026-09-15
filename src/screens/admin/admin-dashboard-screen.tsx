@@ -10,12 +10,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
 import AdminEnquiriesScreen from './admin-enquiries-screen';
+import AdminPasswordResetsScreen from './admin-password-resets-screen';
 
 export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewAllEnrollments?: () => void }) {
   const [dashData, setDashData] = useState<any>(adminDataCache.dashboard);
   const [enquiries, setEnquiries] = useState<any[]>(adminDataCache.enquiries);
   const [showEnquiries, setShowEnquiries] = useState(false);
-  const [enquiriesTab, setEnquiriesTab] = useState<'enquiries' | 'resets'>('enquiries');
+  const [showPasswordResets, setShowPasswordResets] = useState(false);
   const [pendingResetCount, setPendingResetCount] = useState<number>(adminDataCache.pendingResetCount || 0);
 
   // Track last known enquiry count so we only re-render when something
@@ -176,11 +177,23 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
 
+  if (showPasswordResets) {
+    return (
+      <AdminPasswordResetsScreen
+        onClose={() => setShowPasswordResets(false)}
+        onResetsUpdate={(requests, pCount) => {
+          setPendingResetCount(pCount);
+          adminDataCache.passwordResets = requests;
+          adminDataCache.pendingResetCount = pCount;
+        }}
+      />
+    );
+  }
+
   if (showEnquiries) {
     return (
       <AdminEnquiriesScreen
         enquiries={enquiries}
-        initialTab={enquiriesTab}
         onClose={() => setShowEnquiries(false)}
         onEnquiriesUpdate={(updated) => {
           setEnquiries(updated);
@@ -219,7 +232,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             {/* Password Reset Requests Button */}
             <TouchableOpacity
               style={styles.alertBtn}
-              onPress={() => { fetchEnquiriesAndResets(); setEnquiriesTab('resets'); setShowEnquiries(true); }}
+              onPress={() => { fetchEnquiriesAndResets(); setShowPasswordResets(true); }}
             >
               <View style={styles.iconContainer}>
                 <Ionicons name="key-outline" size={22} color="#FFF" />
@@ -234,7 +247,7 @@ export default function AdminDashboardScreen({ onViewAllEnrollments }: { onViewA
             {/* Enquiries Button */}
             <TouchableOpacity
               style={styles.alertBtn}
-              onPress={() => { fetchEnquiriesAndResets(); setEnquiriesTab('enquiries'); setShowEnquiries(true); }}
+              onPress={() => { fetchEnquiriesAndResets(); setShowEnquiries(true); }}
             >
               <View style={styles.iconContainer}>
                 <Ionicons name="mail-outline" size={24} color="#FFF" />
