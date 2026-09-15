@@ -55,7 +55,6 @@ const mapTeachers = (data: any[]): Teacher[] =>
 
 export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { onRegisterAdd?: (fn: () => void) => void; onCountChange?: (count: number) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'All' | 'Active' | 'Inactive'>('All');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
 
@@ -179,19 +178,16 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   }, [onRegisterAdd, handleOpenAddModal]);
 
   const filteredTeachers = teachers.filter(teacher => {
-    const matchesSearch = teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      teacher.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const isLogged = teacher.onlineStatus === 'online' || teacher.onlineStatus === 'always_online';
-    if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Active') return matchesSearch && isLogged;
-    if (activeTab === 'Inactive') return matchesSearch && !isLogged;
-    return matchesSearch;
+    return (
+      teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      teacher.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      teacher.phone.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
   const totalPages = Math.ceil(filteredTeachers.length / PAGE_SIZE);
   const paginatedTeachers = filteredTeachers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const activeCount = teachers.filter(t => t.onlineStatus === 'online' || t.onlineStatus === 'always_online').length;
-  const inactiveCount = teachers.filter(t => t.onlineStatus !== 'online' && t.onlineStatus !== 'always_online').length;
 
   const handleOpenEditModal = async (teacher: Teacher) => {
     setSelectedTeacher(teacher);
@@ -413,32 +409,6 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
               <Ionicons name="close-circle" size={16} color="#9CA3AF" />
             </TouchableOpacity>
           ) : null}
-        </View>
-
-        {/* FILTER PILL TABS */}
-        <View style={styles.filterTabsRow}>
-          <TouchableOpacity
-            style={[styles.filterPill, activeTab === 'All' && styles.filterPillActive]}
-            onPress={() => { setActiveTab('All'); setPage(1); }}
-          >
-            <Text style={[styles.filterPillText, activeTab === 'All' && styles.filterPillTextActive]}>All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterPill, styles.filterPillActive2, activeTab === 'Active' && styles.filterPillActive]}
-            onPress={() => { setActiveTab('Active'); setPage(1); }}
-          >
-            <Text style={[styles.filterPillText, activeTab === 'Active' && styles.filterPillTextActive]}>
-              Active {activeCount}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterPill, styles.filterPillInactive2, activeTab === 'Inactive' && styles.filterPillActive]}
-            onPress={() => { setActiveTab('Inactive'); setPage(1); }}
-          >
-            <Text style={[styles.filterPillText, activeTab === 'Inactive' && styles.filterPillTextActive]}>
-              Inactive {teachers.filter(t => t.status === 'Inactive').length}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* STATS ROW */}
@@ -788,13 +758,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
-  filterTabsRow: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
-  filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(123,44,191,0.10)' },
-  filterPillActive: { backgroundColor: '#7B2CBF' },
-  filterPillActive2: { backgroundColor: 'rgba(16,185,129,0.12)' },
-  filterPillInactive2: { backgroundColor: 'rgba(107,114,128,0.10)' },
-  filterPillText: { fontSize: 13, fontWeight: '600', color: '#7B2CBF' },
-  filterPillTextActive: { color: '#FFFFFF' },
   statsCard: {
     backgroundColor: '#EFF6FF', borderRadius: 16, marginBottom: 16,
     paddingVertical: 16, paddingHorizontal: 12, flexDirection: 'row',
