@@ -226,6 +226,10 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {!!searchQuery && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>

@@ -406,6 +406,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -636,6 +640,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       placeholder="Set login password"
                       placeholderTextColor="#9CA3AF"
                       secureTextEntry={!formShowPassword}
+                      autoComplete="new-password"
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      textContentType="none"
                     />
                     <TouchableOpacity onPress={() => setFormShowPassword(!formShowPassword)}>
                       <Ionicons name={formShowPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9CA3AF" />

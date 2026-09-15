@@ -284,6 +284,10 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {search ? (
             <TouchableOpacity onPress={() => setSearch('')}>

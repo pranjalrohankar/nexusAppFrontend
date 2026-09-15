@@ -319,6 +319,10 @@ export default function AdminBatchesScreen() {
               placeholderTextColor="#9CA3AF"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              autoComplete="off"
+              autoCorrect={false}
+              autoCapitalize="none"
+              spellCheck={false}
             />
             {searchQuery ? (
               <TouchableOpacity onPress={() => setSearchQuery('')}>

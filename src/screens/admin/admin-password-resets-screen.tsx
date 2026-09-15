@@ -148,6 +148,10 @@ export default function AdminPasswordResetsScreen({ onClose, onResetsUpdate }: P
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {search ? (
             <TouchableOpacity onPress={() => setSearch('')}>
@@ -316,6 +320,11 @@ export default function AdminPasswordResetsScreen({ onClose, onResetsUpdate }: P
                         secureTextEntry={!showPassword}
                         value={newPasswordInput}
                         onChangeText={setNewPasswordInput}
+                        autoComplete="new-password"
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        textContentType="none"
                       />
                       <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 6 }}>
                         <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#6B7280" />
