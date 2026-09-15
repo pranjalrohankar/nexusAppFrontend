@@ -19,7 +19,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Linking from 'expo-linking';
 import { api, getApiBaseUrl, resolveDynamicFileUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
-import { coursesData } from '@/screens/home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 function normalizeModString(str: string): string {
   if (!str) return '';

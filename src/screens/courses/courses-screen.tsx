@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ExploreCourses, { ExploreCourseItem } from '@/screens/courses/explore-courses';
 import CourseDetails, { CourseData } from '@/screens/courses/course-details';
-import { coursesData } from '@/screens/home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 import { api } from '@/services/api';
 import { buildCourseDataFromDb } from '@/utils/syllabus-parser';
 

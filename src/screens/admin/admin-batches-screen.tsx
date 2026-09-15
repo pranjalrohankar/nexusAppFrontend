@@ -10,7 +10,7 @@ import { showFormErrorPopup } from '../../utils/alert-helper';
 import BatchStudentsScreen from './batch-students-screen';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
-import { coursesData } from '../home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 type FilterTab = 'All' | 'Active' | 'Upcoming' | 'Completed';
 type BatchStatus = 'ACTIVE' | 'UPCOMING' | 'COMPLETED';

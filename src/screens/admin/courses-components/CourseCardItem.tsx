@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Course } from './types';
 import { parseSyllabus } from '../../../utils/syllabus-parser';
 import { parseTopicsData, isTopicCovered } from '../../../utils/syllabus-progress-store';
-import { coursesData } from '../../home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 interface CourseCardItemProps {
   item: Course;
