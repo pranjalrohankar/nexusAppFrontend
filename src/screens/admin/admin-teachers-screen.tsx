@@ -219,6 +219,12 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
       return;
     }
 
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(formPhone.trim())) {
+      showToast('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
       if (selectedTeacher && selectedTeacher.id && selectedTeacher.id !== 'undefined') {
@@ -616,8 +622,16 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                 </View>
               )}
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Phone *</Text>
-                <TextInput style={styles.modalInput} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" placeholder="e.g. +91 98765 43210" placeholderTextColor="#9CA3AF" />
+                <Text style={styles.fieldLabel}>Phone * (10 digits starting 6-9)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={formPhone}
+                  onChangeText={(t) => setFormPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  placeholder="e.g. 9876543210"
+                  placeholderTextColor="#9CA3AF"
+                />
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>Date of Birth</Text>

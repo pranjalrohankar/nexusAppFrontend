@@ -145,6 +145,31 @@ export default function AdminBatchesScreen() {
   const upcomingCount = batches.filter(b => b.status === 'UPCOMING').length;
   const completedCount = batches.filter(b => b.status === 'COMPLETED').length;
 
+  const computeEffectiveBatchStatus = (startStr?: string, endStr?: string): BatchStatus => {
+    if (!startStr && !endStr) return 'UPCOMING';
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (endStr) {
+      const end = new Date(endStr);
+      end.setHours(0, 0, 0, 0);
+      if (today > end) {
+        return 'COMPLETED';
+      }
+    }
+
+    if (startStr) {
+      const start = new Date(startStr);
+      start.setHours(0, 0, 0, 0);
+      if (today >= start) {
+        return 'ACTIVE';
+      }
+      return 'UPCOMING';
+    }
+
+    return 'ACTIVE';
+  };
+
   const handleOpenAddModal = () => {
     setSelectedBatch(null);
     setFormBatchName('');
@@ -170,7 +195,7 @@ export default function AdminBatchesScreen() {
     setFormEndDate(batch.endDate);
     setFormClassTime(batch.classTimings || batch.courseTimings || '');
     setFormGoogleMeetLink(batch.googleMeetLink || batch.meetLink || '');
-    setFormStatus(batch.status);
+    setFormStatus(computeEffectiveBatchStatus(batch.startDate, batch.endDate));
     setFormClassDays(batch.classDays || []);
     setModalVisible(true);
   };
@@ -182,6 +207,7 @@ export default function AdminBatchesScreen() {
     }
     setSaving(true);
     try {
+      const autoStatus = computeEffectiveBatchStatus(formStartDate, formEndDate);
       const payload = {
         batchName: formBatchName,
         selectCourse: formCourse,
@@ -194,7 +220,7 @@ export default function AdminBatchesScreen() {
         courseTimings: formClassTime,
         googleMeetLink: formGoogleMeetLink,
         meetLink: formGoogleMeetLink,
-        status: formStatus,
+        status: autoStatus,
       };
       console.log('Saving batch:', payload);
       if (selectedBatch) {
@@ -715,14 +741,27 @@ export default function AdminBatchesScreen() {
               />
 
               <Text style={styles.sectionTitle}>STATUS</Text>
-              <Text style={styles.fieldLabel}>Status</Text>
-              <View style={styles.statusRow}>
-                {(['UPCOMING', 'ACTIVE', 'COMPLETED'] as BatchStatus[]).map(status => (
-                  <TouchableOpacity key={status} style={[styles.statusChip, formStatus === status && styles.statusChipActive]} onPress={() => setFormStatus(status)}>
-                    <Text style={[styles.statusChipText, formStatus === status && styles.statusChipTextActive]}>{status === 'UPCOMING' ? 'Upcoming' : status === 'ACTIVE' ? 'Active' : 'Completed'}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {(() => {
+                const autoStatus = computeEffectiveBatchStatus(formStartDate, formEndDate);
+                const statusColor = getStatusColor(autoStatus);
+                const statusText = autoStatus === 'ACTIVE' ? 'Active' : autoStatus === 'UPCOMING' ? 'Upcoming' : 'Completed';
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 12, borderRadius: 12, marginBottom: 16, gap: 10 }}>
+                    <Ionicons name="sparkles" size={16} color="#7B2CBF" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151' }}>
+                        Batch Status:{' '}
+                        <Text style={{ color: statusColor, fontWeight: '700' }}>
+                          {statusText}
+                        </Text>
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
+                        Automatically determined by Start Date and End Date
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })()}
 
               <TouchableOpacity style={styles.createBtn} onPress={handleSave} disabled={saving}>
                 {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.createBtnText}>{selectedBatch ? 'Save Changes' : 'Create Batch'}</Text>}

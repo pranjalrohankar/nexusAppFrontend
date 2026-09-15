@@ -151,13 +151,12 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
   const filtered = students.filter(s => {
     const q = searchQuery.toLowerCase();
     const matchSearch = s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-    const isActive = s.onlineStatus === 'online' || s.onlineStatus === 'always_online';
-    if (activeFilter === 'Active') return matchSearch && isActive;
-    if (activeFilter === 'Inactive') return matchSearch && !isActive;
+    if (activeFilter === 'Active') return matchSearch && s.active !== false;
+    if (activeFilter === 'Inactive') return matchSearch && s.active === false;
     return matchSearch;
   });
 
-  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
+  const activeCount = students.filter(s => s.active !== false).length;
   const avgAttendance = students.length > 0
     ? Math.round(students.reduce((sum, s) => sum + s.attendance, 0) / students.length)
     : 0;
@@ -300,12 +299,12 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
                     <Text style={styles.joinedText}>Joined {formatDate(student.joinedDate)}</Text>
                   </View>
                   <View style={[styles.activeBadge, {
-                    backgroundColor: (student.onlineStatus === 'online' || student.onlineStatus === 'always_online') ? '#ECFDF5' : '#FEE2E2'
+                    backgroundColor: student.active !== false ? '#ECFDF5' : '#FEE2E2'
                   }]}>
                     <Text style={[styles.activeBadgeText, {
-                      color: (student.onlineStatus === 'online' || student.onlineStatus === 'always_online') ? '#10B981' : '#EF4444'
+                      color: student.active !== false ? '#10B981' : '#EF4444'
                     }]}>
-                      {(student.onlineStatus === 'online' || student.onlineStatus === 'always_online') ? 'active' : 'inactive'}
+                      {student.active !== false ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
                   <TouchableOpacity style={styles.menuBtn}>

@@ -191,18 +191,17 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const filteredStudents = students.filter(student => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
-    const isActive = student.onlineStatus === 'online' || student.onlineStatus === 'always_online';
     if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Active') return matchesSearch && isActive;
-    if (activeTab === 'Inactive') return matchesSearch && !isActive;
+    if (activeTab === 'Active') return matchesSearch && student.active !== false;
+    if (activeTab === 'Inactive') return matchesSearch && student.active === false;
     return matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
   const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
-  const inactiveCount = students.filter(s => s.onlineStatus !== 'online' && s.onlineStatus !== 'always_online').length;
+  const activeCount = students.filter(s => s.active !== false).length;
+  const inactiveCount = students.filter(s => s.active === false).length;
 
   useEffect(() => {
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
@@ -236,6 +235,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const handleSaveStudent = async () => {
     if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedStudent && !newCourse)) {
       showToast('Please fill out all required fields.', 'error');
+      return;
+    }
+
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(formPhone.trim())) {
+      showToast('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.', 'error');
+      return;
+    }
+    if (formGuardianPhone.trim() && !phoneRegex.test(formGuardianPhone.trim())) {
+      showToast('Please enter a valid 10-digit guardian mobile number starting with 6, 7, 8, or 9.', 'error');
       return;
     }
 
@@ -484,16 +493,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                     <Text style={styles.studentName}>{item.name}</Text>
                     <Text style={styles.joinedText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
-                  {(() => {
-                    const isLogged = item.onlineStatus === 'online' || item.onlineStatus === 'always_online';
-                    return (
-                      <View style={[styles.statusBadge, isLogged ? styles.statusActive : styles.statusInactive]}>
-                        <Text style={[styles.statusText, isLogged ? styles.statusActiveText : styles.statusInactiveText]}>
-                          {isLogged ? 'Active' : 'Inactive'}
-                        </Text>
-                      </View>
-                    );
-                  })()}
+                  <View style={[styles.statusBadge, item.active !== false ? styles.statusActive : styles.statusInactive]}>
+                    <Text style={[styles.statusText, item.active !== false ? styles.statusActiveText : styles.statusInactiveText]}>
+                      {item.active !== false ? 'Active' : 'Inactive'}
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Info block */}
@@ -640,13 +644,14 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                 </View>
               )}
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Phone *</Text>
+                <Text style={styles.fieldLabel}>Phone * (10 digits starting 6-9)</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={formPhone}
-                  onChangeText={setFormPhone}
+                  onChangeText={(t) => setFormPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
                   keyboardType="phone-pad"
-                  placeholder="e.g. +91 98765 43210"
+                  maxLength={10}
+                  placeholder="e.g. 9876543210"
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
@@ -720,13 +725,14 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                 />
               </View>
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Guardian Phone</Text>
+                <Text style={styles.fieldLabel}>Guardian Phone (10 digits starting 6-9)</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={formGuardianPhone}
-                  onChangeText={setFormGuardianPhone}
+                  onChangeText={(t) => setFormGuardianPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
                   keyboardType="phone-pad"
-                  placeholder="e.g. +91 98765 43211"
+                  maxLength={10}
+                  placeholder="e.g. 9876543211"
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
