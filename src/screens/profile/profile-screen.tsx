@@ -105,7 +105,7 @@ export default function ProfileScreen({ onLogout, currentSubView, onChangeSubVie
   };
   // Sub-view Routing
   if (currentSubView === 'notifications') {
-    return <NotificationsScreen onBack={() => onChangeSubView('profile')} />;
+    return <NotificationsScreen userRole={userRole} onBack={() => onChangeSubView('profile')} />;
   }
 
   if (currentSubView === 'privacy') {

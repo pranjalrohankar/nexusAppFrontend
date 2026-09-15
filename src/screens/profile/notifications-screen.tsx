@@ -15,6 +15,7 @@ import { api } from '../../services/api';
 
 interface NotificationsScreenProps {
   onBack: () => void;
+  userRole?: string;
 }
 
 function relativeTime(iso: string): string {
@@ -29,13 +30,14 @@ function relativeTime(iso: string): string {
 }
 
 function getIconForTitle(title: string): { iconName: string; iconColor: string; iconBg: string } {
+  if (title.includes('Password') || title.includes('Reset')) return { iconName: 'key', iconColor: '#EF4444', iconBg: '#FEE2E2' };
   if (title.includes('Material')) return { iconName: 'book', iconColor: '#7B2CBF', iconBg: '#FAF5FF' };
   if (title.includes('Class') || title.includes('Live')) return { iconName: 'videocam', iconColor: '#EF4444', iconBg: '#FEE2E2' };
   if (title.includes('Reminder')) return { iconName: 'calendar', iconColor: '#10B981', iconBg: '#ECFDF5' };
   return { iconName: 'notifications', iconColor: '#FF7A00', iconBg: '#FFF7ED' };
 }
 
-export default function NotificationsScreen({ onBack }: NotificationsScreenProps) {
+export default function NotificationsScreen({ onBack, userRole = 'student' }: NotificationsScreenProps) {
   const [pushEnabled, setPushEnabled] = useState(true);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [achievementsEnabled, setAchievementsEnabled] = useState(true);
@@ -46,9 +48,18 @@ export default function NotificationsScreen({ onBack }: NotificationsScreenProps
 
   const fetchAll = useCallback(async () => {
     try {
+      let notifsPromise: Promise<any>;
+      if (userRole === 'admin') {
+        notifsPromise = api.getAdminNotifications().catch(() => []);
+      } else if (userRole === 'teacher') {
+        notifsPromise = api.getTeacherNotifications().catch(() => []);
+      } else {
+        notifsPromise = api.getStudentNotifications().catch(() => []);
+      }
+
       const [notifsData, upcomingData] = await Promise.all([
-        api.getStudentNotifications().catch(() => []),
-        api.getStudentUpcomingClasses().catch(() => []),
+        notifsPromise,
+        userRole === 'student' ? api.getStudentUpcomingClasses().catch(() => []) : Promise.resolve([]),
       ]);
 
       const apiNotifs: any[] = Array.isArray(notifsData) ? notifsData : [];
