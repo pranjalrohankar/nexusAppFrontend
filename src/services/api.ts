@@ -193,6 +193,11 @@ async function handleResponse(res: Response | null) {
         return { success: false, message: json.message || `HTTP ${res.status}`, data: json.data || [], status: res.status };
       }
     } catch {}
+    if (text && text.trim().startsWith('<')) {
+      const messageMatch = text.match(/<b>Message<\/b>\s*([^<]+)/i) || text.match(/<title>([^<]+)<\/title>/i);
+      const cleanMsg = messageMatch ? messageMatch[1].trim() : `Server error (HTTP ${res.status})`;
+      return { success: false, message: cleanMsg, data: [], status: res.status };
+    }
     return { success: false, message: text || `HTTP ${res.status}`, data: [], status: res.status };
   }
   if (res.status === 204)
