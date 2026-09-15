@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 import BatchStudentsScreen from './batch-students-screen';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
@@ -75,6 +76,7 @@ export default function AdminBatchesScreen() {
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
   const [activeCalendarField, setActiveCalendarField] = useState<'start' | 'end' | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
@@ -146,7 +148,7 @@ export default function AdminBatchesScreen() {
   const completedCount = batches.filter(b => b.status === 'COMPLETED').length;
 
   const computeEffectiveBatchStatus = (startStr?: string, endStr?: string): BatchStatus => {
-    if (!startStr && !endStr) return 'UPCOMING';
+    if (!startStr && !endStr) return 'ACTIVE';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -182,6 +184,7 @@ export default function AdminBatchesScreen() {
     setFormGoogleMeetLink('');
     setFormStatus('UPCOMING');
     setFormClassDays([]);
+    setFormError(null);
     setModalVisible(true);
   };
 
@@ -197,38 +200,69 @@ export default function AdminBatchesScreen() {
     setFormGoogleMeetLink(batch.googleMeetLink || batch.meetLink || '');
     setFormStatus(computeEffectiveBatchStatus(batch.startDate, batch.endDate));
     setFormClassDays(batch.classDays || []);
+    setFormError(null);
     setModalVisible(true);
   };
 
   const handleSave = async () => {
-    if (!formBatchName || !formCourse || !formInstructor || !formStartDate || !formEndDate || formClassDays.length === 0) {
-      showToast('Please fill all required fields', 'error');
+    const validationErrors: string[] = [];
+    if (!formBatchName.trim()) validationErrors.push('• Batch Name is required.');
+    if (!formCourse.trim()) validationErrors.push('• Course selection is required.');
+    if (!formInstructor.trim()) validationErrors.push('• Instructor is required.');
+    if (!formStartDate.trim()) validationErrors.push('• Start Date is required (YYYY-MM-DD).');
+    if (!formEndDate.trim()) validationErrors.push('• End Date is required (YYYY-MM-DD).');
+    if (formClassDays.length === 0) validationErrors.push('• At least one Class Day must be selected.');
+    if (formStartDate.trim() && formEndDate.trim() && new Date(formStartDate) > new Date(formEndDate)) {
+      validationErrors.push('• Start Date cannot be after End Date.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      setFormError(errorMsg);
+      showFormErrorPopup('Cannot Save Batch Details', `The batch cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
       return;
     }
+
+    setFormError(null);
     setSaving(true);
     try {
       const autoStatus = computeEffectiveBatchStatus(formStartDate, formEndDate);
       const payload = {
-        batchName: formBatchName,
-        selectCourse: formCourse,
-        instructor: formInstructor,
-        duration: formDuration,
-        startDate: formStartDate,
-        endDate: formEndDate,
+        batchName: formBatchName.trim(),
+        selectCourse: formCourse.trim(),
+        instructor: formInstructor.trim(),
+        duration: formDuration.trim(),
+        startDate: formStartDate.trim(),
+        endDate: formEndDate.trim(),
         classDays: formClassDays,
-        classTimings: formClassTime,
-        courseTimings: formClassTime,
-        googleMeetLink: formGoogleMeetLink,
-        meetLink: formGoogleMeetLink,
+        classTimings: formClassTime.trim(),
+        courseTimings: formClassTime.trim(),
+        googleMeetLink: formGoogleMeetLink.trim(),
+        meetLink: formGoogleMeetLink.trim(),
         status: autoStatus,
       };
       console.log('Saving batch:', payload);
       if (selectedBatch) {
         const res = await api.updateBatch(selectedBatch.id, payload);
+        if (res && res.success === false) {
+          const reason = res.message || 'Failed to update batch.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Batch Details', `Failed to update batch:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
         console.log('Update response:', res);
         showToast('Batch updated successfully', 'success');
       } else {
         const res = await api.createBatch(payload);
+        if (res && res.success === false) {
+          const reason = res.message || 'Failed to create batch.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Batch Details', `Failed to create batch:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
         console.log('Create response:', res);
         showToast('Batch created successfully', 'success');
       }
@@ -236,7 +270,10 @@ export default function AdminBatchesScreen() {
       loadData();
     } catch (err: any) {
       console.error('Save error:', err);
-      showToast(err?.message || 'Failed to save batch', 'error');
+      const reason = err?.message || 'Failed to save batch.';
+      setFormError(reason);
+      showFormErrorPopup('Save Error', `Could not save batch:\n\n${reason}`);
+      showToast(reason, 'error');
     } finally {
       setSaving(false);
     }
@@ -619,6 +656,19 @@ export default function AdminBatchesScreen() {
             </View>
 
             <ScrollView style={styles.modalScroll}>
+              {formError && (
+                <View style={styles.modalErrorBox}>
+                  <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.modalErrorTitle}>Cannot Save Batch</Text>
+                    <Text style={styles.modalErrorMessage}>{formError}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setFormError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <Text style={styles.sectionTitle}>BASIC INFORMATION</Text>
 
               <Text style={styles.fieldLabel}>Batch Name *</Text>
@@ -1108,6 +1158,27 @@ function CalendarModal({
 }
 
 const styles = StyleSheet.create({
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  modalErrorMessage: {
+    fontSize: 12,
+    color: '#B91C1C',
+    lineHeight: 18,
+  },
   safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   toast: { position: 'absolute', top: 60, left: 20, right: 20, zIndex: 999, borderRadius: 12, padding: 14, elevation: 8 },

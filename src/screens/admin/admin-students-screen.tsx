@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { adminDataCache } from '../../services/admin-data-cache';
 import { api } from '../../services/api';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 
 interface Enrollment {
   courseTitle: string;
@@ -95,6 +96,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
@@ -185,6 +187,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setShowCourseDropdown(false);
     setShowBatchDropdown(false);
     setShowNewBatchDropdown(false);
+    setFormError(null);
     setIsModalVisible(true);
   }, []);
 
@@ -229,34 +232,59 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setNewEnrollmentDate(new Date().toISOString().split('T')[0]);
     setNewPaymentStatus('Pending');
     setShowNewBatchDropdown(false);
+    setFormError(null);
     setIsModalVisible(true);
   };
 
   const handleSaveStudent = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedStudent && !newCourse)) {
-      showToast('Please fill out all required fields.', 'error');
-      return;
+    const validationErrors: string[] = [];
+    if (!formFirstName.trim()) validationErrors.push('• First Name is required.');
+    if (!formLastName.trim()) validationErrors.push('• Last Name is required.');
+    
+    if (!formEmail.trim()) {
+      validationErrors.push('• Email Address is required.');
+    } else if (!/^\S+@\S+\.\S+$/.test(formEmail.trim())) {
+      validationErrors.push('• Email Address is not a valid format (e.g., student@example.com).');
     }
 
     const phoneRegex = /^[6-9]\d{9}$/;
-    if (!phoneRegex.test(formPhone.trim())) {
-      showToast('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.', 'error');
-      return;
+    if (!formPhone.trim()) {
+      validationErrors.push('• Mobile Number is required.');
+    } else if (!phoneRegex.test(formPhone.trim())) {
+      validationErrors.push('• Mobile Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
     }
+
     if (formGuardianPhone.trim() && !phoneRegex.test(formGuardianPhone.trim())) {
-      showToast('Please enter a valid 10-digit guardian mobile number starting with 6, 7, 8, or 9.', 'error');
+      validationErrors.push('• Guardian Phone Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
+    }
+
+    if (!selectedStudent && !newCourse) {
+      validationErrors.push('• Course selection is required for new students.');
+    }
+
+    if (!selectedStudent && !formPassword.trim()) {
+      validationErrors.push('• Password is required for new student accounts.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      setFormError(errorMsg);
+      showFormErrorPopup('Cannot Save Student Details', `The form cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
       return;
     }
+
+    setFormError(null);
 
     if (selectedStudent) {
       setSaving(true);
       try {
         // 1. Update personal info
         const res = await api.updateStudent(selectedStudent.id, {
-          firstName: formFirstName,
-          lastName: formLastName,
-          email: formEmail,
-          phone: formPhone,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
           dob: formDob,
           street: formStreet,
           city: formCity,
@@ -268,7 +296,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           paymentStatus: formPaymentStatus,
         });
         if (!res?.success) {
-          showToast(res?.message || 'Failed to update', 'error');
+          const reason = res?.message || 'Server rejected the update request.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Student Details', `Failed to update student:\n\n${reason}`);
+          showToast(reason, 'error');
           return;
         }
         // 2. Enroll in new course if selected
@@ -280,7 +311,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             paymentStatus: newPaymentStatus,
           });
           if (!enrollRes?.success) {
-            showToast(enrollRes?.message || 'Failed to add new course', 'error');
+            const reason = enrollRes?.message || 'Failed to add new course.';
+            setFormError(reason);
+            showFormErrorPopup('Enrollment Failed', `Student updated, but new course could not be added:\n\n${reason}`);
+            showToast(reason, 'error');
             return;
           }
           showToast('Student updated & enrolled in ' + newCourse, 'success');
@@ -289,7 +323,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         }
         setIsModalVisible(false);
         // Optimistically update the card in local state immediately
-        const updatedName = `${formFirstName} ${formLastName}`.trim();
+        const updatedName = `${formFirstName.trim()} ${formLastName.trim()}`.trim();
         setStudents(prev => prev.map(s => {
           if (s.id !== selectedStudent.id) return s;
           const updatedEnrollments = newCourse
@@ -298,8 +332,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           return {
             ...s,
             name: updatedName,
-            email: formEmail,
-            phone: formPhone,
+            email: formEmail.trim(),
+            phone: formPhone.trim(),
             dob: formDob,
             street: formStreet,
             city: formCity,
@@ -314,28 +348,23 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         // Also refresh from server in background to stay in sync
         loadStudents(false);
       } catch (err: any) {
-        showToast(err.message || 'Cannot connect to server', 'error');
+        const reason = err?.message || 'Cannot connect to backend server.';
+        setFormError(reason);
+        showFormErrorPopup('Save Error', `Could not update student details:\n\n${reason}`);
+        showToast(reason, 'error');
       } finally {
         setSaving(false);
       }
     } else {
       // Adding new student or enrolling existing student to new course
-      if (!formPassword) {
-        showToast('Password is required for new enrollment', 'error');
-        return;
-      }
-
       setSaving(true);
       try {
-        // Backend will check if user exists and either:
-        // 1. Create new user + student + enrollment (new student)
-        // 2. Add new enrollment to existing student (re-enrollment)
         const res = await api.createUser({
-          firstName: formFirstName,
-          lastName: formLastName,
-          email: formEmail,
-          password: formPassword,
-          phone: formPhone,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          email: formEmail.trim(),
+          password: formPassword.trim(),
+          phone: formPhone.trim(),
           dob: formDob,
           street: formStreet,
           city: formCity,
@@ -354,10 +383,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           showToast(res.message || 'Student enrolled successfully!', 'success');
           loadStudents();
         } else {
-          showToast(res.message || 'Failed to enroll student.', 'error');
+          const reason = res.message || 'Failed to enroll student.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Student Details', `Failed to register student:\n\n${reason}`);
+          showToast(reason, 'error');
         }
       } catch (err: any) {
-        showToast('Cannot reach server. Make sure backend is running.', 'error');
+        const reason = err?.message || 'Cannot reach server. Make sure backend is running.';
+        setFormError(reason);
+        showFormErrorPopup('Save Error', `Failed to register student:\n\n${reason}`);
+        showToast(reason, 'error');
       } finally {
         setSaving(false);
       }
@@ -596,6 +631,19 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             </View>
 
             <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {formError && (
+                <View style={styles.modalErrorBox}>
+                  <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.modalErrorTitle}>Cannot Save Student</Text>
+                    <Text style={styles.modalErrorMessage}>{formError}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setFormError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Personal Information */}
               <Text style={styles.formSectionTitle}>Personal Information</Text>
               <View style={styles.formGroup}>
@@ -941,6 +989,27 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 }
 
 const styles = StyleSheet.create({
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  modalErrorMessage: {
+    fontSize: 12,
+    color: '#B91C1C',
+    lineHeight: 18,
+  },
   existingEnrollmentsBox: {
     borderWidth: 1,
     borderColor: '#E5E7EB',

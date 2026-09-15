@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 import { adminDataCache } from '../../services/admin-data-cache';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 
 interface Teacher {
   id: string;
@@ -89,6 +90,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
   const [totalStudents, setTotalStudents] = useState(0);
 
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
@@ -154,6 +156,7 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setFormEmploymentType('Full Time');
     setFormPassword('');
     setSelectedCourseIds([]);
+    setFormError(null);
     if (adminDataCache.courses.length === 0) await fetchCourses();
     else setCourses(adminDataCache.courses as Course[]);
     setIsModalVisible(true);
@@ -209,31 +212,51 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
     setFormEmploymentType('');
     setFormPassword('');
     setSelectedCourseIds(teacher.assignedCourseIds || []);
+    setFormError(null);
     if (courses.length === 0) await fetchCourses();
     setIsModalVisible(true);
   };
 
   const handleSaveTeacher = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedTeacher && !formPassword)) {
-      showToast('Please fill out all required fields including password.', 'error');
-      return;
+    const validationErrors: string[] = [];
+    if (!formFirstName.trim()) validationErrors.push('• First Name is required.');
+    if (!formLastName.trim()) validationErrors.push('• Last Name is required.');
+    
+    if (!formEmail.trim()) {
+      validationErrors.push('• Email Address is required.');
+    } else if (!/^\S+@\S+\.\S+$/.test(formEmail.trim())) {
+      validationErrors.push('• Email Address is not a valid format (e.g., teacher@example.com).');
     }
 
     const phoneRegex = /^[6-9]\d{9}$/;
-    if (!phoneRegex.test(formPhone.trim())) {
-      showToast('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.', 'error');
+    if (!formPhone.trim()) {
+      validationErrors.push('• Mobile Number is required.');
+    } else if (!phoneRegex.test(formPhone.trim())) {
+      validationErrors.push('• Mobile Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
+    }
+
+    if (!selectedTeacher && !formPassword.trim()) {
+      validationErrors.push('• Password is required for new teacher accounts.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      setFormError(errorMsg);
+      showFormErrorPopup('Cannot Save Teacher Details', `The form cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
       return;
     }
 
+    setFormError(null);
     setSaving(true);
     try {
       if (selectedTeacher && selectedTeacher.id && selectedTeacher.id !== 'undefined') {
         // ── EDIT existing teacher ────────────────────────────────────────────
         const res = await api.updateTeacher(selectedTeacher.id, {
-          firstName: formFirstName,
-          lastName: formLastName,
-          email: formEmail,
-          phone: formPhone,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
           dob: formDob,
           street: formStreet,
           city: formCity,
@@ -251,13 +274,13 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           setIsModalVisible(false);
           showToast('Teacher details saved successfully.', 'success');
         } else {
-          showToast(res.message || 'Failed to update teacher.', 'error');
+          const reason = res.message || 'Failed to update teacher.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Teacher Details', `Failed to update teacher:\n\n${reason}`);
+          showToast(reason, 'error');
         }
       } else {
         // ── CREATE new teacher ───────────────────────────────────────────────
-        // Step 1: Create the teacher account WITHOUT courseIds.
-        // Passing courseIds here hits the student-enrollment logic on the
-        // backend and returns 400 "Student is already enrolled in this course."
         const res = await api.createUser({
           firstName: formFirstName.trim(),
           lastName: formLastName.trim(),
@@ -275,14 +298,11 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           joinDate: formJoinDate,
           employmentType: formEmploymentType,
           role: 'TEACHER',
-          // ✅ courseIds intentionally omitted — assigned separately below
         });
 
         console.log('[createTeacher] API response:', JSON.stringify(res));
 
         if (res.success) {
-          // Step 2: Resolve the real Teacher ID by fetching the updated teacher list.
-          // createUser returns the User ID, but assignCourse needs the Teacher ID.
           if (selectedCourseIds.length > 0) {
             try {
               const teachersRes = await api.getTeachers();
@@ -308,10 +328,8 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           }
 
           await fetchTeachers();
-          setPage(1); // reset to page 1 so the new teacher is visible
+          setPage(1);
 
-          // Invalidate the dashboard cache so it re-fetches with the updated
-          // teacher count the next time the dashboard tab is visited.
           if (adminDataCache.dashboard) {
             adminDataCache.dashboard = {
               ...adminDataCache.dashboard,
@@ -322,16 +340,19 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
           setIsModalVisible(false);
           showToast('Teacher registered! Credentials sent to ' + formEmail, 'success');
         } else {
-          showToast(res.message || 'Failed to register teacher.', 'error');
+          const reason = res.message || 'Failed to register teacher.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Teacher Details', `Failed to register teacher:\n\n${reason}`);
+          showToast(reason, 'error');
         }
       }
     } catch (err: any) {
-      // Surface the actual server message instead of a generic string so it's
-      // easier to diagnose future validation errors.
       const msg = err?.message?.includes('HTTP')
         ? err.message.split(': ').slice(1).join(': ')
-        : 'Could not connect to server.';
-      showToast(msg || 'Could not connect to server.', 'error');
+        : (err?.message || 'Could not connect to server.');
+      setFormError(msg);
+      showFormErrorPopup('Save Error', `Could not save teacher details:\n\n${msg}`);
+      showToast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -593,6 +614,19 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
             </View>
 
             <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {formError && (
+                <View style={styles.modalErrorBox}>
+                  <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.modalErrorTitle}>Cannot Save Teacher</Text>
+                    <Text style={styles.modalErrorMessage}>{formError}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setFormError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Personal Information */}
               <Text style={styles.formSectionTitle}>Personal Information</Text>
               <View style={styles.formGroup}>
@@ -732,6 +766,27 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
 }
 
 const styles = StyleSheet.create({
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  modalErrorMessage: {
+    fontSize: 12,
+    color: '#B91C1C',
+    lineHeight: 18,
+  },
   safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
   filterTabsRow: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(123,44,191,0.10)' },
