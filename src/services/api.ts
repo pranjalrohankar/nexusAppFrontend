@@ -585,4 +585,5 @@ export const api = {
     return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
   },
   gradeTestSubmission: (id: number | string, data: object) => put(`/tests/submissions/${id}/grade`, data),
+  deleteTestSubmission: (id: number | string) => del(`/tests/submissions/${id}`),
 };

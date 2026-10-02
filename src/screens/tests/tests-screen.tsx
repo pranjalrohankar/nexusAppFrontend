@@ -26,6 +26,59 @@ type SubTabType = 'MCQ' | 'StudyMaterial';
 const PUBLISHED_TESTS_KEY = 'NEXUS_PUBLISHED_TESTS';
 const TEST_SUBMISSIONS_KEY = 'NEXUS_TEST_SUBMISSIONS';
 
+const DEMO_TEST_TITLES = [
+  'javascript es6+ assessment',
+  'react advanced patterns test',
+  'ui/ux design fundamentals',
+  'data science foundations',
+  'java full stack & spring boot assessment',
+  'wireframing & prototyping quiz',
+];
+
+const isDemoTestTitle = (title?: string) => {
+  if (!title) return false;
+  const lower = title.toLowerCase().trim();
+  return DEMO_TEST_TITLES.some(dt => lower.includes(dt));
+};
+
+const DUMMY_STUDENT_NAMES = [
+  'ruchita',
+  'shruti',
+  'suraj',
+  'pallavi',
+  'kapil',
+  'rahul',
+  'mandar',
+  'anil',
+  'pranay',
+  'kishor',
+  'student user',
+  'student',
+  'dummy'
+];
+
+const isDummySubmission = (sub: any) => {
+  if (!sub) return false;
+  const name = String(sub.studentName || sub.student?.name || '').toLowerCase();
+  const email = String(sub.studentEmail || sub.student?.email || '').toLowerCase();
+  const title = String(sub.testTitle || sub.test?.testName || '').toLowerCase();
+  const feedback = String(sub.feedback || '').toLowerCase();
+
+  if (DUMMY_STUDENT_NAMES.some(dn => name.includes(dn) || email.includes(dn))) {
+    return true;
+  }
+  if (isDemoTestTitle(title)) {
+    return true;
+  }
+  if (title.includes('data science 20 mcqs') || title.includes('20 mcqs')) {
+    return true;
+  }
+  if (feedback.includes('proctoring violation') || feedback.includes('auto-submitted')) {
+    return true;
+  }
+  return false;
+};
+
 interface Enrollment {
   id: number;
   courseTitle: string;
@@ -75,12 +128,18 @@ export default function TestsScreen() {
         const res = await api.getAllTests();
         apiTests = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
       } catch (_) {}
+      apiTests = apiTests.filter((t: any) => !isDemoTestTitle(t.title || t.testName));
 
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
       let localTests: any[] = [];
       if (storedTests) {
         const parsed = safeParseJson(storedTests, []);
         if (Array.isArray(parsed)) localTests = parsed;
+      }
+      const initialLocalTestsLen = localTests.length;
+      localTests = localTests.filter((t: any) => !isDemoTestTitle(t.title || t.testName));
+      if (localTests.length !== initialLocalTestsLen) {
+        await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(localTests));
       }
 
       const mergedTestsMap = new Map<string, any>();
@@ -107,62 +166,6 @@ export default function TestsScreen() {
           mergedTestsMap.set(String(t.id), t);
         }
       });
-      if (mergedTestsMap.size === 0) {
-        const defaultDemoTests = [
-          {
-            id: "1",
-            title: "JavaScript ES6+ Assessment",
-            category: "Full Stack Web Development",
-            questionsCount: 5,
-            duration: "35 mins",
-            passScore: "70%",
-            totalMarks: 100,
-            testType: "MCQ",
-            questions: [
-              { question: "Which keyword creates a block-scoped variable in ES6?", options: ["var", "let", "const and let", "global"], correctOption: 2 },
-              { question: "What does Promise.all() do?", options: ["Rejects if any promise rejects", "Resolves first", "Runs synchronously", "Cancels all"], correctOption: 0 },
-              { question: "What is the purpose of arrow functions?", options: ["Lexical this binding", "New prototype", "Dynamic scope", "Slower execution"], correctOption: 0 },
-              { question: "Which method creates a shallow copy of an array in ES6?", options: ["Array.from() / Spread [...arr]", "arr.slice(-1)", "arr.copy()", "arr.shallow()"], correctOption: 0 },
-              { question: "What does destructuring assignment do?", options: ["Unpacks values from arrays/objects", "Destroys variables", "Compiles JS", "Deletes properties"], correctOption: 0 }
-            ]
-          },
-          {
-            id: "2",
-            title: "React Advanced Patterns Test",
-            category: "Full Stack Web Development",
-            questionsCount: 5,
-            duration: "45 mins",
-            passScore: "75%",
-            totalMarks: 100,
-            testType: "MCQ",
-            questions: [
-              { question: "What is the primary benefit of React hooks?", options: ["Reuse stateful logic without changing hierarchy", "Replace JSX", "Faster than vanilla JS", "Disable re-renders"], correctOption: 0 },
-              { question: "When does useEffect cleanup function run?", options: ["Before component unmounts and before re-running effect", "Only on page reload", "Only on error", "Never"], correctOption: 0 },
-              { question: "What is React.memo used for?", options: ["Memoizing component render based on props", "Storing redux state", "Memoizing hooks", "Database caching"], correctOption: 0 },
-              { question: "Which hook should be used for mutable values that don't trigger re-render?", options: ["useRef", "useState", "useMemo", "useCallback"], correctOption: 0 },
-              { question: "What problem does useCallback solve?", options: ["Preserves function reference across renders", "Replaces Redux", "Executes async code", "Creates DOM nodes"], correctOption: 0 }
-            ]
-          },
-          {
-            id: "3",
-            title: "Java Full Stack & Spring Boot Assessment",
-            category: "Java Full Stack Development",
-            questionsCount: 5,
-            duration: "45 mins",
-            passScore: "75%",
-            totalMarks: 100,
-            testType: "MCQ",
-            questions: [
-              { question: "Which Spring annotation maps an HTTP GET request to a handler method?", options: ["@GetMapping", "@PostMapping", "@RequestMapping(method=POST)", "@QueryMapping"], correctOption: 0 },
-              { question: "What is Dependency Injection in Spring?", options: ["Objects receive dependencies from external container", "Hardcoded object creation", "Java Reflection bypass", "Thread pooling"], correctOption: 0 },
-              { question: "What is JPA used for in Spring Boot?", options: ["Object-Relational Mapping (ORM) and data persistence", "Frontend routing", "JWT generation", "Load balancing"], correctOption: 0 },
-              { question: "Which interface does Spring Data JPA repository extend for standard CRUD?", options: ["JpaRepository / CrudRepository", "Serializable", "Runnable", "Callable"], correctOption: 0 },
-              { question: "What does @Transactional ensure in Spring?", options: ["ACID compliance across method operations", "Fast serialization", "Thread safety only", "Cache eviction"], correctOption: 0 }
-            ]
-          }
-        ];
-        defaultDemoTests.forEach(t => mergedTestsMap.set(t.id, t));
-      }
       setPublishedTests(Array.from(mergedTestsMap.values()));
 
       // 2. Fetch submissions from backend + AsyncStorage
@@ -171,12 +174,18 @@ export default function TestsScreen() {
         const subRes = await api.getMyTestSubmissions();
         apiSubs = Array.isArray(subRes) ? subRes : Array.isArray((subRes as any)?.data) ? (subRes as any).data : [];
       } catch (_) {}
+      apiSubs = apiSubs.filter((s: any) => !isDummySubmission(s));
 
       const storedSubs = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
       let localSubs: any[] = [];
       if (storedSubs) {
-        const parsed = JSON.parse(storedSubs);
+        const parsed = safeParseJson(storedSubs, []);
         if (Array.isArray(parsed)) localSubs = parsed;
+      }
+      const initialSubsLen = localSubs.length;
+      localSubs = localSubs.filter((s: any) => !isDummySubmission(s));
+      if (localSubs.length !== initialSubsLen) {
+        await AsyncStorage.setItem(TEST_SUBMISSIONS_KEY, JSON.stringify(localSubs));
       }
 
       const mergedSubsMap = new Map<string, any>();
@@ -210,79 +219,8 @@ export default function TestsScreen() {
     return <ActiveTestScreen testInfo={activeTest} onClose={() => { setActiveTest(null); fetchData(); }} />;
   }
 
-  // MCQ Tests data
-  const mcqTests = [
-    {
-      id: '1',
-      title: 'JavaScript ES6+ Assessment',
-      category: 'Full Stack Development',
-      badge: 'Intermediate',
-      badgeColor: '#D97706',
-      badgeBg: '#FEF3C7',
-      icon: 'laptop-outline',
-      iconBg: '#7B2CBF',
-      questions: '30',
-      duration: '35 mins',
-      passScore: '70%',
-      attempts: '3',
-    },
-    {
-      id: '2',
-      title: 'React Advanced Patterns Test',
-      category: 'Full Stack Development',
-      badge: 'Advanced',
-      badgeColor: '#DC2626',
-      badgeBg: '#FEE2E2',
-      icon: 'logo-react',
-      iconBg: '#EA580C',
-      questions: '40',
-      duration: '45 mins',
-      passScore: '75%',
-      attempts: '1',
-    },
-    {
-      id: '3',
-      title: 'UI/UX Design Fundamentals',
-      category: 'UI/UX Design',
-      badge: 'Beginner',
-      badgeColor: '#16A34A',
-      badgeBg: '#DCFCE7',
-      icon: 'color-palette-outline',
-      iconBg: '#7B2CBF',
-      questions: '25',
-      duration: '30 mins',
-      passScore: '70%',
-      attempts: '2',
-    },
-    {
-      id: '4',
-      title: 'Wireframing & Prototyping Quiz',
-      category: 'UI/UX Design',
-      badge: 'Intermediate',
-      badgeColor: '#D97706',
-      badgeBg: '#FEF3C7',
-      icon: 'ruler-outline',
-      iconBg: '#EA580C',
-      questions: '20',
-      duration: '25 mins',
-      passScore: '65%',
-      attempts: '0',
-    },
-    {
-      id: '5',
-      title: 'Data Science Foundations',
-      category: 'Data Science & Machine Learning',
-      badge: 'Intermediate',
-      badgeColor: '#D97706',
-      badgeBg: '#FEF3C7',
-      icon: 'server-outline',
-      iconBg: '#7B2CBF',
-      questions: '25',
-      duration: '30 mins',
-      passScore: '70%',
-      attempts: '1',
-    }
-  ];
+  // MCQ Tests data - empty (no demo/mock tests)
+  const mcqTests: any[] = [];
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -317,8 +255,9 @@ export default function TestsScreen() {
         {/* 2. TESTS CONTENT VIEW */}
         <View style={styles.listContainer}>
             {(() => {
-              const allTestList = [
-                ...publishedTests.map(pt => ({
+              const allTestList = publishedTests
+                .filter(pt => !isDemoTestTitle(pt.title))
+                .map(pt => ({
                   id: pt.id,
                   title: pt.title,
                   category: pt.category,
@@ -327,11 +266,11 @@ export default function TestsScreen() {
                   badgeBg: pt.testType === 'PDF' ? '#FEE2E2' : '#FAF0FD',
                   icon: pt.testType === 'PDF' ? 'document-text-outline' : 'clipboard-outline',
                   iconBg: pt.testType === 'PDF' ? '#EF4444' : '#7B2CBF',
-                  questionsCountLabel: String(pt.questionsCount || 'PDF Exam'),
+                  questionsCountLabel: String(pt.questionsCount || (pt.testType === 'PDF' ? 'PDF Exam' : 'MCQs')),
                   duration: pt.duration || '45 mins',
                   passScore: pt.passScore || '75%',
                   attempts: '1',
-                  testType: pt.testType || 'PDF',
+                  testType: pt.testType || 'MCQ',
                   pdfFileUri: pt.pdfFileUri,
                   pdfFileName: pt.pdfFileName,
                   pdfInstructions: pt.pdfInstructions,
@@ -339,11 +278,19 @@ export default function TestsScreen() {
                   questions: (pt.questions && Array.isArray(pt.questions) && pt.questions.length > 0)
                     ? pt.questions
                     : parseMcqsFromText('', pt.pdfFileName || pt.title),
-                })),
-                ...mcqTests
-                  .filter(m => !publishedTests.some(p => p.id === m.id))
-                  .map(m => ({ ...m, questions: parseMcqsFromText('', m.title) })),
-              ];
+                }));
+
+              if (allTestList.length === 0) {
+                return (
+                  <View style={{ backgroundColor: '#FFF', borderRadius: 16, padding: 32, alignItems: 'center', marginVertical: 20 }}>
+                    <Ionicons name="document-text-outline" size={44} color="#9CA3AF" />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F2937', marginTop: 12 }}>No Tests Available</Text>
+                    <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4, textAlign: 'center' }}>
+                      No tests have been published yet. Please check back later.
+                    </Text>
+                  </View>
+                );
+              }
 
               return allTestList.map((test) => {
                 const sub = userSubmissions.find(s => s.testId === test.id || s.testTitle === test.title);
