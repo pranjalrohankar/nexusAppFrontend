@@ -16,11 +16,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { adminDataCache } from '../../services/admin-data-cache';
 import { api } from '../../services/api';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 
 interface Enrollment {
   courseTitle: string;
   enrollmentDate: string;
   paymentStatus: string;
+}
+
+interface StudentBatch {
+  id: number;
+  batchName: string;
+  selectCourse: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 interface Student {
@@ -29,10 +39,12 @@ interface Student {
   email: string;
   phone: string;
   active: boolean;
+  status?: string;
   onlineStatus?: 'online' | 'offline' | 'always_online';
   coursesCount: number;
   createdAt: string;
   enrollments: Enrollment[];
+  batches?: StudentBatch[];
   dob?: string;
   street?: string;
   city?: string;
@@ -79,6 +91,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [newEnrollmentDate, setNewEnrollmentDate] = useState('');
   const [newPaymentStatus, setNewPaymentStatus] = useState('Pending');
   const [showNewBatchDropdown, setShowNewBatchDropdown] = useState(false);
+  const [enrollmentBatches, setEnrollmentBatches] = useState<Record<string, string>>({});
+  const [openBatchDropdownCourse, setOpenBatchDropdownCourse] = useState<string | null>(null);
   const [formPassword, setFormPassword] = useState('');
   const [formShowPassword, setFormShowPassword] = useState(false);
 
@@ -87,7 +101,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     return cached.length > 0 ? cached.slice().sort((a: any, b: any) => b.id - a.id) : [];
   });
   const [courses, setCourses] = useState<Course[]>(adminDataCache.courses as Course[]);
-  const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string }[]>([]);
+  const [batches, setBatches] = useState<{ id: number; batchName: string; selectCourse: string; status?: string; startDate?: string; endDate?: string }[]>([]);
   const [loading, setLoading] = useState(adminDataCache.students.length === 0);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 5;
@@ -95,6 +109,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
 
@@ -146,6 +161,9 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         id: b.id,
         batchName: b.batchName,
         selectCourse: b.selectCourse,
+        status: b.status,
+        startDate: b.startDate,
+        endDate: b.endDate,
       })));
     } catch (err) { }
   }, []);
@@ -182,27 +200,29 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setNewBatchName('');
     setNewEnrollmentDate(new Date().toISOString().split('T')[0]);
     setNewPaymentStatus('Pending');
+    setEnrollmentBatches({});
+    setOpenBatchDropdownCourse(null);
     setShowCourseDropdown(false);
     setShowBatchDropdown(false);
     setShowNewBatchDropdown(false);
+    setFormError(null);
     setIsModalVisible(true);
   }, []);
 
   const filteredStudents = students.filter(student => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query);
-    const isActive = student.onlineStatus === 'online' || student.onlineStatus === 'always_online';
     if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Active') return matchesSearch && isActive;
-    if (activeTab === 'Inactive') return matchesSearch && !isActive;
+    if (activeTab === 'Active') return matchesSearch && student.active !== false;
+    if (activeTab === 'Inactive') return matchesSearch && student.active === false;
     return matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
   const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const activeCount = students.filter(s => s.onlineStatus === 'online' || s.onlineStatus === 'always_online').length;
-  const inactiveCount = students.filter(s => s.onlineStatus !== 'online' && s.onlineStatus !== 'always_online').length;
+  const activeCount = students.filter(s => s.active !== false).length;
+  const inactiveCount = students.filter(s => s.active === false).length;
 
   useEffect(() => {
     if (onRegisterAdd) onRegisterAdd(handleOpenAddModal);
@@ -224,30 +244,80 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
     setFormGuardianPhone(student.guardianPhone || '');
     setFormEnrollmentDate(student.enrollmentDate || '');
     setFormPaymentStatus(student.paymentStatus || 'Pending');
+
+    // Initialize mapping of enrolled course -> assigned batch name
+    const initialBatches: Record<string, string> = {};
+    if (student.enrollments && student.enrollments.length > 0) {
+      student.enrollments.forEach(enr => {
+        const directBatch = (enr as any).batchName;
+        initialBatches[enr.courseTitle] = directBatch || '';
+      });
+    } else if (student.course) {
+      const directBatch = (student.batches && student.batches.length > 0) ? student.batches[0].batchName : '';
+      initialBatches[student.course] = directBatch || '';
+    }
+    setEnrollmentBatches(initialBatches);
+    setOpenBatchDropdownCourse(null);
+
     // Reset add-new-course fields
     setNewCourse('');
     setNewBatchName('');
     setNewEnrollmentDate(new Date().toISOString().split('T')[0]);
     setNewPaymentStatus('Pending');
     setShowNewBatchDropdown(false);
+    setFormError(null);
     setIsModalVisible(true);
   };
 
   const handleSaveStudent = async () => {
-    if (!formFirstName || !formLastName || !formEmail || !formPhone || (!selectedStudent && !newCourse)) {
-      showToast('Please fill out all required fields.', 'error');
+    const validationErrors: string[] = [];
+    if (!formFirstName.trim()) validationErrors.push('• First Name is required.');
+    if (!formLastName.trim()) validationErrors.push('• Last Name is required.');
+    
+    if (!formEmail.trim()) {
+      validationErrors.push('• Email Address is required.');
+    } else if (!/^\S+@\S+\.\S+$/.test(formEmail.trim())) {
+      validationErrors.push('• Email Address is not a valid format (e.g., student@example.com).');
+    }
+
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!formPhone.trim()) {
+      validationErrors.push('• Mobile Number is required.');
+    } else if (!phoneRegex.test(formPhone.trim())) {
+      validationErrors.push('• Mobile Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
+    }
+
+    if (formGuardianPhone.trim() && !phoneRegex.test(formGuardianPhone.trim())) {
+      validationErrors.push('• Guardian Phone Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
+    }
+
+    if (!selectedStudent && !newCourse) {
+      validationErrors.push('• Course selection is required for new students.');
+    }
+
+    if (!selectedStudent && !formPassword.trim()) {
+      validationErrors.push('• Password is required for new student accounts.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      setFormError(errorMsg);
+      showFormErrorPopup('Cannot Save Student Details', `The form cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
       return;
     }
+
+    setFormError(null);
 
     if (selectedStudent) {
       setSaving(true);
       try {
-        // 1. Update personal info
+        // 1. Update personal info + course batches
         const res = await api.updateStudent(selectedStudent.id, {
-          firstName: formFirstName,
-          lastName: formLastName,
-          email: formEmail,
-          phone: formPhone,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
           dob: formDob,
           street: formStreet,
           city: formCity,
@@ -257,40 +327,64 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           guardianPhone: formGuardianPhone,
           enrollmentDate: formEnrollmentDate,
           paymentStatus: formPaymentStatus,
+          courseBatches: enrollmentBatches,
         });
         if (!res?.success) {
-          showToast(res?.message || 'Failed to update', 'error');
+          const reason = res?.message || 'Server rejected the update request.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Student Details', `Failed to update student:\n\n${reason}`);
+          showToast(reason, 'error');
           return;
         }
-        // 2. Enroll in new course if selected
-        if (newCourse) {
+        // 2. Enroll in new course if selected and not already enrolled
+        const isAlreadyEnrolled = !!newCourse && (
+          selectedStudent.enrollments?.some(e => (e.courseTitle || '').trim().toLowerCase() === newCourse.trim().toLowerCase()) ||
+          (selectedStudent.course && selectedStudent.course.trim().toLowerCase() === newCourse.trim().toLowerCase())
+        );
+
+        if (newCourse && !isAlreadyEnrolled) {
           const enrollRes = await api.enrollStudent(selectedStudent.id, {
-            courseTitle: newCourse,
+            courseTitle: newCourse.trim(),
             batchName: newBatchName,
             enrollmentDate: newEnrollmentDate,
             paymentStatus: newPaymentStatus,
           });
           if (!enrollRes?.success) {
-            showToast(enrollRes?.message || 'Failed to add new course', 'error');
+            const reason = enrollRes?.message || 'Failed to add new course.';
+            setFormError(reason);
+            showFormErrorPopup('Enrollment Failed', `Student updated, but new course could not be added:\n\n${reason}`);
+            showToast(reason, 'error');
             return;
           }
           showToast('Student updated & enrolled in ' + newCourse, 'success');
         } else {
-          showToast('Student updated successfully', 'success');
+          showToast('Student details & batch updated successfully', 'success');
         }
         setIsModalVisible(false);
+
         // Optimistically update the card in local state immediately
-        const updatedName = `${formFirstName} ${formLastName}`.trim();
+        const allAssignedBatchNames = Object.values(enrollmentBatches).filter(Boolean);
+        if (newCourse && newBatchName) allAssignedBatchNames.push(newBatchName);
+        
+        const assignedBatches = batches.filter(b => allAssignedBatchNames.includes(b.batchName));
+        const isNowActive = assignedBatches.length > 0
+          ? assignedBatches.some(b => b.status !== 'COMPLETED')
+          : true;
+
+        const updatedName = `${formFirstName.trim()} ${formLastName.trim()}`.trim();
         setStudents(prev => prev.map(s => {
           if (s.id !== selectedStudent.id) return s;
           const updatedEnrollments = newCourse
-            ? [...(s.enrollments || []), { courseTitle: newCourse, enrollmentDate: newEnrollmentDate, paymentStatus: newPaymentStatus }]
-            : s.enrollments;
+            ? [
+                ...(s.enrollments || []).map(e => ({ ...e, batchName: enrollmentBatches[e.courseTitle] ?? (e as any).batchName })),
+                { courseTitle: newCourse, enrollmentDate: newEnrollmentDate, paymentStatus: newPaymentStatus, batchName: newBatchName }
+              ]
+            : (s.enrollments || []).map(e => ({ ...e, batchName: enrollmentBatches[e.courseTitle] ?? (e as any).batchName }));
           return {
             ...s,
             name: updatedName,
-            email: formEmail,
-            phone: formPhone,
+            email: formEmail.trim(),
+            phone: formPhone.trim(),
             dob: formDob,
             street: formStreet,
             city: formCity,
@@ -298,6 +392,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             pinCode: formPinCode,
             guardianName: formGuardianName,
             guardianPhone: formGuardianPhone,
+            active: isNowActive,
+            status: isNowActive ? 'Active' : 'Inactive',
+            batches: assignedBatches.map(b => ({
+              id: b.id,
+              batchName: b.batchName,
+              selectCourse: b.selectCourse,
+              status: b.status || 'ACTIVE',
+              startDate: b.startDate,
+              endDate: b.endDate,
+            })),
             enrollments: updatedEnrollments,
             coursesCount: updatedEnrollments?.length ?? s.coursesCount,
           };
@@ -305,28 +409,23 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         // Also refresh from server in background to stay in sync
         loadStudents(false);
       } catch (err: any) {
-        showToast(err.message || 'Cannot connect to server', 'error');
+        const reason = err?.message || 'Cannot connect to backend server.';
+        setFormError(reason);
+        showFormErrorPopup('Save Error', `Could not update student details:\n\n${reason}`);
+        showToast(reason, 'error');
       } finally {
         setSaving(false);
       }
     } else {
       // Adding new student or enrolling existing student to new course
-      if (!formPassword) {
-        showToast('Password is required for new enrollment', 'error');
-        return;
-      }
-
       setSaving(true);
       try {
-        // Backend will check if user exists and either:
-        // 1. Create new user + student + enrollment (new student)
-        // 2. Add new enrollment to existing student (re-enrollment)
         const res = await api.createUser({
-          firstName: formFirstName,
-          lastName: formLastName,
-          email: formEmail,
-          password: formPassword,
-          phone: formPhone,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          email: formEmail.trim(),
+          password: formPassword.trim(),
+          phone: formPhone.trim(),
           dob: formDob,
           street: formStreet,
           city: formCity,
@@ -345,10 +444,16 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
           showToast(res.message || 'Student enrolled successfully!', 'success');
           loadStudents();
         } else {
-          showToast(res.message || 'Failed to enroll student.', 'error');
+          const reason = res.message || 'Failed to enroll student.';
+          setFormError(reason);
+          showFormErrorPopup('Cannot Save Student Details', `Failed to register student:\n\n${reason}`);
+          showToast(reason, 'error');
         }
       } catch (err: any) {
-        showToast('Cannot reach server. Make sure backend is running.', 'error');
+        const reason = err?.message || 'Cannot reach server. Make sure backend is running.';
+        setFormError(reason);
+        showFormErrorPopup('Save Error', `Failed to register student:\n\n${reason}`);
+        showToast(reason, 'error');
       } finally {
         setSaving(false);
       }
@@ -397,6 +502,10 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={(v) => { setSearchQuery(v); setPage(1); }}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -484,16 +593,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                     <Text style={styles.studentName}>{item.name}</Text>
                     <Text style={styles.joinedText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
-                  {(() => {
-                    const isLogged = item.onlineStatus === 'online' || item.onlineStatus === 'always_online';
-                    return (
-                      <View style={[styles.statusBadge, isLogged ? styles.statusActive : styles.statusInactive]}>
-                        <Text style={[styles.statusText, isLogged ? styles.statusActiveText : styles.statusInactiveText]}>
-                          {isLogged ? 'Active' : 'Inactive'}
-                        </Text>
-                      </View>
-                    );
-                  })()}
+                  <View style={[styles.statusBadge, item.active !== false ? styles.statusActive : styles.statusInactive]}>
+                    <Text style={[styles.statusText, item.active !== false ? styles.statusActiveText : styles.statusInactiveText]}>
+                      {item.active !== false ? 'Active' : 'Inactive'}
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Info block */}
@@ -518,6 +622,36 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                           <Text style={styles.enrollmentTagStatus}>({enrollment.paymentStatus})</Text>
                         </View>
                       ))}
+                    </View>
+                  )}
+                  {item.batches && item.batches.length > 0 ? (
+                    <View style={styles.batchesRow}>
+                      <Ionicons name="time-outline" size={13} color="#6B7280" />
+                      <View style={styles.batchesList}>
+                        {item.batches.map((b, bIdx) => (
+                          <View
+                            key={bIdx}
+                            style={[
+                              styles.batchPill,
+                              b.status === 'COMPLETED' ? styles.batchPillCompleted : styles.batchPillActive
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.batchPillText,
+                                b.status === 'COMPLETED' ? styles.batchPillCompletedText : styles.batchPillActiveText
+                              ]}
+                            >
+                              {b.batchName} • {b.status === 'COMPLETED' ? 'Completed' : b.status === 'UPCOMING' ? 'Upcoming' : 'Active'}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.batchesRow}>
+                      <Ionicons name="time-outline" size={13} color="#9CA3AF" />
+                      <Text style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', marginLeft: 4 }}>No batch assigned</Text>
                     </View>
                   )}
                 </View>
@@ -588,6 +722,19 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
             </View>
 
             <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {formError && (
+                <View style={styles.modalErrorBox}>
+                  <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginTop: 1 }} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.modalErrorTitle}>Cannot Save Student</Text>
+                    <Text style={styles.modalErrorMessage}>{formError}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setFormError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Personal Information */}
               <Text style={styles.formSectionTitle}>Personal Information</Text>
               <View style={styles.formGroup}>
@@ -632,6 +779,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       placeholder="Set login password"
                       placeholderTextColor="#9CA3AF"
                       secureTextEntry={!formShowPassword}
+                      autoComplete="new-password"
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      textContentType="none"
                     />
                     <TouchableOpacity onPress={() => setFormShowPassword(!formShowPassword)}>
                       <Ionicons name={formShowPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9CA3AF" />
@@ -640,13 +792,14 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                 </View>
               )}
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Phone *</Text>
+                <Text style={styles.fieldLabel}>Phone * (10 digits starting 6-9)</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={formPhone}
-                  onChangeText={setFormPhone}
+                  onChangeText={(t) => setFormPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
                   keyboardType="phone-pad"
-                  placeholder="e.g. +91 98765 43210"
+                  maxLength={10}
+                  placeholder="e.g. 9876543210"
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
@@ -720,48 +873,193 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                 />
               </View>
               <View style={styles.formGroup}>
-                <Text style={styles.fieldLabel}>Guardian Phone</Text>
+                <Text style={styles.fieldLabel}>Guardian Phone (10 digits starting 6-9)</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={formGuardianPhone}
-                  onChangeText={setFormGuardianPhone}
+                  onChangeText={(t) => setFormGuardianPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
                   keyboardType="phone-pad"
-                  placeholder="e.g. +91 98765 43211"
+                  maxLength={10}
+                  placeholder="e.g. 9876543211"
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
 
               {/* Enrollment Details */}
-              <Text style={styles.formSectionTitle}>Enrollment Details</Text>
+              <Text style={styles.formSectionTitle}>Enrollment & Status</Text>
 
-              {/* In edit mode: show existing enrollments as read-only */}
-              {selectedStudent && selectedStudent.enrollments && selectedStudent.enrollments.length > 0 && (
-                <View style={styles.formGroup}>
-                  <Text style={styles.fieldLabel}>Current Enrollments</Text>
-                  <View style={styles.existingEnrollmentsBox}>
-                    {selectedStudent.enrollments.map((enr, idx) => (
-                      <View key={idx} style={styles.existingEnrollmentRow}>
-                        <Ionicons name="book-outline" size={13} color="#7B2CBF" />
-                        <Text style={styles.existingEnrollmentText}>{enr.courseTitle}</Text>
-                        <View style={[
-                          styles.existingEnrollmentBadge,
-                          enr.paymentStatus === 'Paid' ? styles.badgePaid :
-                            enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
-                        ]}>
-                          <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
-                        </View>
+              {/* Dynamic Batch-Dependent Status Banner */}
+              {selectedStudent && (
+                <View style={[
+                  styles.statusInfoBanner,
+                  selectedStudent.active !== false ? styles.statusInfoBannerActive : styles.statusInfoBannerInactive
+                ]}>
+                  <Ionicons
+                    name={selectedStudent.active !== false ? "checkmark-circle" : "time"}
+                    size={22}
+                    color={selectedStudent.active !== false ? "#10B981" : "#F59E0B"}
+                    style={{ marginTop: 2 }}
+                  />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.statusInfoTitle}>Student Status: </Text>
+                      <View style={[styles.statusBadge, selectedStudent.active !== false ? styles.statusActive : styles.statusInactive]}>
+                        <Text style={[styles.statusText, selectedStudent.active !== false ? styles.statusActiveText : styles.statusInactiveText]}>
+                          {selectedStudent.active !== false ? 'Active' : 'Inactive'}
+                        </Text>
                       </View>
-                    ))}
+                    </View>
+                    <Text style={styles.statusInfoSubtitle}>
+                      {selectedStudent.active !== false
+                        ? 'Active — Enrolled in active or upcoming batch schedules.'
+                        : 'Inactive — All enrolled batches have reached their completion date.'}
+                    </Text>
+                    <Text style={styles.statusInfoNote}>
+                      Status is automatically determined based on batch schedules and course enrollments.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* In edit mode: show existing enrollments with interactive batch switcher */}
+              {selectedStudent && (
+                ((selectedStudent.enrollments && selectedStudent.enrollments.length > 0) || !!selectedStudent.course)
+              ) && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Current Enrollments & Assigned Batches</Text>
+                  <View style={styles.existingEnrollmentsBox}>
+                    {(
+                      selectedStudent.enrollments && selectedStudent.enrollments.length > 0
+                        ? selectedStudent.enrollments
+                        : [{ id: 0, courseTitle: selectedStudent.course || '', paymentStatus: selectedStudent.paymentStatus || 'Pending', batchName: '' }]
+                    ).map((enr, idx) => {
+                      const cTitle = enr.courseTitle || '';
+                      if (!cTitle) return null;
+                      const selectedBatchForCourse = enrollmentBatches[cTitle] !== undefined
+                        ? enrollmentBatches[cTitle]
+                        : ((enr as any).batchName || '');
+
+                      const courseBatchesList = batches.filter(b =>
+                        (b.selectCourse || '').toLowerCase() === cTitle.toLowerCase() ||
+                        (b.selectCourse || '').toLowerCase().includes(cTitle.toLowerCase()) ||
+                        cTitle.toLowerCase().includes((b.selectCourse || '').toLowerCase())
+                      );
+                      const isOpen = openBatchDropdownCourse === cTitle;
+                      const currentBatchObj = batches.find(b => b.batchName === selectedBatchForCourse);
+
+                      return (
+                        <View key={idx} style={styles.existingEnrollmentContainer}>
+                          <View style={styles.existingEnrollmentRow}>
+                            <Ionicons name="book-outline" size={14} color="#7B2CBF" />
+                            <Text style={styles.existingEnrollmentText}>{cTitle}</Text>
+                            <View style={[
+                              styles.existingEnrollmentBadge,
+                              enr.paymentStatus === 'Paid' ? styles.badgePaid :
+                                enr.paymentStatus === 'Pending' ? styles.badgePending : styles.badgeFailed
+                            ]}>
+                              <Text style={styles.existingEnrollmentBadgeText}>{enr.paymentStatus}</Text>
+                            </View>
+                          </View>
+
+                          {/* Batch Selector Row */}
+                          <View style={styles.batchSelectorRow}>
+                            <Text style={styles.batchSelectorLabel}>Batch:</Text>
+                            <TouchableOpacity
+                              style={[
+                                styles.batchSelectorButton,
+                                isOpen && styles.batchSelectorButtonOpen,
+                                selectedBatchForCourse ? styles.batchSelectorButtonSelected : null
+                              ]}
+                              onPress={() => setOpenBatchDropdownCourse(isOpen ? null : cTitle)}
+                            >
+                              <Ionicons
+                                name="people-outline"
+                                size={13}
+                                color={selectedBatchForCourse ? "#7B2CBF" : "#9CA3AF"}
+                              />
+                              <Text style={[
+                                styles.batchSelectorButtonText,
+                                !selectedBatchForCourse && styles.batchSelectorButtonPlaceholder
+                              ]}>
+                                {selectedBatchForCourse
+                                  ? `${selectedBatchForCourse} (${currentBatchObj?.status === 'COMPLETED' ? 'Completed' : currentBatchObj?.status === 'UPCOMING' ? 'Upcoming' : 'Active'})`
+                                  : '— No Batch (Select to assign) —'}
+                              </Text>
+                              <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={14} color="#6B7280" />
+                            </TouchableOpacity>
+                          </View>
+
+                          {/* Dropdown Options for this enrolled course */}
+                          {isOpen && (
+                            <View style={styles.batchOptionsDropdown}>
+                              <TouchableOpacity
+                                style={[styles.batchOptionItem, !selectedBatchForCourse && styles.batchOptionItemSelected]}
+                                onPress={() => {
+                                  setEnrollmentBatches(prev => ({ ...prev, [cTitle]: '' }));
+                                  setOpenBatchDropdownCourse(null);
+                                }}
+                              >
+                                <Text style={[styles.batchOptionItemText, !selectedBatchForCourse && styles.batchOptionItemTextSelected]}>
+                                  — No Batch —
+                                </Text>
+                                {!selectedBatchForCourse && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                              </TouchableOpacity>
+
+                              {courseBatchesList.map(b => {
+                                const isSelected = selectedBatchForCourse === b.batchName;
+                                const isCompleted = b.status === 'COMPLETED';
+                                const isUpcoming = b.status === 'UPCOMING';
+                                return (
+                                  <TouchableOpacity
+                                    key={b.id}
+                                    style={[styles.batchOptionItem, isSelected && styles.batchOptionItemSelected]}
+                                    onPress={() => {
+                                      setEnrollmentBatches(prev => ({ ...prev, [cTitle]: b.batchName }));
+                                      setOpenBatchDropdownCourse(null);
+                                    }}
+                                  >
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={[styles.batchOptionItemText, isSelected && styles.batchOptionItemTextSelected]}>
+                                        {b.batchName}
+                                      </Text>
+                                      <Text style={styles.batchOptionSubtext}>
+                                        {isCompleted ? 'Completed' : isUpcoming ? 'Upcoming' : 'Active'}
+                                        {b.startDate ? ` • Starts: ${b.startDate}` : ''}
+                                        {b.endDate ? ` • Ends: ${b.endDate}` : ''}
+                                      </Text>
+                                    </View>
+                                    {isSelected && <Ionicons name="checkmark" size={16} color="#7B2CBF" />}
+                                  </TouchableOpacity>
+                                );
+                              })}
+
+                              {courseBatchesList.length === 0 && (
+                                <View style={styles.batchOptionItem}>
+                                  <Text style={[styles.batchOptionItemText, { color: '#9CA3AF' }]}>
+                                    No batches created for this course yet
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               )}
 
               {/* Add new course — shown in both add and edit mode */}
               <View style={[styles.formGroup, { zIndex: 1000 }]}>
-                <Text style={styles.fieldLabel}>{selectedStudent ? 'Add New Course' : 'Course *'}</Text>
+                <Text style={styles.fieldLabel}>{selectedStudent ? 'Enroll in Additional Course (Optional)' : 'Course *'}</Text>
+                {selectedStudent && (
+                  <Text style={{ fontSize: 11, color: '#6B7280', marginBottom: 6 }}>
+                    To change batches for current courses, use the dropdown above. Only select here to add a new course.
+                  </Text>
+                )}
                 <View style={styles.checkboxGroup}>
                   <Text style={[styles.dropdownText, !newCourse && styles.dropdownPlaceholder]}>
-                    {newCourse || 'Select a course'}
+                    {newCourse || 'Select an additional course'}
                   </Text>
                   <View style={styles.checkboxList}>
                     {courses.length === 0 ? (
@@ -770,7 +1068,13 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                       </View>
                     ) : (
                       courses
-                        .filter(c => !selectedStudent || !selectedStudent.enrollments?.some(e => e.courseTitle === c.title))
+                        .filter(c => {
+                          if (!selectedStudent) return true;
+                          const cTitleLower = (c.title || '').trim().toLowerCase();
+                          const enrolledInList = selectedStudent.enrollments?.some(e => (e.courseTitle || '').trim().toLowerCase() === cTitleLower);
+                          const enrolledInSingle = (selectedStudent.course || '').trim().toLowerCase() === cTitleLower;
+                          return !enrolledInList && !enrolledInSingle;
+                        })
                         .map((course) => (
                           <TouchableOpacity
                             key={course.id}
@@ -926,6 +1230,27 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
 }
 
 const styles = StyleSheet.create({
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  modalErrorMessage: {
+    fontSize: 12,
+    color: '#B91C1C',
+    lineHeight: 18,
+  },
   existingEnrollmentsBox: {
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -933,6 +1258,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     padding: 10,
     gap: 8,
+  },
+  existingEnrollmentContainer: {
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   existingEnrollmentRow: {
     flexDirection: 'row',
@@ -957,6 +1287,173 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#374151',
+  },
+  batchSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  batchSelectorLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+    width: 44,
+  },
+  batchSelectorButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    gap: 6,
+  },
+  batchSelectorButtonOpen: {
+    borderColor: '#7B2CBF',
+    backgroundColor: '#FAF5FF',
+  },
+  batchSelectorButtonSelected: {
+    borderColor: '#DDD6FE',
+  },
+  batchSelectorButtonText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  batchSelectorButtonPlaceholder: {
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  batchOptionsDropdown: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    marginTop: 6,
+    marginLeft: 52,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  batchOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  batchOptionItemSelected: {
+    backgroundColor: '#FAF5FF',
+  },
+  batchOptionItemText: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  batchOptionItemTextSelected: {
+    color: '#7B2CBF',
+    fontWeight: '700',
+  },
+  batchOptionSubtext: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  enrolledBatchInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    marginLeft: 21,
+  },
+  enrolledBatchText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  statusInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  statusInfoBannerActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  statusInfoBannerInactive: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  statusInfoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginRight: 6,
+  },
+  statusInfoValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusInfoSubtitle: {
+    fontSize: 12,
+    color: '#4B5563',
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  statusInfoNote: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  batchesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 2,
+  },
+  batchesList: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  batchPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  batchPillActive: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#DDD6FE',
+  },
+  batchPillCompleted: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  batchPillText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  batchPillActiveText: {
+    color: '#6D28D9',
+  },
+  batchPillCompletedText: {
+    color: '#6B7280',
   },
   filterTabsRow: {
     flexDirection: 'row',

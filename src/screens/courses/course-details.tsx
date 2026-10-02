@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseSyllabus } from '../../utils/syllabus-parser';
 import { getCompletedTopicsForCourse, parseTopicsData, isTopicCovered } from '../../utils/syllabus-progress-store';
-import { coursesData } from '../home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 export interface SyllabusItem {
   moduleNumber: string;

@@ -50,6 +50,9 @@ const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | 
 const [alertModal, setAlertModal] = useState<{ visible: boolean; title: string; message: string; type: 'error' | 'success' | 'info' }>({
   visible: false, title: '', message: '', type: 'error'
 });
+const [showForgotModal, setShowForgotModal] = useState(false);
+const [forgotEmail, setForgotEmail] = useState('');
+const [forgotLoading, setForgotLoading] = useState(false);
 const [showSourceDrop, setShowSourceDrop] = useState(false);
 const [showCourseDrop, setShowCourseDrop] = useState(false);
 const toastAnim = useRef(new Animated.Value(0)).current;
@@ -180,6 +183,43 @@ const [loading, setLoading] = useState(false);
       showAlertModal('Login Error', errorMsg, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenForgotPassword = () => {
+    setForgotEmail(signInEmail.trim());
+    setShowForgotModal(true);
+  };
+
+  const handleForgotPasswordSubmit = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const clean = forgotEmail.trim();
+    if (!clean) {
+      showToast('Please enter your email address', 'error');
+      return;
+    }
+    if (!emailRegex.test(clean)) {
+      showToast('Please enter a valid email address', 'error');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res: any = await api.forgotPassword(clean);
+      setShowForgotModal(false);
+      if (res && res.success !== false) {
+        showAlertModal(
+          'Request Submitted',
+          res.message || 'A password reset request has been forwarded to the Admin. You will receive instructions on your email.',
+          'success'
+        );
+      } else {
+        showAlertModal('Notice', res?.message || 'Could not submit request. Please try again.', 'error');
+      }
+    } catch (err: any) {
+      setShowForgotModal(false);
+      showAlertModal('Error', err?.message || 'Server error. Please try again later.', 'error');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -421,7 +461,10 @@ onPress={() => setRememberMe(!rememberMe)}
 </View>
 <Text style={styles.checkboxLabel}>Remember me</Text>
 </TouchableOpacity>
-<TouchableOpacity>
+<TouchableOpacity
+  onPress={handleOpenForgotPassword}
+  activeOpacity={0.7}
+>
 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
 </TouchableOpacity>
 </View>
@@ -617,6 +660,72 @@ showsVerticalScrollIndicator={false}
       </TouchableOpacity>
     </View>
   </View>
+</Modal>
+
+{/* Forgot Password Modal */}
+<Modal
+  visible={showForgotModal}
+  transparent
+  animationType="fade"
+  onRequestClose={() => { if (!forgotLoading) setShowForgotModal(false); }}
+>
+  <KeyboardAvoidingView
+    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    style={styles.modalOverlay}
+  >
+    <View style={styles.forgotModalCard}>
+      <View style={styles.forgotModalHeader}>
+        <View style={styles.forgotIconCircle}>
+          <Ionicons name="key-outline" size={30} color="#7B2CBF" />
+        </View>
+        <Text style={styles.forgotModalTitle}>Forgot Password?</Text>
+        <Text style={styles.forgotModalSubtitle}>
+          Enter your registered email address. A password reset request will be sent to the Admin, and you will receive reset instructions on your email.
+        </Text>
+      </View>
+
+      <View style={styles.forgotInputGroup}>
+        <Text style={styles.inputLabel}>Registered Email Address</Text>
+        <View style={styles.inputWrapper}>
+          <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. yourname@example.com"
+            placeholderTextColor="#9CA3AF"
+            value={forgotEmail}
+            onChangeText={setForgotEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!forgotLoading}
+          />
+        </View>
+      </View>
+
+      <View style={styles.forgotBtnRow}>
+        <TouchableOpacity
+          style={styles.forgotCancelBtn}
+          onPress={() => setShowForgotModal(false)}
+          disabled={forgotLoading}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.forgotCancelBtnText}>Cancel</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.forgotSubmitBtn}
+          onPress={handleForgotPasswordSubmit}
+          disabled={forgotLoading}
+          activeOpacity={0.85}
+        >
+          {forgotLoading ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <Text style={styles.forgotSubmitBtnText}>Submit Request</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  </KeyboardAvoidingView>
 </Modal>
 
 </View>
@@ -1090,6 +1199,82 @@ btnSuccess: {
 alertButtonText: {
   color: '#FFF',
   fontSize: 16,
+  fontWeight: '600',
+},
+forgotModalCard: {
+  backgroundColor: '#FFF',
+  borderRadius: 24,
+  padding: 24,
+  width: '100%',
+  maxWidth: 420,
+  elevation: 12,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 10 },
+  shadowOpacity: 0.25,
+  shadowRadius: 20,
+},
+forgotModalHeader: {
+  alignItems: 'center',
+  marginBottom: 20,
+},
+forgotIconCircle: {
+  width: 60,
+  height: 60,
+  borderRadius: 30,
+  backgroundColor: '#F3E8FF',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginBottom: 12,
+},
+forgotModalTitle: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#111827',
+  marginBottom: 8,
+  textAlign: 'center',
+},
+forgotModalSubtitle: {
+  fontSize: 13,
+  color: '#6B7280',
+  textAlign: 'center',
+  lineHeight: 18,
+  paddingHorizontal: 8,
+},
+forgotInputGroup: {
+  marginBottom: 20,
+  width: '100%',
+},
+forgotBtnRow: {
+  flexDirection: 'row',
+  gap: 12,
+  width: '100%',
+},
+forgotCancelBtn: {
+  flex: 1,
+  height: 48,
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+  backgroundColor: '#F9FAFB',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+forgotCancelBtnText: {
+  color: '#4B5563',
+  fontSize: 15,
+  fontWeight: '600',
+},
+forgotSubmitBtn: {
+  flex: 1.4,
+  height: 48,
+  borderRadius: 14,
+  backgroundColor: '#7B2CBF',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+forgotSubmitBtnText: {
+  color: '#FFF',
+  fontSize: 15,
   fontWeight: '600',
 },
 });

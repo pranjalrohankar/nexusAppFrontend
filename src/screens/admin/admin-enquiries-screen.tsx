@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Platform, Linking, StatusBar,
+  TextInput, StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -142,7 +142,7 @@ function EnquiryDetail({
           ) : null}
           {enquiry.message ? (
             <View style={det.messageBox}>
-              <Text style={det.messageText}>&quot;{enquiry.message}&quot;</Text>
+              <Text style={det.messageText}>"{enquiry.message}"</Text>
             </View>
           ) : null}
         </View>
@@ -151,32 +151,25 @@ function EnquiryDetail({
         <View style={det.section}>
           <Text style={det.sectionLabel}>QUICK ACTIONS</Text>
           <View style={det.actionsRow}>
-            <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`tel:${enquiry.phoneNumber}`)}>
-              <Ionicons name="call-outline" size={15} color="#16A34A" />
+            <TouchableOpacity style={det.actionBtn} onPress={() => {}}>
+              <Ionicons name="mail-outline" size={16} color="#7B2CBF" />
+              <Text style={[det.actionText, { color: '#7B2CBF' }]}>Email</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={det.actionBtn} onPress={() => {}}>
+              <Ionicons name="call-outline" size={16} color="#16A34A" />
               <Text style={[det.actionText, { color: '#16A34A' }]}>Call</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`mailto:${enquiry.email}`)}>
-              <Ionicons name="mail-outline" size={15} color="#2563EB" />
-              <Text style={[det.actionText, { color: '#2563EB' }]}>Email</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={det.actionBtn} onPress={() => Linking.openURL(`https://wa.me/${enquiry.phoneNumber?.replace(/\D/g, '')}`)}>
-              <Ionicons name="logo-whatsapp" size={15} color="#25D366" />
+            <TouchableOpacity style={det.actionBtn} onPress={() => {}}>
+              <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
               <Text style={[det.actionText, { color: '#25D366' }]}>WhatsApp</Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Footer */}
       <View style={det.footer}>
-        <TouchableOpacity style={det.saveBtn}>
-          <Ionicons name="send-outline" size={16} color="#FFF" />
-          <Text style={det.saveBtnText}>Save</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={det.closeBtn} onPress={onClose}>
-          <Text style={det.closeBtnText}>Close</Text>
+          <Text style={det.closeBtnText}>Back to Enquiries</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -188,20 +181,20 @@ const det = StyleSheet.create({
   header: { backgroundColor: '#7B2CBF', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   accentLine: { height: 3, borderRadius: 2, marginBottom: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
+  backBtn: { padding: 4 },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#FFF' },
-  newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
-  newBadgeText: { fontSize: 11, color: '#FFF', fontWeight: '600' },
-  scroll: { flex: 1, backgroundColor: '#F3F4F6' },
+  newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, gap: 3 },
+  newBadgeText: { fontSize: 11, color: '#2563EB', fontWeight: '600' },
+  scroll: { flex: 1, backgroundColor: '#F9FAFB' },
   scrollContent: { padding: 16 },
-  personCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 18, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-  avatar: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 17 },
+  personCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  avatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   personMid: { flex: 1 },
-  name: { fontSize: 17, fontWeight: 'bold', color: '#1F2937' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' },
+  name: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   metaText: { fontSize: 11, color: '#9CA3AF' },
-  metaDot: { fontSize: 11, color: '#9CA3AF' },
+  metaDot: { fontSize: 11, color: '#D1D5DB' },
   section: { borderWidth: 1.5, borderColor: '#E5E7EB', borderStyle: 'dashed', borderRadius: 14, padding: 16, marginBottom: 14, backgroundColor: '#FFF' },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 1, marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
@@ -216,16 +209,14 @@ const det = StyleSheet.create({
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingVertical: 10 },
   actionText: { fontSize: 13, fontWeight: '600' },
   footer: { flexDirection: 'row', gap: 12, padding: 16, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#7B2CBF', borderRadius: 14, height: 50 },
-  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  closeBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 14, height: 50 },
-  closeBtnText: { color: '#1F2937', fontWeight: '600', fontSize: 15 },
+  closeBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#7B2CBF', borderRadius: 14, height: 50 },
+  closeBtnText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
 });
 
 interface Props {
   enquiries: any[];
   onClose: () => void;
-  onEnquiriesUpdate: (updated: any[]) => void;
+  onEnquiriesUpdate?: (updated: any[]) => void;
 }
 
 export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUpdate }: Props) {
@@ -241,14 +232,14 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
     unread.forEach(e => api.markEnquiryRead(e.id).catch(() => {}));
     const updated = localEnquiries.map(e => ({ ...e, isRead: true }));
     setLocalEnquiries(updated);
-    onEnquiriesUpdate(updated);
+    if (onEnquiriesUpdate) onEnquiriesUpdate(updated);
   };
 
   const handleRead = (id: number) => {
     api.markEnquiryRead(id).catch(() => {});
     const updated = localEnquiries.map(e => e.id === id ? { ...e, isRead: true } : e);
     setLocalEnquiries(updated);
-    onEnquiriesUpdate(updated);
+    if (onEnquiriesUpdate) onEnquiriesUpdate(updated);
   };
 
   if (selected) {
@@ -262,7 +253,7 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
     );
   }
 
-  const filtered = localEnquiries.filter(e =>
+  const filteredEnquiries = localEnquiries.filter(e =>
     [e.fullName, e.email, e.phoneNumber, e.course].some(v =>
       v?.toLowerCase().includes(search.toLowerCase())
     )
@@ -278,12 +269,13 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
           <TouchableOpacity style={eq.backBtn} onPress={onClose}>
             <Ionicons name="arrow-back" size={20} color="#FFF" />
           </TouchableOpacity>
-          <Text style={eq.headerTitle}>Enquiries</Text>
+          <Text style={eq.headerTitle}>Student Enquiries</Text>
           <TouchableOpacity style={eq.markAllBtn} onPress={handleMarkAllRead}>
             <Ionicons name="checkmark-done-outline" size={15} color="#7B2CBF" />
             <Text style={eq.markAllText}>Read All</Text>
           </TouchableOpacity>
         </View>
+
         <View style={eq.searchBar}>
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
@@ -292,18 +284,28 @@ export default function AdminEnquiriesScreen({ enquiries, onClose, onEnquiriesUp
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
+            autoComplete="off"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
           />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
+      {/* BODY CONTENT */}
       <ScrollView style={eq.list} contentContainerStyle={eq.listContent} showsVerticalScrollIndicator={false}>
-        {filtered.length === 0 ? (
+        {filteredEnquiries.length === 0 ? (
           <View style={eq.emptyBox}>
-            <Ionicons name="mail-outline" size={40} color="#D1D5DB" />
+            <Ionicons name="mail-outline" size={44} color="#D1D5DB" />
             <Text style={eq.emptyText}>No enquiries found</Text>
           </View>
         ) : (
-          filtered.map((e: any, idx: number) => {
+          filteredEnquiries.map((e: any, idx: number) => {
             const pill = PILL_STYLES[idx % 5];
             const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
             const initials = (e.fullName ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -360,12 +362,12 @@ const eq = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#7B2CBF' },
   header: { backgroundColor: '#7B2CBF', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   accentLine: { height: 3, borderRadius: 2, marginBottom: 10 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   backBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, fontSize: 26, fontWeight: '700', color: '#FFF' },
+  headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#FFF' },
   markAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   markAllText: { fontSize: 12, fontWeight: '700', color: '#7B2CBF' },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, paddingHorizontal: 14, height: 46, gap: 8 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 14, paddingHorizontal: 14, height: 44, gap: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#1F2937' },
   list: { flex: 1, backgroundColor: '#F3F4F6' },
   listContent: { padding: 16, gap: 12 },
@@ -373,10 +375,10 @@ const eq = StyleSheet.create({
   emptyText: { fontSize: 14, color: '#9CA3AF' },
   card: { backgroundColor: '#FFF', borderRadius: 18, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 8 },
-  avatar: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
   cardMid: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   name: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', flex: 1 },
   newBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, gap: 3 },
   newDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },

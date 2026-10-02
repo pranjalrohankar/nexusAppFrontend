@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import { api, getApiBaseUrl } from '@/services/api';
 import { parseSyllabus } from '@/utils/syllabus-parser';
-import { coursesData } from '@/screens/home/home-screen';
+import { coursesData } from '@/constants/courses-data';
 
 interface StudyMaterialsScreenProps {
   onClose?: () => void;

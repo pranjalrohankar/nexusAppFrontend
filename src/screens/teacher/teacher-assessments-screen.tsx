@@ -157,21 +157,61 @@ function normalizeQuestions(rawList: any, fallbackTitle: string): Question[] {
   });
 }
 
+const DEMO_TEST_TITLES = [
+  'javascript es6+ assessment',
+  'react advanced patterns test',
+  'ui/ux design fundamentals',
+  'data science foundations',
+  'java full stack & spring boot assessment',
+  'wireframing & prototyping quiz',
+];
+
+const isDemoTestTitle = (title?: string) => {
+  if (!title) return false;
+  const lower = title.toLowerCase().trim();
+  return DEMO_TEST_TITLES.some(dt => lower.includes(dt));
+};
+
+const DUMMY_STUDENT_NAMES = [
+  'ruchita',
+  'shruti',
+  'suraj',
+  'pallavi',
+  'kapil',
+  'rahul',
+  'mandar',
+  'anil',
+  'pranay',
+  'kishor',
+  'dummy'
+];
+
+const isDummySubmission = (sub: any) => {
+  if (!sub) return false;
+  const name = String(sub.studentName || sub.student?.name || '').toLowerCase();
+  const email = String(sub.studentEmail || sub.student?.email || '').toLowerCase();
+  const title = String(sub.testTitle || sub.test?.testName || '').toLowerCase();
+  const feedback = String(sub.feedback || '').toLowerCase();
+
+  if (DUMMY_STUDENT_NAMES.some(dn => name.includes(dn) || email.includes(dn))) {
+    return true;
+  }
+  if (isDemoTestTitle(title)) {
+    return true;
+  }
+  if (feedback.includes('proctoring violation') || feedback.includes('auto-submitted')) {
+    return true;
+  }
+  return false;
+};
+
 export default function TeacherAssessmentsScreen() {
   const [activeTab, setActiveTab] = useState<'MANAGE_TESTS' | 'CHECK_SUBMISSIONS'>('MANAGE_TESTS');
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedTestForView, setSelectedTestForView] = useState<Test | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const defaultTests: Test[] = [
-    { id: '1', title: 'JavaScript ES6+ Assessment', questionsCount: 5, duration: '35 mins', passScore: '70%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    { id: '2', title: 'React Advanced Patterns Test', questionsCount: 5, duration: '45 mins', passScore: '75%', category: 'Full Stack Development', testType: 'MCQ', totalMarks: 100 },
-    { id: '3', title: 'UI/UX Design Fundamentals', questionsCount: 5, duration: '30 mins', passScore: '70%', category: 'UI/UX Design', testType: 'MCQ', totalMarks: 100 },
-    { id: '4', title: 'Data Science Foundations', questionsCount: 5, duration: '40 mins', passScore: '70%', category: 'Data Science & Machine Learning', testType: 'MCQ', totalMarks: 100 },
-    { id: '5', title: 'Java Full Stack & Spring Boot Assessment', questionsCount: 5, duration: '45 mins', passScore: '75%', category: 'Java Full Stack', testType: 'MCQ', totalMarks: 100 },
-  ];
-
-  const [tests, setTests] = useState<Test[]>(defaultTests);
+  const [tests, setTests] = useState<Test[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
 
   // Wizard Fields
@@ -212,12 +252,18 @@ export default function TeacherAssessmentsScreen() {
         const res = await api.getAllTests();
         apiTests = Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
       } catch (_) {}
+      apiTests = apiTests.filter((t: any) => !isDemoTestTitle(t.title || t.testName));
 
       const storedTests = await AsyncStorage.getItem(PUBLISHED_TESTS_KEY);
       let localTests: any[] = [];
       if (storedTests) {
         const parsed = safeParseJson(storedTests, []);
         if (Array.isArray(parsed)) localTests = parsed;
+      }
+      const initialLocalTestsLen = localTests.length;
+      localTests = localTests.filter((t: any) => !isDemoTestTitle(t.title || t.testName));
+      if (localTests.length !== initialLocalTestsLen) {
+        await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(localTests));
       }
 
       // Merge backend and local tests
@@ -245,11 +291,6 @@ export default function TeacherAssessmentsScreen() {
           mergedTestsMap.set(String(t.id), t);
         }
       });
-      defaultTests.forEach((dt) => {
-        if (!mergedTestsMap.has(String(dt.id))) {
-          mergedTestsMap.set(String(dt.id), dt);
-        }
-      });
       setTests(Array.from(mergedTestsMap.values()));
 
       // 2. Fetch submissions from backend API + AsyncStorage
@@ -258,12 +299,20 @@ export default function TeacherAssessmentsScreen() {
         const subRes = await api.getTestSubmissions();
         apiSubs = Array.isArray(subRes) ? subRes : Array.isArray((subRes as any)?.data) ? (subRes as any).data : [];
       } catch (_) {}
+      apiSubs = apiSubs.filter((s: any) => !isDummySubmission(s));
 
       const storedSubs = await AsyncStorage.getItem(TEST_SUBMISSIONS_KEY);
       let localSubs: any[] = [];
       if (storedSubs) {
-        const parsed = JSON.parse(storedSubs);
+        const parsed = safeParseJson(storedSubs, []);
         if (Array.isArray(parsed)) localSubs = parsed;
+      }
+      const initialSubsLen = localSubs.length;
+      localSubs = localSubs.filter((s: any) => !isDummySubmission(s));
+      if (localSubs.length === 0) {
+        await AsyncStorage.removeItem(TEST_SUBMISSIONS_KEY);
+      } else if (localSubs.length !== initialSubsLen) {
+        await AsyncStorage.setItem(TEST_SUBMISSIONS_KEY, JSON.stringify(localSubs));
       }
 
       const mergedSubsMap = new Map<string, Submission>();
@@ -334,6 +383,10 @@ export default function TeacherAssessmentsScreen() {
         const updatedTests = tests.filter(t => t.id !== testId);
         setTests(updatedTests);
         await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(updatedTests));
+        const numId = parseInt(testId, 10);
+        if (!isNaN(numId)) {
+          api.deleteTest(numId).catch(() => {});
+        }
         Alert.alert('Success', 'Test deleted successfully');
       } catch (err) {
         console.error('Failed to delete test:', err);
@@ -352,6 +405,66 @@ export default function TeacherAssessmentsScreen() {
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+        ]
+      );
+    }
+  };
+
+  const handleDeleteSubmission = async (submissionId: string) => {
+    const confirmDelete = async () => {
+      try {
+        const updatedSubs = submissions.filter(s => s.id !== submissionId);
+        setSubmissions(updatedSubs);
+        await AsyncStorage.setItem(TEST_SUBMISSIONS_KEY, JSON.stringify(updatedSubs));
+        const numId = parseInt(submissionId.replace(/\D/g, ''), 10);
+        if (!isNaN(numId)) {
+          api.deleteTestSubmission(numId).catch(() => {});
+        }
+        Alert.alert('Success', 'Submission deleted successfully');
+      } catch (err) {
+        console.error('Failed to delete submission:', err);
+        Alert.alert('Error', 'Failed to delete submission');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this submission?')) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Submission',
+        'Are you sure you want to delete this student submission?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+        ]
+      );
+    }
+  };
+
+  const handleClearAllSubmissions = async () => {
+    const doClear = async () => {
+      try {
+        setSubmissions([]);
+        setGradingMarks({});
+        setGradingFeedback({});
+        await AsyncStorage.removeItem(TEST_SUBMISSIONS_KEY);
+        Alert.alert('Submissions Cleared', 'All test submissions have been removed.');
+      } catch (_) {}
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to remove all dummy student submissions?')) {
+        await doClear();
+      }
+    } else {
+      Alert.alert(
+        'Clear Submissions',
+        'Are you sure you want to remove all student submissions?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Clear All', style: 'destructive', onPress: doClear },
         ]
       );
     }
@@ -454,35 +567,47 @@ export default function TeacherAssessmentsScreen() {
     };
 
     // 1. Persist to backend database via API
-    api.createTest({
-      title: newTest.title,
-      courseTitle: newTest.category,
-      category: newTest.category,
-      duration: newTest.duration,
-      passScore: newTest.passScore,
-      totalMarks: newTest.totalMarks,
-      testType: newTest.testType,
-      questionsCount: newTest.questionsCount,
-      pdfFileName: newTest.pdfFileName,
-      pdfFileUri: newTest.pdfFileUri,
-      pdfInstructions: newTest.pdfInstructions,
-      questionsJson: JSON.stringify(finalQuestions),
-    }).then((created: any) => {
-      if (created?.data?.id) {
-        newTest.id = String(created.data.id);
+    setIsRefreshing(true);
+    try {
+      const res: any = await api.createTest({
+        title: newTest.title,
+        courseTitle: newTest.category,
+        category: newTest.category,
+        duration: newTest.duration,
+        passScore: newTest.passScore,
+        totalMarks: newTest.totalMarks,
+        testType: newTest.testType,
+        questionsCount: newTest.questionsCount,
+        pdfFileName: newTest.pdfFileName,
+        pdfFileUri: newTest.pdfFileUri,
+        pdfInstructions: newTest.pdfInstructions,
+        questionsJson: JSON.stringify(finalQuestions),
+      });
+
+      const resData = res?.data ?? res;
+      if (resData?.id) {
+        newTest.id = String(resData.id);
       }
-    }).catch(err => console.log('Backend test creation error:', err));
 
-    const updatedTests = [newTest, ...tests];
-    setTests(updatedTests);
-    await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(updatedTests));
+      const updatedTests = [newTest, ...tests.filter(t => t.id !== newTest.id)];
+      setTests(updatedTests);
+      await AsyncStorage.setItem(PUBLISHED_TESTS_KEY, JSON.stringify(updatedTests));
 
-    // Reset Wizard
-    setTitle(''); setDuration('45'); setPassScore('75'); setTotalMarks('100');
-    setCategory('Full Stack Development'); setPdfFileName(''); setPdfFileUri('');
-    setPdfInstructions(''); setWizardQuestions([]); setExtractedMcqs([]); setShowCreateWizard(false);
+      // Reset Wizard
+      setTitle(''); setDuration('45'); setPassScore('75'); setTotalMarks('100');
+      setCategory('Full Stack Development'); setPdfFileName(''); setPdfFileUri('');
+      setPdfInstructions(''); setWizardQuestions([]); setExtractedMcqs([]); setShowCreateWizard(false);
 
-    Alert.alert('Test Published! 🎉', `"${newTest.title}" with ${finalQuestions.length} interactive MCQs has been successfully added to student active test list.`);
+      Alert.alert('Test Published! 🎉', `"${newTest.title}" with ${finalQuestions.length} interactive MCQs has been successfully saved to database and added to test list.`);
+      
+      // Full sync with backend
+      await loadTestsAndSubmissions();
+    } catch (err: any) {
+      console.error('Backend test creation error:', err);
+      Alert.alert('Save Failed', 'Could not save test to database: ' + (err?.message || 'Server connection error'));
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleSaveGrade = async (submissionId: string) => {
@@ -906,18 +1031,39 @@ export default function TeacherAssessmentsScreen() {
           <View style={styles.listContainer}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>✍️ Student Submissions ({submissions.length})</Text>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
-                onPress={loadTestsAndSubmissions}
-                disabled={isRefreshing}
-              >
-                {isRefreshing ? (
-                  <ActivityIndicator size="small" color="#7B2CBF" />
-                ) : (
-                  <Ionicons name="refresh-outline" size={14} color="#7B2CBF" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {submissions.length > 0 && (
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      backgroundColor: '#FEE2E2',
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#FECACA',
+                    }}
+                    onPress={handleClearAllSubmissions}
+                  >
+                    <Ionicons name="trash-outline" size={13} color="#DC2626" />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626' }}>Clear All ({submissions.length})</Text>
+                  </TouchableOpacity>
                 )}
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#7B2CBF' }}>Refresh</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                  onPress={loadTestsAndSubmissions}
+                  disabled={isRefreshing}
+                >
+                  {isRefreshing ? (
+                    <ActivityIndicator size="small" color="#7B2CBF" />
+                  ) : (
+                    <Ionicons name="refresh-outline" size={14} color="#7B2CBF" />
+                  )}
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#7B2CBF' }}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {submissions.length === 0 ? (
@@ -937,10 +1083,26 @@ export default function TeacherAssessmentsScreen() {
                       <Text style={styles.subTestTitle}>{sub.testTitle}</Text>
                       <Text style={styles.subDate}>Submitted: {sub.submittedAt}</Text>
                     </View>
-                    <View style={[styles.statusBadge, sub.status === 'GRADED' ? styles.badgeGraded : styles.badgePending]}>
-                      <Text style={[styles.statusBadgeText, sub.status === 'GRADED' ? styles.badgeTextGraded : styles.badgeTextPending]}>
-                        {sub.status === 'GRADED' ? 'GRADED' : 'PENDING EVALUATION'}
-                      </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={[styles.statusBadge, sub.status === 'GRADED' ? styles.badgeGraded : styles.badgePending]}>
+                        <Text style={[styles.statusBadgeText, sub.status === 'GRADED' ? styles.badgeTextGraded : styles.badgeTextPending]}>
+                          {sub.status === 'GRADED' ? 'GRADED' : 'PENDING EVALUATION'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          backgroundColor: '#FEE2E2',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                        onPress={() => handleDeleteSubmission(sub.id)}
+                        accessibilityLabel="Delete submission"
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                      </TouchableOpacity>
                     </View>
                   </View>
 

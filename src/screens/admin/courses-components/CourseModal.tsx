@@ -19,6 +19,8 @@ interface CourseModalProps {
   teachers?: Teacher[];
   formData: CourseFormData;
   showInstructorDropdown?: boolean;
+  errorMessage?: string | null;
+  onClearError?: () => void;
   onClose: () => void;
   onUpdateField: <K extends keyof CourseFormData>(key: K, value: CourseFormData[K]) => void;
   onToggleDropdown?: () => void;
@@ -31,6 +33,8 @@ export const CourseModal = React.memo(({
   teachers,
   formData,
   showInstructorDropdown,
+  errorMessage,
+  onClearError,
   onClose,
   onUpdateField,
   onToggleDropdown,
@@ -55,6 +59,21 @@ export const CourseModal = React.memo(({
           </View>
 
           <ScrollView contentContainerStyle={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            {errorMessage && (
+              <View style={styles.modalErrorBox}>
+                <Ionicons name="alert-circle" size={20} color="#DC2626" style={{ marginTop: 1 }} />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={styles.modalErrorTitle}>Cannot Save Course</Text>
+                  <Text style={styles.modalErrorMessage}>{errorMessage}</Text>
+                </View>
+                {onClearError && (
+                  <TouchableOpacity onPress={onClearError} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={18} color="#DC2626" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {/* Basic Info */}
             <Text style={styles.formSectionTitle}>Basic Information</Text>
 
@@ -236,6 +255,27 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     padding: 20,
+  },
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalErrorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991B1B',
+    marginBottom: 2,
+  },
+  modalErrorMessage: {
+    fontSize: 12,
+    color: '#B91C1C',
+    lineHeight: 18,
   },
   formSectionTitle: {
     fontSize: 15,

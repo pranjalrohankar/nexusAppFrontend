@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../services/api';
+import { showFormErrorPopup } from '../../utils/alert-helper';
 
 const PROFILE_PHOTO_KEY = 'user_profile_photo';
 
@@ -159,38 +160,77 @@ export default function AccountSettingsScreen({
   };
 
   const handleSaveChanges = async () => {
-    if (!name.trim()) { showToast('Name cannot be empty.', 'error'); return; }
+    const validationErrors: string[] = [];
+    if (!name.trim()) {
+      validationErrors.push('• Full Name cannot be empty.');
+    }
+
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (phone.trim() && !phoneRegex.test(phone.trim())) {
+      validationErrors.push('• Mobile Number must be a valid 10-digit number starting with 6, 7, 8, or 9.');
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMsg = validationErrors.join('\n');
+      showFormErrorPopup('Cannot Save Profile Changes', `Profile details cannot be saved due to the following reasons:\n\n${errorMsg}`);
+      showToast('Please fix the validation errors shown.', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
       if (userRole === 'student') {
         if (!profile) {
-          const res: any = await (api as any).updateUserProfile({ name: name.trim(), phone, city, state });
-          if (res?.success !== false) {
-            setProfile((prev: any) => ({ ...prev, name: name.trim(), phone, city, state }));
-            showToast('Profile updated successfully!', 'success');
+          const res: any = await (api as any).updateUserProfile({ name: name.trim(), phone: phone.trim(), city: city.trim(), state: state.trim() });
+          if (res?.success === false) {
+            const reason = res.message || 'Failed to update profile.';
+            showFormErrorPopup('Save Failed', `Could not update profile:\n\n${reason}`);
+            showToast(reason, 'error');
             return;
           }
+          setProfile((prev: any) => ({ ...prev, name: name.trim(), phone: phone.trim(), city: city.trim(), state: state.trim() }));
+          showToast('Profile updated successfully!', 'success');
+          return;
         }
         const nameParts = name.trim().split(' ');
         const firstName = nameParts[0];
         const lastName = nameParts.slice(1).join(' ') || '.';
         const res: any = await (api as any).updateStudentProfile({
-          firstName, lastName, phone, city, state,
+          firstName, lastName, phone: phone.trim(), city: city.trim(), state: state.trim(),
         });
-        if (res?.success === false) { showToast(res.message || 'Failed to update.', 'error'); return; }
-        setProfile((prev: any) => ({ ...prev, name: name.trim(), phone, city, state }));
+        if (res?.success === false) {
+          const reason = res.message || 'Failed to update profile.';
+          showFormErrorPopup('Save Failed', `Could not update profile:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
+        setProfile((prev: any) => ({ ...prev, name: name.trim(), phone: phone.trim(), city: city.trim(), state: state.trim() }));
         showToast('Profile updated successfully!', 'success');
       } else if (userRole === 'teacher') {
-        await (api as any).updateTeacherProfile({ name, phone, city, state, profileImage: photoUri });
+        const res: any = await (api as any).updateTeacherProfile({ name: name.trim(), phone: phone.trim(), city: city.trim(), state: state.trim(), profileImage: photoUri });
+        if (res?.success === false) {
+          const reason = res.message || 'Failed to update teacher profile.';
+          showFormErrorPopup('Save Failed', `Could not update profile:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
         showToast('Profile updated successfully!', 'success');
         setTimeout(() => onBack(), 1600);
       } else if (userRole === 'admin') {
-        await (api as any).updateUserProfile({ name, phone, city, state });
+        const res: any = await (api as any).updateUserProfile({ name: name.trim(), phone: phone.trim(), city: city.trim(), state: state.trim() });
+        if (res?.success === false) {
+          const reason = res.message || 'Failed to update admin profile.';
+          showFormErrorPopup('Save Failed', `Could not update profile:\n\n${reason}`);
+          showToast(reason, 'error');
+          return;
+        }
         showToast('Profile updated successfully!', 'success');
         setTimeout(() => onBack(), 1600);
       }
     } catch (err: any) {
-      showToast(err?.message || 'Failed to save changes. Please try again.', 'error');
+      const reason = err?.message || 'Failed to save changes. Please try again.';
+      showFormErrorPopup('Save Error', `Could not save profile changes:\n\n${reason}`);
+      showToast(reason, 'error');
     } finally {
       setSaving(false);
     }
@@ -422,16 +462,6 @@ const styles = StyleSheet.create({
     padding: 0,
     margin: 0,
     borderWidth: 0,
-    outlineStyle: 'none',
-    outlineWidth: 0,
-    outlineColor: 'transparent',
-    ...(Platform.OS === 'web'
-      ? ({
-          outline: 'none',
-          boxShadow: 'none',
-          border: 'none',
-        } as any)
-      : {}),
   },
   divider: { height: 1, backgroundColor: '#F0F0F0', marginLeft: 50 },
   saveBtn: {

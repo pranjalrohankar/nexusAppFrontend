@@ -193,6 +193,11 @@ async function handleResponse(res: Response | null) {
         return { success: false, message: json.message || `HTTP ${res.status}`, data: json.data || [], status: res.status };
       }
     } catch {}
+    if (text && text.trim().startsWith('<')) {
+      const messageMatch = text.match(/<b>Message<\/b>\s*([^<]+)/i) || text.match(/<title>([^<]+)<\/title>/i);
+      const cleanMsg = messageMatch ? messageMatch[1].trim() : `Server error (HTTP ${res.status})`;
+      return { success: false, message: cleanMsg, data: [], status: res.status };
+    }
     return { success: false, message: text || `HTTP ${res.status}`, data: [], status: res.status };
   }
   if (res.status === 204)
@@ -369,6 +374,15 @@ export const api = {
     deviceFingerprint?: string,
   ) => post("/auth/login", { email, password, role, deviceFingerprint }, "application/json", true),
 
+  forgotPassword: (email: string) =>
+    post("/auth/forgot-password", { email }, "application/json", true),
+
+  getPasswordResetRequests: () => get("/admin/password-resets"),
+  resolvePasswordResetRequest: (id: number | string, newPassword?: string) =>
+    put(`/admin/password-resets/${id}/resolve`, newPassword ? { newPassword } : {}),
+  deletePasswordResetRequest: (id: number | string) =>
+    del(`/admin/password-resets/${id}`),
+
   createUser: (data: object) => post("/admin/users", data),
 
   getStudents: () => get("/admin/students"),
@@ -376,6 +390,10 @@ export const api = {
   getTeacher: (id: number | string) => get(`/teachers/${id}`),
   updateStudent: (id: number | string, data: object) =>
     put(`/admin/students/${id}`, data),
+  changeStudentBatch: (id: number | string, data: object) =>
+    put(`/admin/students/${id}/change-batch`, data),
+  reassignBatchStudent: (batchId: number | string, data: object) =>
+    put(`/batches/${batchId}/reassign-student`, data),
   enrollStudent: (id: number | string, data: object) =>
     post(`/admin/students/${id}/enroll`, data),
   deleteStudent: (id: number | string) => del(`/admin/students/${id}`),
@@ -475,6 +493,7 @@ export const api = {
     get(`/auth/login-history?userId=${userId}`),
   getSecuritySettings: (userId: number | string) =>
     get(`/auth/security-settings?userId=${userId}`),
+  updateSecuritySettings: (data: object) => put('/auth/security-settings', data),
   // Batch and Course covered topics
   getBatchCoveredTopics: (batchId: number | string) => get(`/batches/${batchId}/covered-topics`),
   updateBatchCoveredTopics: (batchId: number | string, topics: string[] | string) =>
@@ -527,8 +546,10 @@ export const api = {
   getPrivacySettings: () => get('/student/privacy-settings'),
   updatePrivacySettings: (data: object) => put('/student/privacy-settings', data),
 
-  // Teacher notification endpoints
+  // Notification endpoints
   getTeacherNotifications: () => get('/notifications/teacher'),
+  getAdminNotifications: () => get('/notifications/admin'),
+  getMyNotifications: () => get('/notifications/my'),
   markNotificationRead: (id: number | string) => patch(`/notifications/${id}/read`),
   markAllNotificationsRead: (role: string) => patch(`/notifications/mark-all-read?role=${role}`),
 
@@ -564,4 +585,5 @@ export const api = {
     return Array.isArray(res) ? res : Array.isArray((res as any)?.data) ? (res as any).data : [];
   },
   gradeTestSubmission: (id: number | string, data: object) => put(`/tests/submissions/${id}/grade`, data),
+  deleteTestSubmission: (id: number | string) => del(`/tests/submissions/${id}`),
 };
