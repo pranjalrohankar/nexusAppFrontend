@@ -453,8 +453,8 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                     ]} />
                   </View>
                   <View style={styles.metaCol}>
-                    <Text style={styles.teacherName}>{item.name}</Text>
-                    <Text style={styles.joinedText}>Joined {item.joinedDate}</Text>
+                    <Text style={styles.teacherName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.joinedText} numberOfLines={1}>Joined {item.joinedDate}</Text>
                   </View>
                   {(() => {
                     const isLogged = item.onlineStatus === 'online' || item.onlineStatus === 'always_online';
@@ -475,11 +475,11 @@ export default function AdminTeachersScreen({ onRegisterAdd, onCountChange }: { 
                 <View style={styles.infoBlock}>
                   <View style={styles.infoRow}>
                     <Ionicons name="mail-outline" size={13} color="#6B7280" />
-                    <Text style={styles.infoValue}>{item.email}</Text>
+                    <Text style={styles.infoValue} numberOfLines={1}>{item.email}</Text>
                   </View>
                   <View style={styles.infoRow}>
                     <Ionicons name="call-outline" size={13} color="#6B7280" />
-                    <Text style={styles.infoValue}>{item.phone}</Text>
+                    <Text style={styles.infoValue} numberOfLines={1}>{item.phone}</Text>
                   </View>
                   <View style={styles.statsDetailsRow}>
                     <View style={styles.miniStatCard}>
@@ -795,7 +795,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', marginRight: 12,
   },
   avatarText: { color: '#0369A1', fontSize: 18, fontWeight: 'bold' },
-  metaCol: { flex: 1 },
+  metaCol: { flex: 1, minWidth: 0, marginRight: 8 },
   teacherName: { fontSize: 15, fontWeight: 'bold', color: '#1F2937' },
   joinedText: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
   ratingBadge: {
@@ -805,13 +805,13 @@ const styles = StyleSheet.create({
   },
   ratingText: { fontSize: 11, fontWeight: 'bold', color: '#EA580C' },
   infoBlock: { borderTopWidth: 1, borderTopColor: '#F3F4F6', marginTop: 12, paddingTop: 12, gap: 8 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  infoValue: { fontSize: 12, color: '#4B5563', fontWeight: '500' },
-  statsDetailsRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
+  infoValue: { fontSize: 12, color: '#4B5563', fontWeight: '500', flex: 1, flexShrink: 1 },
+  statsDetailsRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   miniStatCard: {
     backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#F3F4F6',
-    borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12,
-    alignItems: 'center', flex: 1,
+    borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10,
+    alignItems: 'center', flex: 1, minWidth: 0,
   },
   miniStatVal: { fontSize: 13, fontWeight: 'bold', color: '#1F2937' },
   miniStatLabel: { fontSize: 9, color: '#6B7280', fontWeight: '500', marginTop: 2 },
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
   },
   dotGreen: { backgroundColor: '#10B981' },
   dotGray: { backgroundColor: '#9CA3AF' },
-  statusBadge: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8 },
+  statusBadge: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8, flexShrink: 0 },
   statusActive: { backgroundColor: '#ECFDF5' },
   statusInactive: { backgroundColor: '#FEE2E2' },
   statusBadgeText: { fontSize: 10, fontWeight: 'bold' },
@@ -831,7 +831,7 @@ const styles = StyleSheet.create({
   cardActions: {
     flexDirection: 'row', justifyContent: 'flex-end',
     borderTopWidth: 1, borderTopColor: '#F3F4F6',
-    marginTop: 12, paddingTop: 12, gap: 10,
+    marginTop: 12, paddingTop: 12, gap: 8, flexWrap: 'wrap',
   },
   toggleStatusBtn: {
     flexDirection: 'row', alignItems: 'center',

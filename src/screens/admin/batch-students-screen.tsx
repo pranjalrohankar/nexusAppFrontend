@@ -274,7 +274,7 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
         </View>
 
         {/* Filter pills */}
-        <View style={styles.filterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
           {(['All', 'Active', 'Inactive'] as const).map(f => (
             <TouchableOpacity
               key={f}
@@ -286,7 +286,7 @@ export default function BatchStudentsScreen({ batch, onBack }: Props) {
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
       {/* ── BODY ── */}
@@ -609,15 +609,16 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 13, color: '#1F2937' },
 
-  filterRow: { flexDirection: 'row', gap: 8 },
+  filterRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   filterPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.15)',
+    flexShrink: 0,
   },
   filterPillActive: { backgroundColor: '#FFFFFF' },
-  filterPillText: { fontSize: 13, fontWeight: '600', color: '#E9D5FF' },
+  filterPillText: { fontSize: 12.5, fontWeight: '600', color: '#E9D5FF' },
   filterPillTextActive: { color: '#7B2CBF' },
 
   /* ── Body ── */

@@ -404,7 +404,7 @@ export default function AdminCoursesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* FILTER PILL TABS */}
-        <View style={styles.filterTabsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterTabsScrollRow} contentContainerStyle={styles.filterTabsRow}>
           {(['All', 'Active', 'Upcoming', 'Completed'] as const).map((tab) => {
             const count =
               tab === 'All'
@@ -438,7 +438,7 @@ export default function AdminCoursesScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* STATS ROW */}
         <View style={styles.statsCard}>
@@ -629,41 +629,46 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     height: '100%',
   },
+  filterTabsScrollRow: { marginBottom: 14, flexGrow: 0 },
   filterTabsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingHorizontal: 2,
   },
   filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(123,44,191,0.10)',
+    flexShrink: 0,
   },
   filterPillGreen: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(16,185,129,0.10)',
+    flexShrink: 0,
   },
   filterPillAmber: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(245,158,11,0.10)',
+    flexShrink: 0,
   },
   filterPillGray: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(107,114,128,0.10)',
+    flexShrink: 0,
   },
   filterPillActive: {
     backgroundColor: '#7B2CBF',
   },
   filterPillText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
     color: '#4B5563',
   },
