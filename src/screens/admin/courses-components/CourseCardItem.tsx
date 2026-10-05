@@ -45,7 +45,7 @@ export const CourseCardItem = React.memo(({ item, onEdit, onDelete }: CourseCard
     <View style={styles.courseCard}>
       <View style={styles.cardHeader}>
         <View style={styles.titleCol}>
-          <Text style={styles.courseTitle}>{item.title}</Text>
+          <Text style={styles.courseTitle} numberOfLines={1}>{item.title}</Text>
         </View>
         <View
           style={[
@@ -153,6 +153,7 @@ const styles = StyleSheet.create({
   },
   titleCol: {
     flex: 1,
+    minWidth: 0,
     marginRight: 10,
   },
   courseTitle: {
@@ -169,6 +170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    flexShrink: 0,
   },
   statusActive: {
     backgroundColor: 'rgba(16,185,129,0.12)',
@@ -195,7 +197,7 @@ const styles = StyleSheet.create({
   detailsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
     paddingVertical: 10,
     borderTopWidth: 1,
     borderBottomWidth: 1,
@@ -221,20 +223,21 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
   },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
     backgroundColor: 'rgba(123,44,191,0.08)',
   },
   editBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#7B2CBF',
   },
@@ -242,13 +245,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
     backgroundColor: 'rgba(239,68,68,0.08)',
   },
   deleteBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#EF4444',
   },

@@ -515,7 +515,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
         </View>
 
         {/* FILTER PILL TABS */}
-        <View style={styles.filterTabsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterTabsScrollRow} contentContainerStyle={styles.filterTabsRow}>
           <TouchableOpacity
             style={[styles.filterPill, activeTab === 'All' && styles.filterPillActive]}
             onPress={() => { setActiveTab('All'); setPage(1); }}
@@ -540,7 +540,7 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
               Inactive {inactiveCount}
             </Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
 
         {/* STATS ROW */}
         <View style={styles.statsCard}>
@@ -590,8 +590,8 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                     )}
                   </View>
                   <View style={styles.metaCol}>
-                    <Text style={styles.studentName}>{item.name}</Text>
-                    <Text style={styles.joinedText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
+                    <Text style={styles.studentName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.joinedText} numberOfLines={1}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
                   <View style={[styles.statusBadge, item.active !== false ? styles.statusActive : styles.statusInactive]}>
                     <Text style={[styles.statusText, item.active !== false ? styles.statusActiveText : styles.statusInactiveText]}>
@@ -604,11 +604,11 @@ export default function AdminStudentsScreen({ onRegisterAdd, onCountChange }: { 
                 <View style={styles.infoBlock}>
                   <View style={styles.infoRow}>
                     <Ionicons name="mail-outline" size={13} color="#6B7280" />
-                    <Text style={styles.infoValue}>{item.email}</Text>
+                    <Text style={styles.infoValue} numberOfLines={1}>{item.email}</Text>
                   </View>
                   <View style={styles.infoRow}>
                     <Ionicons name="call-outline" size={13} color="#6B7280" />
-                    <Text style={styles.infoValue}>{item.phone}</Text>
+                    <Text style={styles.infoValue} numberOfLines={1}>{item.phone}</Text>
                   </View>
                   <View style={styles.infoRow}>
                     <Ionicons name="book-outline" size={13} color="#6B7280" />
@@ -1455,17 +1455,19 @@ const styles = StyleSheet.create({
   batchPillCompletedText: {
     color: '#6B7280',
   },
+  filterTabsScrollRow: { marginBottom: 14, flexGrow: 0 },
   filterTabsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingHorizontal: 2,
   },
   filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(123,44,191,0.10)',
+    flexShrink: 0,
   },
   filterPillActive: {
     backgroundColor: '#7B2CBF',
@@ -1477,7 +1479,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(107,114,128,0.10)',
   },
   filterPillText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
     color: '#7B2CBF',
   },
@@ -1488,7 +1490,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     borderRadius: 16,
     marginBottom: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
